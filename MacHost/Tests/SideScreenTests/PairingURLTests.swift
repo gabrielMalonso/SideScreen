@@ -8,6 +8,7 @@ final class PairingURLTests: XCTestCase {
         XCTAssertTrue(url.hasPrefix("sidescreen://192.168.1.42:8888?"))
         XCTAssertTrue(url.contains("t="))
         XCTAssertTrue(url.contains("name="))
+        XCTAssertTrue(url.contains("mode=lan"))
     }
 
     func testTokenIsBase64URLNoPadding() {
@@ -27,5 +28,11 @@ final class PairingURLTests: XCTestCase {
         let token = Data(repeating: 0, count: 32)
         let url = PairingURL.build(host: "1.2.3.4", port: 9, token: token, name: "Dat's MacBook")
         XCTAssertTrue(url.contains("name=Dat%27s%20MacBook") || url.contains("name=Dat's%20MacBook"))
+    }
+
+    func testTailnetModeIsEncoded() {
+        let token = Data(repeating: 0, count: 32)
+        let url = PairingURL.build(host: "mac-mini.example.ts.net", port: 54321, token: token, name: "Mac", mode: .tailnet)
+        XCTAssertTrue(url.contains("mode=tailnet"))
     }
 }

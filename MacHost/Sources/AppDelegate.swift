@@ -47,6 +47,7 @@ struct GestureThresholds {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var streamingServer: StreamingServer?
+    var inputServer: InputServer?
     var screenCapture: ScreenCapture?
     var virtualDisplayManager: VirtualDisplayManager?
     var settings = DisplaySettings()
@@ -491,6 +492,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
+            let inputBackend = CGEventInputBackend()
+            let inputPort = UInt16(min(Int(settings.port) + 1, Int(UInt16.max)))
+            inputServer = InputServer(
+                port: inputPort,
+                expectedAuthToken: settings.connectionMode == .wireless ? WirelessAuth.loadOrCreate() : nil,
+                backend: inputBackend
+            )
             streamingServer?.touchEnabled = settings.touchEnabled
             if settings.connectionMode == .wireless {
                 streamingServer?.expectedAuthToken = WirelessAuth.loadOrCreate()
@@ -567,6 +575,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             streamingServer?.start()
+            inputServer?.start()
             screenCapture?.startStreaming(
                 to: streamingServer,
                 bitrateMbps: settings.effectiveBitrate,
@@ -579,7 +588,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.isRunning = true
             }
 
-            print("✅ Server started on port \(settings.port)")
+            print("✅ Server started on port \(settings.port), input port \(inputPort)")
         } catch {
             print("❌ Failed to start: \(error)")
             await MainActor.run {
@@ -600,8 +609,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         virtualDisplayManager?.saveDisplayPosition()
 
         screenCapture?.stopStreaming()
+        inputServer?.stop()
         streamingServer?.stop()
         virtualDisplayManager?.destroyDisplay()
+        inputServer = nil
 
         settings.isRunning = false
         settings.displayCreated = false

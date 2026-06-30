@@ -4,7 +4,13 @@ import android.net.Uri
 import android.util.Base64
 
 object PairingURL {
-    data class Parsed(val host: String, val port: Int, val token: ByteArray, val macName: String)
+    data class Parsed(
+        val host: String,
+        val port: Int,
+        val token: ByteArray,
+        val macName: String,
+        val endpointMode: EndpointMode,
+    )
 
     fun parse(url: String): Parsed? {
         val uri =
@@ -25,6 +31,7 @@ object PairingURL {
             }
         if (token.size != 32) return null
         val name = uri.getQueryParameter("name") ?: "Mac"
-        return Parsed(host, port, token, name)
+        val endpointMode = EndpointMode.fromWire(uri.getQueryParameter("mode"))
+        return Parsed(host, port, token, name, endpointMode)
     }
 }

@@ -1072,6 +1072,12 @@ class DisplaySettings: ObservableObject {
     @Published var connectionMode: ConnectionMode {
         didSet { save("connectionMode", connectionMode.rawValue) }
     }
+    @Published var endpointMode: EndpointMode {
+        didSet { save("endpointMode", endpointMode.rawValue) }
+    }
+    @Published var tailnetHost: String {
+        didSet { save("tailnetHost", tailnetHost) }
+    }
 
     // Runtime state (not persisted)
     @Published var displayCreated = false
@@ -1110,6 +1116,9 @@ class DisplaySettings: ObservableObject {
         self.touchEnabled = defaults.object(forKey: keyPrefix + "touchEnabled") as? Bool ?? true
         let modeRaw = defaults.string(forKey: keyPrefix + "connectionMode") ?? ConnectionMode.usb.rawValue
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
+        let endpointRaw = defaults.string(forKey: keyPrefix + "endpointMode") ?? EndpointMode.lan.rawValue
+        self.endpointMode = EndpointMode(rawValue: endpointRaw) ?? .lan
+        self.tailnetHost = defaults.string(forKey: keyPrefix + "tailnetHost") ?? ""
 
         print("Loaded settings: \(resolution) @ \(refreshRate)Hz, bitrate=\(bitrate), quality=\(quality)")
     }
@@ -1173,7 +1182,7 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality",
                     "gamingBoost", "port", "rotation", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled"]
+                    "customWidth", "customHeight", "touchEnabled", "endpointMode", "tailnetHost"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
         }
@@ -1190,6 +1199,8 @@ class DisplaySettings: ObservableObject {
         customWidth = 1920
         customHeight = 1200
         touchEnabled = true
+        endpointMode = .lan
+        tailnetHost = ""
 
         print("Settings reset to defaults")
     }
@@ -1322,6 +1333,19 @@ struct WirelessSection: View {
             }
             FrostedGroupBox(title: "Pair Device", icon: "qrcode") {
                 VStack(spacing: 8) {
+                    Picker("", selection: $settings.endpointMode) {
+                        Text("LAN").tag(EndpointMode.lan)
+                        Text("Tailnet").tag(EndpointMode.tailnet)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    if settings.endpointMode == .tailnet {
+                        TextField("mac-mini.tailnet.ts.net or 100.x.y.z", text: $settings.tailnetHost)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                    }
+
                     if let qr = qrImage {
                         Image(nsImage: qr)
                             .interpolation(.none)
@@ -1338,7 +1362,7 @@ struct WirelessSection: View {
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    Text(LANAddressResolver.primaryIPv4().map { "Listening: \($0):\(settings.port)" } ?? "WiFi disconnected — no LAN address")
+                    Text(endpointStatusText())
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
@@ -1413,6 +1437,8 @@ struct WirelessSection: View {
         // two-parameter form requires macOS 14 and would block Ventura.
         // Deprecation is a compile-time warning only on Xcode 15+ SDKs.
         .onChange(of: settings.port) { _ in refreshQR() }
+        .onChange(of: settings.endpointMode) { _ in refreshQR() }
+        .onChange(of: settings.tailnetHost) { _ in refreshQR() }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now in
             nowTick = now
             refreshPaired()
@@ -1432,10 +1458,20 @@ struct WirelessSection: View {
 
     private func refreshQR() {
         let token = WirelessAuth.loadOrCreate()
-        let host = LANAddressResolver.primaryIPv4() ?? "0.0.0.0"
+        let host = EndpointAdvertiser.advertisedHost(mode: settings.endpointMode, tailnetHost: settings.tailnetHost) ?? "0.0.0.0"
         let name = Host.current().localizedName ?? "Mac"
-        let url = PairingURL.build(host: host, port: settings.port, token: token, name: name)
+        let url = PairingURL.build(host: host, port: settings.port, token: token, name: name, mode: settings.endpointMode)
         qrImage = QRRenderer.render(url: url, size: 180)
+    }
+
+    private func endpointStatusText() -> String {
+        switch settings.endpointMode {
+        case .lan:
+            return LANAddressResolver.primaryIPv4().map { "LAN: \($0):\(settings.port)" } ?? "WiFi disconnected — no LAN address"
+        case .tailnet, .manual:
+            let host = settings.tailnetHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            return host.isEmpty ? "Tailnet host required" : "Tailnet: \(host):\(settings.port)"
+        }
     }
 
     private func refreshPaired() {

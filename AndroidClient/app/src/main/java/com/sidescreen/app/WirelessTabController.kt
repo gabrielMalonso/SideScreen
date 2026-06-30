@@ -24,6 +24,7 @@ class WirelessTabController(
         token: ByteArray,
         deviceName: String,
         macName: String,
+        endpointMode: EndpointMode,
     ) -> Unit,
 ) {
     data class Views(
@@ -131,9 +132,9 @@ class WirelessTabController(
     fun onScanResult(url: String) {
         val parsed = PairingURL.parse(url) ?: return
         val deviceName = (android.os.Build.MODEL ?: "Android").take(64)
-        storage.save(PairedHostStorage.Entry(parsed.host, parsed.port, parsed.token, parsed.macName))
+        storage.save(PairedHostStorage.Entry(parsed.host, parsed.port, parsed.token, parsed.macName, parsed.endpointMode))
         showConnecting("Connecting to ${parsed.macName}", "${parsed.host}:${parsed.port}")
-        onConnectRequested(parsed.host, parsed.port, parsed.token, deviceName, parsed.macName)
+        onConnectRequested(parsed.host, parsed.port, parsed.token, deviceName, parsed.macName, parsed.endpointMode)
     }
 
     fun onConnectError(error: StreamClient.WirelessConnectError) {
@@ -218,7 +219,7 @@ class WirelessTabController(
 
     private fun attemptAutoConnect(entry: PairedHostStorage.Entry) {
         val deviceName = (android.os.Build.MODEL ?: "Android").take(64)
-        onConnectRequested(entry.host, entry.port, entry.token, deviceName, entry.macName)
+        onConnectRequested(entry.host, entry.port, entry.token, deviceName, entry.macName, entry.endpointMode)
     }
 
     companion object {

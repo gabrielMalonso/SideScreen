@@ -8,15 +8,22 @@ class PairedHostStorage(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("paired_host", Context.MODE_PRIVATE)
 
-    data class Entry(val host: String, val port: Int, val token: ByteArray, val macName: String) {
+    data class Entry(
+        val host: String,
+        val port: Int,
+        val token: ByteArray,
+        val macName: String,
+        val endpointMode: EndpointMode = EndpointMode.LAN,
+    ) {
         override fun equals(other: Any?): Boolean {
             if (other !is Entry) return false
             return host == other.host && port == other.port && macName == other.macName &&
-                token.contentEquals(other.token)
+                endpointMode == other.endpointMode && token.contentEquals(other.token)
         }
 
         override fun hashCode(): Int =
-            ((host.hashCode() * 31 + port) * 31 + macName.hashCode()) * 31 + token.contentHashCode()
+            (((host.hashCode() * 31 + port) * 31 + macName.hashCode()) * 31 + endpointMode.hashCode()) *
+                31 + token.contentHashCode()
     }
 
     fun save(entry: Entry) {
@@ -25,6 +32,7 @@ class PairedHostStorage(context: Context) {
             .putInt("port", entry.port)
             .putString("token_b64", Base64.encodeToString(entry.token, Base64.NO_WRAP or Base64.NO_PADDING))
             .putString("mac_name", entry.macName)
+            .putString("endpoint_mode", entry.endpointMode.name)
             .apply()
     }
 
@@ -40,7 +48,8 @@ class PairedHostStorage(context: Context) {
             }
         if (token.size != 32) return null
         val macName = prefs.getString("mac_name", null) ?: "Mac"
-        return Entry(host, port, token, macName)
+        val endpointMode = EndpointMode.fromWire(prefs.getString("endpoint_mode", null))
+        return Entry(host, port, token, macName, endpointMode)
     }
 
     fun clear() {

@@ -167,8 +167,8 @@ class MainActivity : AppCompatActivity() {
                     ),
                 storage = pairedHostStorage,
                 cameraPerm = cameraPerm,
-                onConnectRequested = { host, port, token, deviceName, macName ->
-                    connectWireless(host, port, token, deviceName, macName)
+                onConnectRequested = { host, port, token, deviceName, macName, endpointMode ->
+                    connectWireless(host, port, token, deviceName, macName, endpointMode)
                 },
             )
         wirelessController.bind()
@@ -947,13 +947,14 @@ class MainActivity : AppCompatActivity() {
         token: ByteArray,
         deviceName: String,
         macName: String,
+        endpointMode: EndpointMode,
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 log("Connecting wirelessly to $host:$port...")
                 streamClient = StreamClient(host, port, applicationContext)
                 setupStreamClientCallbacks()
-                streamClient?.connectWireless(token, deviceName)
+                streamClient?.connectWireless(token, deviceName, endpointMode)
                 // NOTE: onConnectSuccess is fired from the onConnectionStatus(true)
                 // listener (above) right after handshake OK — not here. This line
                 // would otherwise run AFTER the receive loop exits, i.e. AFTER

@@ -160,8 +160,12 @@ class StreamClient(
     suspend fun connectWireless(
         token: ByteArray,
         deviceName: String,
+        endpointMode: EndpointMode = EndpointMode.LAN,
     ) = withContext(Dispatchers.IO) {
-        Log.i(TAG, "connectWireless: trying $host:$port (device=$deviceName, token bytes=${token.size})")
+        Log.i(
+            TAG,
+            "connectWireless: trying $host:$port (device=$deviceName, mode=$endpointMode, token bytes=${token.size})",
+        )
 
         // Force the socket onto the active WiFi network. On some Android setups
         // (especially LG/Android 12), an app's default outbound socket may take
@@ -171,20 +175,24 @@ class StreamClient(
             try {
                 val sock = Socket()
                 sock.tcpNoDelay = true
-                val wifiNetwork =
-                    context?.let { ctx ->
-                        val cm = ctx.getSystemService(ConnectivityManager::class.java)
-                        cm.allNetworks.firstOrNull { net ->
-                            val caps = cm.getNetworkCapabilities(net)
-                            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
-                                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        }
-                    }
-                if (wifiNetwork != null) {
-                    Log.i(TAG, "connectWireless: binding socket to WiFi network $wifiNetwork")
-                    wifiNetwork.bindSocket(sock)
+                if (endpointMode.isTailnet) {
+                    Log.i(TAG, "connectWireless: Tailnet mode, using default VPN route")
                 } else {
-                    Log.w(TAG, "connectWireless: no WiFi network found, using default routing")
+                    val wifiNetwork =
+                        context?.let { ctx ->
+                            val cm = ctx.getSystemService(ConnectivityManager::class.java)
+                            cm.allNetworks.firstOrNull { net ->
+                                val caps = cm.getNetworkCapabilities(net)
+                                caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
+                                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            }
+                        }
+                    if (wifiNetwork != null) {
+                        Log.i(TAG, "connectWireless: LAN mode, binding socket to WiFi network $wifiNetwork")
+                        wifiNetwork.bindSocket(sock)
+                    } else {
+                        Log.w(TAG, "connectWireless: LAN mode, no WiFi network found, using default routing")
+                        }
                 }
                 sock.connect(java.net.InetSocketAddress(host, port), 5000)
                 sock

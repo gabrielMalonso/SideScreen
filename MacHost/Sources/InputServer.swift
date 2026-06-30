@@ -1,0 +1,170 @@
+import Foundation
+import Network
+
+final class InputServer {
+    private let port: UInt16
+    private let expectedAuthToken: Data?
+    private let backend: InputBackend
+    private var listener: NWListener?
+    private var connection: NWConnection?
+    private let queue = DispatchQueue(label: "inputServerQueue", qos: .userInteractive)
+
+    init(port: UInt16, expectedAuthToken: Data?, backend: InputBackend) {
+        self.port = port
+        self.expectedAuthToken = expectedAuthToken
+        self.backend = backend
+    }
+
+    func start() {
+        do {
+            let params = NWParameters.tcp
+            params.allowLocalEndpointReuse = true
+            if let tcpOptions = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+                tcpOptions.noDelay = true
+            }
+            listener = try NWListener(using: params, on: NWEndpoint.Port(integerLiteral: port))
+            listener?.newConnectionHandler = { [weak self] conn in
+                self?.handleConnection(conn)
+            }
+            listener?.stateUpdateHandler = { state in
+                if case .ready = state {
+                    debugLog("InputServer listening on port \(self.port)")
+                } else if case .failed(let error) = state {
+                    debugLog("InputServer failed: \(error)")
+                }
+            }
+            listener?.start(queue: queue)
+        } catch {
+            debugLog("InputServer failed to start: \(error)")
+        }
+    }
+
+    func stop() {
+        connection?.cancel()
+        listener?.cancel()
+        connection = nil
+        listener = nil
+        backend.releaseAll(reason: "input server stopped")
+    }
+
+    private func handleConnection(_ conn: NWConnection) {
+        debugLog("InputServer incoming connection")
+        connection?.cancel()
+        backend.releaseAll(reason: "new input connection")
+        connection = conn
+
+        conn.stateUpdateHandler = { [weak self, weak conn] state in
+            guard let self, let conn else { return }
+            switch state {
+            case .ready:
+                self.receiveHelloPrefix(on: conn)
+            case .failed(let error):
+                debugLog("InputServer connection failed: \(error)")
+                self.backend.releaseAll(reason: "input connection failed")
+            case .cancelled:
+                debugLog("InputServer connection cancelled")
+                self.backend.releaseAll(reason: "input connection cancelled")
+            default:
+                break
+            }
+        }
+        conn.start(queue: queue)
+    }
+
+    private func receiveHelloPrefix(on conn: NWConnection) {
+        receiveExact(RemoteInputCodec.helloFixedLength, on: conn) { [weak self, weak conn] prefix in
+            guard let self, let conn else { return }
+            do {
+                let parsed = try RemoteInputCodec.parseHelloPrefix(prefix)
+                self.receiveHelloSuffix(length: parsed.deviceIdLength + 4, prefix: prefix, on: conn)
+            } catch {
+                self.reject(conn, reason: 1)
+            }
+        }
+    }
+
+    private func receiveHelloSuffix(length: Int, prefix: Data, on conn: NWConnection) {
+        receiveExact(length, on: conn) { [weak self, weak conn] suffix in
+            guard let self, let conn else { return }
+            do {
+                let hello = try RemoteInputCodec.parseHello(prefix: prefix, suffix: suffix)
+                try self.authorize(hello)
+                debugLog("InputServer auth OK — device=\(hello.deviceId), caps=\(hello.capabilities)")
+                conn.send(content: RemoteInputCodec.acceptResponse(), completion: .contentProcessed { _ in })
+                self.receiveEventHeader(on: conn)
+            } catch RemoteInputProtocolError.invalidToken {
+                self.reject(conn, reason: 2)
+            } catch {
+                self.reject(conn, reason: 1)
+            }
+        }
+    }
+
+    private func authorize(_ hello: InputChannelHello) throws {
+        if let expectedAuthToken {
+            guard WirelessAuth.validate(hello.token, expected: expectedAuthToken) else {
+                throw RemoteInputProtocolError.invalidToken
+            }
+        }
+    }
+
+    private func reject(_ conn: NWConnection, reason: UInt8) {
+        conn.send(content: RemoteInputCodec.rejectResponse(reason: reason), completion: .contentProcessed { _ in
+            conn.cancel()
+        })
+    }
+
+    private func receiveEventHeader(on conn: NWConnection) {
+        receiveExact(RemoteInputEnvelope.headerLength, on: conn) { [weak self, weak conn] header in
+            guard let self, let conn else { return }
+            do {
+                let (type, sequence, timestamp, payloadLength) = try RemoteInputEnvelope.parseHeader(header)
+                if payloadLength == 0 {
+                    let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: Data())
+                    self.backend.handle(event)
+                    self.receiveEventHeader(on: conn)
+                } else {
+                    self.receiveEventPayload(type: type, sequence: sequence, timestamp: timestamp, length: payloadLength, on: conn)
+                }
+            } catch {
+                debugLog("InputServer invalid header: \(error)")
+                self.backend.releaseAll(reason: "invalid input header")
+                conn.cancel()
+            }
+        }
+    }
+
+    private func receiveEventPayload(type: RemoteInputEventType, sequence: UInt64, timestamp: UInt64, length: Int, on conn: NWConnection) {
+        receiveExact(length, on: conn) { [weak self, weak conn] payload in
+            guard let self, let conn else { return }
+            do {
+                let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: payload)
+                self.backend.handle(event)
+                self.receiveEventHeader(on: conn)
+            } catch {
+                debugLog("InputServer invalid payload: \(error)")
+                self.backend.releaseAll(reason: "invalid input payload")
+                conn.cancel()
+            }
+        }
+    }
+
+    private func receiveExact(_ length: Int, on conn: NWConnection, completion: @escaping (Data) -> Void) {
+        conn.receive(minimumIncompleteLength: length, maximumLength: length) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let error {
+                debugLog("InputServer receive error: \(error)")
+                self.backend.releaseAll(reason: "input receive error")
+                conn.cancel()
+                return
+            }
+            guard let data, data.count == length, !isComplete else {
+                self.backend.releaseAll(reason: "input closed")
+                conn.cancel()
+                return
+            }
+            completion(data)
+        }
+    }
+}
+
