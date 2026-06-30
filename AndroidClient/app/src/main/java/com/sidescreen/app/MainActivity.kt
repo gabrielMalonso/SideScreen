@@ -53,9 +53,13 @@ class MainActivity : AppCompatActivity() {
     private var activeInputHost: String? = null
     private var activeInputPort: Int = 0
     private var activeInputToken: ByteArray? = null
+    private var activeInputSessionId: ByteArray? = null
     private var activeInputDeviceId: String = "Android"
     private var activeInputEndpointMode: EndpointMode = EndpointMode.LAN
+    private var activeInputBackendName: String = "waiting"
     private var lastMouseButtonMask = 0
+    private var inputEventsThisSecond = 0
+    private var inputRateRunnable: Runnable? = null
     private var currentSurfaceHolder: SurfaceHolder? = null
     private var displayWidth = 0 // 0 = no config received yet
     private var displayHeight = 0 // 0 = no config received yet
@@ -112,6 +116,7 @@ class MainActivity : AppCompatActivity() {
         startChecklistUpdates()
         setupModeToggle()
         setupWirelessController()
+        setupAccessibilityAssist()
     }
 
     private fun setupModeToggle() {
@@ -173,6 +178,10 @@ class MainActivity : AppCompatActivity() {
                         idleMacIp = binding.idleMacIp,
                         repairTitle = binding.repairTitle,
                         repairMessage = binding.repairMessage,
+                        endpointModeText = binding.wirelessEndpointModeText,
+                        routeText = binding.wirelessRouteText,
+                        inputRouteText = binding.wirelessInputRouteText,
+                        limitationText = binding.wirelessLimitationText,
                     ),
                 storage = pairedHostStorage,
                 cameraPerm = cameraPerm,
@@ -185,6 +194,25 @@ class MainActivity : AppCompatActivity() {
         if (prefs.connectionMode == ConnectionMode.WIRELESS) {
             wirelessController.show()
         }
+    }
+
+    private fun setupAccessibilityAssist() {
+        binding.accessibilityAssistButton.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        updateAccessibilityAssistStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateAccessibilityAssistStatus()
+    }
+
+    private fun updateAccessibilityAssistStatus() {
+        if (!::binding.isInitialized) return
+        val enabled = SideScreenAccessibilityService.isEnabled(this)
+        binding.accessibilityAssistStatus.text = if (enabled) "Assist: enabled" else "Assist: off"
+        binding.accessibilityAssistStatus.setTextColor(Color.parseColor(if (enabled) "#4ade80" else "#BBBBBB"))
     }
 
     override fun onActivityResult(
@@ -864,6 +892,13 @@ class MainActivity : AppCompatActivity() {
             streamClient?.releaseBuffer(buffer)
         }
 
+        streamClient?.onSessionCredentials = { credentials ->
+            activeInputToken = credentials.inputToken.copyOf()
+            activeInputSessionId = credentials.sessionId.copyOf()
+            val shortSessionId = credentials.sessionId.take(4).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            mainDiag("Wireless session established: $shortSessionId...")
+        }
+
         streamClient?.onLatencyMeasured = { rttMs ->
             runOnUiThread {
                 binding.latencyText.text = String.format("%.1f ms", rttMs)
@@ -885,6 +920,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 if (connected) {
                     startPingTimer()
+                    startInputRateUpdates()
                     connectInputChannel()
                     stopChecklistUpdates()
                     enableFullscreenMode()
@@ -906,6 +942,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else {
                     disconnectInputChannel()
+                    stopInputRateUpdates()
                     stopPingTimer()
                     disableFullscreenMode()
                     resetOrientationToSensor()
@@ -981,7 +1018,7 @@ class MainActivity : AppCompatActivity() {
                 configureInputChannel(host, port + 1, token, deviceName, endpointMode)
                 streamClient = StreamClient(host, port, applicationContext)
                 setupStreamClientCallbacks()
-                streamClient?.connectWireless(token, deviceName, endpointMode)
+                streamClient?.connectWireless(token, deviceName, prefs.remoteInputDeviceId, prefs.remoteDeviceSecret, endpointMode)
                 // NOTE: onConnectSuccess is fired from the onConnectionStatus(true)
                 // listener (above) right after handshake OK — not here. This line
                 // would otherwise run AFTER the receive loop exits, i.e. AFTER
@@ -1156,8 +1193,10 @@ class MainActivity : AppCompatActivity() {
         activeInputHost = host
         activeInputPort = port
         activeInputToken = token.copyOf()
+        activeInputSessionId = null
         activeInputDeviceId = prefs.remoteInputDeviceId
         activeInputEndpointMode = endpointMode
+        activeInputBackendName = "waiting"
         mainDiag("Input channel configured for $deviceName as ${activeInputDeviceId.take(8)}..., mode=$endpointMode")
     }
 
@@ -1171,9 +1210,25 @@ class MainActivity : AppCompatActivity() {
                 port = activeInputPort,
                 token = token,
                 deviceId = activeInputDeviceId,
+                sessionId = activeInputSessionId,
                 context = applicationContext,
                 endpointMode = activeInputEndpointMode,
             ).also { client ->
+                client.onBackendAccepted = { backendName ->
+                    runOnUiThread {
+                        activeInputBackendName = backendName
+                        wirelessController.onInputBackendAccepted(backendName)
+                        updatePointerCaptureUi(
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) binding.surfaceView.hasPointerCapture() else false,
+                        )
+                    }
+                }
+                client.onInputLatencyMeasured = { rttMs ->
+                    runOnUiThread {
+                        binding.inputLatencyText.text = String.format("input %.1f ms", rttMs)
+                    }
+                }
+                RemoteInputBridge.attach(client)
                 client.connect()
             }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1190,12 +1245,20 @@ class MainActivity : AppCompatActivity() {
             binding.surfaceView.releasePointerCapture()
         }
         inputClient?.shutdown()
+        RemoteInputBridge.detach(inputClient)
         inputClient = null
+        activeInputBackendName = "waiting"
+        binding.inputLatencyText.text = "input --"
         updatePointerCaptureUi(false)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (RemoteInputBridge.wasRecentlyForwardedByAccessibility(event)) {
+            recordInputEvent()
+            return true
+        }
         val handled = inputClient?.sendKey(event) == true
+        if (handled) recordInputEvent()
         if (handled) return true
         return super.dispatchKeyEvent(event)
     }
@@ -1205,12 +1268,14 @@ class MainActivity : AppCompatActivity() {
         updatePointerCaptureUi(hasCapture)
         if (!hasCapture) {
             inputClient?.sendAllInputsUp()
+            recordInputEvent()
             lastMouseButtonMask = 0
         }
     }
 
     override fun onPause() {
         inputClient?.sendAllInputsUp()
+        recordInputEvent()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
         }
@@ -1220,6 +1285,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun releasePointerCaptureForLocalUse() {
         inputClient?.sendAllInputsUp()
+        recordInputEvent()
         lastMouseButtonMask = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
@@ -1230,7 +1296,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updatePointerCaptureUi(hasCapture: Boolean) {
         runOnUiThread {
-            binding.inputCaptureText.text = if (hasCapture) "Mouse captured" else "Input ready"
+            val backend = activeInputBackendName
+            binding.inputCaptureText.text =
+                when {
+                    hasCapture -> "Mouse captured · $backend"
+                    inputClient?.isConnected == true -> "Input ready · $backend"
+                    else -> "Input waiting"
+                }
             binding.releasePointerButton.isEnabled = hasCapture
             binding.releasePointerButton.alpha = if (hasCapture) 1f else 0.55f
         }
@@ -1266,6 +1338,7 @@ class MainActivity : AppCompatActivity() {
                         0f
                     }
                 inputClient?.sendPointerRelative(dx, dy, fromPointerCapture)
+                recordInputEvent()
                 sendMouseButtonDiff(event.buttonState)
                 return true
             }
@@ -1274,6 +1347,7 @@ class MainActivity : AppCompatActivity() {
                     deltaX = event.getAxisValue(MotionEvent.AXIS_HSCROLL) * 48f,
                     deltaY = event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 48f,
                 )
+                recordInputEvent()
                 return true
             }
             MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
@@ -1282,6 +1356,7 @@ class MainActivity : AppCompatActivity() {
             }
             MotionEvent.ACTION_CANCEL -> {
                 inputClient?.sendAllInputsUp()
+                recordInputEvent()
                 lastMouseButtonMask = 0
                 return true
             }
@@ -1301,9 +1376,35 @@ class MainActivity : AppCompatActivity() {
         ).forEach { (androidButton, remoteButton) ->
             if ((changed and androidButton) != 0) {
                 inputClient?.sendPointerButton(remoteButton, (newMask and androidButton) != 0)
+                recordInputEvent()
             }
         }
         lastMouseButtonMask = newMask
+    }
+
+    private fun recordInputEvent() {
+        inputEventsThisSecond += 1
+    }
+
+    private fun startInputRateUpdates() {
+        stopInputRateUpdates()
+        inputEventsThisSecond = 0
+        inputRateRunnable =
+            object : Runnable {
+                override fun run() {
+                    binding.inputRateText.text = "$inputEventsThisSecond ev/s"
+                    inputEventsThisSecond = 0
+                    checklistHandler.postDelayed(this, 1000)
+                }
+            }
+        checklistHandler.post(inputRateRunnable!!)
+    }
+
+    private fun stopInputRateUpdates() {
+        inputRateRunnable?.let { checklistHandler.removeCallbacks(it) }
+        inputRateRunnable = null
+        inputEventsThisSecond = 0
+        binding.inputRateText.text = "0 ev/s"
     }
 
     /**

@@ -10,11 +10,20 @@ class RemoteInputProtocolTest {
     @Test
     fun helloUsesRmipMagicAndToken() {
         val token = ByteArray(32) { it.toByte() }
-        val bytes = RemoteInputProtocol.hello(token, "Tablet", 5)
+        val bytes = RemoteInputProtocol.hello(token, "Tablet", capabilities = 5)
         assertArrayEquals(byteArrayOf(0x52, 0x4D, 0x49, 0x50), bytes.copyOfRange(0, 4))
         assertEquals(1, bytes[4].toInt())
         assertEquals(0, bytes[5].toInt())
         assertArrayEquals(token, bytes.copyOfRange(6, 38))
+    }
+
+    @Test
+    fun helloCanCarrySessionId() {
+        val token = ByteArray(32) { it.toByte() }
+        val sessionId = ByteArray(16) { (it + 64).toByte() }
+        val bytes = RemoteInputProtocol.hello(token, "Tablet", sessionId, capabilities = 5)
+        assertEquals(1, bytes[5].toInt())
+        assertArrayEquals(sessionId, bytes.copyOfRange(bytes.size - 16, bytes.size))
     }
 
     @Test
@@ -33,5 +42,20 @@ class RemoteInputProtocolTest {
         assertEquals(42, buffer.long)
         buffer.long
         assertEquals(3, buffer.short.toInt())
+    }
+
+    @Test
+    fun inputPingPayloadUsesLittleEndianTimestamp() {
+        val bytes = RemoteInputProtocol.inputPingPayload(0x0102_0304_0506_0708L)
+        assertArrayEquals(
+            byteArrayOf(0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01),
+            bytes,
+        )
+    }
+
+    @Test
+    fun exposesAccessibilityAssistCapabilityAndKeyboardFlag() {
+        assertEquals(1 shl 4, RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST)
+        assertEquals(2, RemoteInputProtocol.FLAG_FROM_ACCESSIBILITY)
     }
 }

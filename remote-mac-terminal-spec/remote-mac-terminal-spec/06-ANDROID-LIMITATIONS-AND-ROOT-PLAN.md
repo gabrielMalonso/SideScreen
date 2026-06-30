@@ -82,6 +82,15 @@ Não colocar Accessibility no caminho obrigatório porque:
 - nem toda tecla passa;
 - comportamento varia por OEM.
 
+Estado implementado sem root:
+
+- o app registra um `AccessibilityService` opcional;
+- a permissão abre pelo painel Wireless do Android;
+- o serviço solicita apenas filtro de teclas e não recupera conteúdo de janelas;
+- eventos enviados por Accessibility usam flag própria no protocolo;
+- a Activity evita mandar duplicatas quando o serviço já encaminhou a mesma tecla;
+- se o usuário não habilitar Accessibility, o modo normal continua funcionando.
+
 ## Root muda o cenário
 
 Com root, é possível mirar abaixo do framework Android:
@@ -190,4 +199,3 @@ Depois:
 Por último:
   RootEvdevBackend
 ```
-

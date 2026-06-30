@@ -19,18 +19,26 @@ private extension NWEndpoint {
 
 final class InputServer {
     private let port: UInt16
-    private let expectedAuthToken: Data?
+    private let validateAuthToken: ((Data, String, Data?) -> Bool)?
     private let backend: InputBackend
     private let activeBackend: ActiveInputBackend
+    private let isDeviceRevoked: (String) -> Bool
     private var listener: NWListener?
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "inputServerQueue", qos: .userInteractive)
 
-    init(port: UInt16, expectedAuthToken: Data?, backend: InputBackend, activeBackend: ActiveInputBackend) {
+    init(
+        port: UInt16,
+        validateAuthToken: ((Data, String, Data?) -> Bool)?,
+        backend: InputBackend,
+        activeBackend: ActiveInputBackend,
+        isDeviceRevoked: @escaping (String) -> Bool = { _ in false }
+    ) {
         self.port = port
-        self.expectedAuthToken = expectedAuthToken
+        self.validateAuthToken = validateAuthToken
         self.backend = backend
         self.activeBackend = activeBackend
+        self.isDeviceRevoked = isDeviceRevoked
     }
 
     func start() {
@@ -113,6 +121,8 @@ final class InputServer {
                 self.receiveEventHeader(on: conn)
             } catch RemoteInputProtocolError.invalidToken {
                 self.reject(conn, reason: 2)
+            } catch RemoteInputProtocolError.deviceRevoked {
+                self.reject(conn, reason: 3)
             } catch {
                 self.reject(conn, reason: 1)
             }
@@ -120,9 +130,12 @@ final class InputServer {
     }
 
     private func authorize(_ hello: InputChannelHello, connection: NWConnection) throws {
-        if let expectedAuthToken {
-            guard WirelessAuth.validate(hello.token, expected: expectedAuthToken) else {
+        if let validateAuthToken {
+            guard validateAuthToken(hello.token, hello.deviceId, hello.sessionId) else {
                 throw RemoteInputProtocolError.invalidToken
+            }
+            if isDeviceRevoked(hello.deviceId) {
+                throw RemoteInputProtocolError.deviceRevoked
             }
         } else if !connection.endpoint.isLoopback {
             throw RemoteInputProtocolError.invalidToken
@@ -142,7 +155,7 @@ final class InputServer {
                 let (type, sequence, timestamp, payloadLength) = try RemoteInputEnvelope.parseHeader(header)
                 if payloadLength == 0 {
                     let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: Data())
-                    self.backend.handle(event)
+                    self.handleParsedEvent(event, on: conn)
                     self.receiveEventHeader(on: conn)
                 } else {
                     self.receiveEventPayload(type: type, sequence: sequence, timestamp: timestamp, length: payloadLength, on: conn)
@@ -160,13 +173,30 @@ final class InputServer {
             guard let self, let conn else { return }
             do {
                 let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: payload)
-                self.backend.handle(event)
+                self.handleParsedEvent(event, on: conn)
                 self.receiveEventHeader(on: conn)
             } catch {
                 debugLog("InputServer invalid payload: \(error)")
                 self.backend.endSession(reason: "invalid input payload")
                 conn.cancel()
             }
+        }
+    }
+
+    private func handleParsedEvent(_ event: RemoteInputEvent, on conn: NWConnection) {
+        backend.handle(event)
+        if case .ping(let sequence, let clientTimestampNanos) = event {
+            conn.send(
+                content: RemoteInputCodec.inputPongFrame(
+                    sequence: sequence,
+                    clientTimestampNanos: clientTimestampNanos
+                ),
+                completion: .contentProcessed { error in
+                    if let error {
+                        debugLog("InputServer pong send failed: \(error)")
+                    }
+                }
+            )
         }
     }
 

@@ -8,33 +8,60 @@ object RemoteInputProtocol {
     const val CAP_KEYBOARD_ACTIVITY = 1 shl 0
     const val CAP_POINTER_CAPTURE = 1 shl 1
     const val CAP_GENERIC_MOTION = 1 shl 2
+    const val CAP_ACCESSIBILITY_ASSIST = 1 shl 4
     const val CAP_HID_USAGE_MAPPING = 1 shl 7
+
+    const val FLAG_FROM_ACTIVITY = 1
+    const val FLAG_FROM_ACCESSIBILITY = 1 shl 1
 
     const val EVENT_KEYBOARD_KEY = 0x01
     const val EVENT_POINTER_RELATIVE = 0x10
     const val EVENT_POINTER_BUTTON = 0x11
     const val EVENT_POINTER_WHEEL = 0x12
     const val EVENT_ALL_INPUTS_UP = 0x20
+    const val EVENT_INPUT_PING = 0x30
+    const val EVENT_INPUT_PONG = 0x31
+    const val ENVELOPE_HEADER_LENGTH = 21
+
+    data class EnvelopeHeader(
+        val eventType: Int,
+        val sequence: Long,
+        val timestampNanos: Long,
+        val payloadLength: Int,
+    )
+
+    data class InputPong(
+        val clientTimestampNanos: Long,
+        val serverTimestampNanos: Long,
+    )
 
     fun hello(
         token: ByteArray,
         deviceId: String,
+        sessionId: ByteArray? = null,
         capabilities: Int,
     ): ByteArray {
         require(token.size == 32) { "token must be 32 bytes" }
+        require(sessionId == null || sessionId.size == AuthHandshake.SESSION_ID_LENGTH) {
+            "sessionId must be 16 bytes"
+        }
         val deviceBytes = deviceId.toByteArray(Charsets.UTF_8).let {
             if (it.size <= 64) it else it.copyOf(64)
         }
-        return ByteBuffer.allocate(4 + 1 + 1 + 32 + 1 + deviceBytes.size + 4)
+        val flags = if (sessionId != null) 1 else 0
+        val buffer = ByteBuffer.allocate(4 + 1 + 1 + 32 + 1 + deviceBytes.size + 4 + (sessionId?.size ?: 0))
             .order(ByteOrder.LITTLE_ENDIAN)
             .put(byteArrayOf(0x52, 0x4D, 0x49, 0x50)) // RMIP
             .put(1.toByte())
-            .put(0.toByte())
+            .put(flags.toByte())
             .put(token)
             .put(deviceBytes.size.toByte())
             .put(deviceBytes)
             .putInt(capabilities)
-            .array()
+        if (sessionId != null) {
+            buffer.put(sessionId)
+        }
+        return buffer.array()
     }
 
     fun envelope(
@@ -42,7 +69,7 @@ object RemoteInputProtocol {
         sequence: Long,
         payload: ByteArray,
     ): ByteArray =
-        ByteBuffer.allocate(21 + payload.size)
+        ByteBuffer.allocate(ENVELOPE_HEADER_LENGTH + payload.size)
             .order(ByteOrder.LITTLE_ENDIAN)
             .put(eventType.toByte())
             .putLong(sequence)
@@ -55,6 +82,7 @@ object RemoteInputProtocol {
         event: KeyEvent,
         usageId: Int,
         down: Boolean,
+        sourceFlag: Int = FLAG_FROM_ACTIVITY,
     ): ByteArray =
         ByteBuffer.allocate(24)
             .order(ByteOrder.LITTLE_ENDIAN)
@@ -66,7 +94,7 @@ object RemoteInputProtocol {
             .put(keyLocation(event).toByte())
             .putShort(event.repeatCount.toShort())
             .putInt(event.metaState)
-            .putInt(1) // FLAG_FROM_ACTIVITY
+            .putInt(sourceFlag)
             .array()
 
     fun pointerRelativePayload(
@@ -104,6 +132,32 @@ object RemoteInputProtocol {
             .put(1.toByte()) // pixel
             .putInt(0)
             .array()
+
+    fun inputPingPayload(value: Long = System.nanoTime()): ByteArray =
+        ByteBuffer.allocate(8)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putLong(value)
+            .array()
+
+    fun parseEnvelopeHeader(bytes: ByteArray): EnvelopeHeader {
+        require(bytes.size == ENVELOPE_HEADER_LENGTH) { "input envelope header must be 21 bytes" }
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        return EnvelopeHeader(
+            eventType = buffer.get().toInt() and 0xff,
+            sequence = buffer.long,
+            timestampNanos = buffer.long,
+            payloadLength = buffer.short.toInt() and 0xffff,
+        )
+    }
+
+    fun parseInputPongPayload(bytes: ByteArray): InputPong {
+        require(bytes.size == 16) { "input pong payload must be 16 bytes" }
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        return InputPong(
+            clientTimestampNanos = buffer.long,
+            serverTimestampNanos = buffer.long,
+        )
+    }
 
     private fun keyLocation(event: KeyEvent): Int =
         when (event.keyCode) {

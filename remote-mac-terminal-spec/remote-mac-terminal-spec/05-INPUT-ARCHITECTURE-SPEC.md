@@ -109,7 +109,7 @@ TouchGesture
 
 ### 4. AccessibilityAssistBackend
 
-Fase: pós-MVP.
+Fase: Alpha sem root.
 
 Accessibility pode pedir para filtrar eventos de tecla, mas não deve ser backend principal.
 
@@ -119,6 +119,16 @@ Uso recomendado:
 - tentar obter eventos adicionais de teclado;
 - não prometer captura de Home/Power/Recents;
 - explicar claramente ao usuário por que a permissão é sensível.
+- não ler conteúdo de tela;
+- evitar duplicar eventos que também chegam via Activity.
+
+Implementação atual:
+
+- `SideScreenAccessibilityService` solicita `flagRequestFilterKeyEvents`;
+- encaminha `KeyEvent` para o mesmo `InputClient` quando há sessão de input ativa;
+- marca eventos com `FLAG_FROM_ACCESSIBILITY`;
+- consome eventos encaminhados para evitar efeito local;
+- a Activity ignora duplicatas recentes enviadas pelo serviço.
 
 ### 5. RootEvdevBackend
 
@@ -476,4 +486,3 @@ Registrar:
 - scroll vertical funciona;
 - disconnect não deixa tecla ou botão preso;
 - input continua responsivo com vídeo em resolução alta.
-

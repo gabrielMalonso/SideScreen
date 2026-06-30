@@ -34,6 +34,7 @@ class StreamClient(
     var onConnectionStatus: ((Boolean) -> Unit)? = null
     var onDisplaySize: ((Int, Int, Int) -> Unit)? = null // width, height, rotation
     var onStats: ((Double, Double) -> Unit)? = null
+    var onSessionCredentials: ((AuthHandshake.SessionCredentials) -> Unit)? = null
 
     /** Invoked when the server confirms the stream codec (true = HEVC). */
     var onCodecSelected: ((Boolean) -> Unit)? = null
@@ -150,6 +151,8 @@ class StreamClient(
 
         object TokenRejected : WirelessConnectError("Token rejected — re-pair required")
 
+        object DeviceRevoked : WirelessConnectError("This Android device was revoked on the Mac")
+
         object ProtocolError : WirelessConnectError("Connection error, please rescan QR")
     }
 
@@ -160,6 +163,8 @@ class StreamClient(
     suspend fun connectWireless(
         token: ByteArray,
         deviceName: String,
+        deviceId: String,
+        deviceSecret: ByteArray,
         endpointMode: EndpointMode = EndpointMode.LAN,
     ) = withContext(Dispatchers.IO) {
         Log.i(
@@ -175,9 +180,7 @@ class StreamClient(
             try {
                 val sock = Socket()
                 sock.tcpNoDelay = true
-                if (endpointMode.isTailnet) {
-                    Log.i(TAG, "connectWireless: Tailnet mode, using default VPN route")
-                } else {
+                if (endpointMode.shouldBindWifi) {
                     val wifiNetwork =
                         context?.let { ctx ->
                             val cm = ctx.getSystemService(ConnectivityManager::class.java)
@@ -193,6 +196,8 @@ class StreamClient(
                     } else {
                         Log.w(TAG, "connectWireless: LAN mode, no WiFi network found, using default routing")
                     }
+                } else {
+                    Log.i(TAG, "connectWireless: $endpointMode mode, using default route")
                 }
                 sock.connect(java.net.InetSocketAddress(host, port), 5000)
                 sock
@@ -208,10 +213,10 @@ class StreamClient(
             }
         Log.i(
             TAG,
-            "connectWireless: TCP connected, sending handshake (${37 + deviceName.toByteArray().size} bytes)",
+            "connectWireless: TCP connected, sending handshake for device ${deviceId.take(8)}...",
         )
 
-        val request = AuthHandshake.encodeRequest(token, deviceName)
+        val request = AuthHandshake.encodeRequest(token, deviceName, deviceId, deviceSecret)
         try {
             s.getOutputStream().write(request)
             s.getOutputStream().flush()
@@ -257,6 +262,8 @@ class StreamClient(
         Log.i(TAG, "connectWireless: handshake response status=$status")
         when (status) {
             AuthHandshake.ResponseStatus.OK -> {
+                val sessionCredentials = readSessionCredentials(s)
+                onSessionCredentials?.invoke(sessionCredentials)
                 socket = s
                 inputStream = DataInputStream(java.io.BufferedInputStream(s.getInputStream(), 65536))
                 outputStream = java.io.DataOutputStream(s.getOutputStream())
@@ -276,6 +283,13 @@ class StreamClient(
                 }
                 throw WirelessConnectError.TokenRejected
             }
+            AuthHandshake.ResponseStatus.DEVICE_REVOKED -> {
+                try {
+                    s.close()
+                } catch (_: IOException) {
+                }
+                throw WirelessConnectError.DeviceRevoked
+            }
             else -> {
                 try {
                     s.close()
@@ -283,6 +297,26 @@ class StreamClient(
                 }
                 throw WirelessConnectError.ProtocolError
             }
+        }
+    }
+
+    private fun readSessionCredentials(socket: Socket): AuthHandshake.SessionCredentials {
+        val sessionBytes = ByteArray(AuthHandshake.SESSION_ID_LENGTH + AuthHandshake.INPUT_TOKEN_LENGTH)
+        try {
+            DataInputStream(socket.getInputStream()).readFully(sessionBytes)
+        } catch (e: IOException) {
+            try {
+                socket.close()
+            } catch (_: IOException) {
+            }
+            throw WirelessConnectError.ProtocolError
+        }
+        return AuthHandshake.parseSessionCredentials(sessionBytes) ?: run {
+            try {
+                socket.close()
+            } catch (_: IOException) {
+            }
+            throw WirelessConnectError.ProtocolError
         }
     }
 

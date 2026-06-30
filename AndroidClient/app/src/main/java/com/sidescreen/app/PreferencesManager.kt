@@ -2,6 +2,8 @@ package com.sidescreen.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
+import java.security.SecureRandom
 import java.util.UUID
 
 class PreferencesManager(
@@ -47,6 +49,23 @@ class PreferencesManager(
             prefs.getString("remote_input_device_id", null)?.let { return it }
             val generated = UUID.randomUUID().toString()
             prefs.edit().putString("remote_input_device_id", generated).apply()
+            return generated
+        }
+
+    val remoteDeviceSecret: ByteArray
+        get() {
+            prefs.getString("remote_device_secret_b64", null)?.let { encoded ->
+                try {
+                    val decoded = Base64.decode(encoded, Base64.NO_WRAP or Base64.NO_PADDING)
+                    if (decoded.size == 32) return decoded
+                } catch (_: IllegalArgumentException) {
+                }
+            }
+            val generated = ByteArray(32)
+            SecureRandom().nextBytes(generated)
+            prefs.edit()
+                .putString("remote_device_secret_b64", Base64.encodeToString(generated, Base64.NO_WRAP or Base64.NO_PADDING))
+                .apply()
             return generated
         }
 }

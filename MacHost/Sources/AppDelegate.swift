@@ -54,10 +54,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindow: SettingsWindowController?
     var statusItem: NSStatusItem?
     let pairedDeviceStore = PairedDeviceStore()
-    /// Name of the wireless device currently streaming (nil when no wireless client is active).
+    private let remoteSessionStore = RemoteSessionStore()
+    /// Identity of the wireless device currently streaming (nil when no wireless client is active).
     /// Used to roll its `lastConnected` timestamp forward every status refresh tick so the UI
     /// shows "just now" while connected and freezes at the disconnect moment afterward.
-    private var currentWirelessDevice: String?
+    private var currentWirelessDevice: PairedDevice?
     private var cancellables = Set<AnyCancellable>()
     private var permissionCheckTimer: Timer?
     private var statusRefreshTimer: Timer?
@@ -106,8 +107,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // onClientDisconnected handler clears currentWirelessDevice — from that
         // point lastConnected stays frozen at the disconnect moment, so the
         // "X minutes ago" label counts up correctly.
-        if let name = currentWirelessDevice {
-            pairedDeviceStore.upsert(name: name, lastConnected: Date())
+        if let device = currentWirelessDevice {
+            pairedDeviceStore.upsert(id: device.id, name: device.name, deviceSecret: device.deviceSecret, lastConnected: Date())
         }
 
         let port = Int(settings.port)
@@ -127,9 +128,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let status = KarabinerVirtualHIDDetector.status()
         settings.virtualHIDStatus = status.title
         settings.virtualHIDStatusDetail = status.detail
+        settings.virtualHIDHelperInstalled = status.helperBinaryInstalled && status.helperLaunchDaemonInstalled
         if !settings.isRunning {
             settings.activeInputBackend = "Not running"
         }
+    }
+
+    @MainActor
+    private func installVirtualHIDHelper() async {
+        guard !settings.isRunning else { return }
+        settings.virtualHIDHelperActionInProgress = true
+        settings.virtualHIDHelperMessage = "Installing helper..."
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try VirtualHIDHelperInstaller.installForCurrentUser()
+            }.value
+            settings.virtualHIDHelperMessage = "Helper installed for uid \(getuid())."
+        } catch {
+            settings.virtualHIDHelperMessage = "Helper install failed: \(error.localizedDescription)"
+        }
+        settings.virtualHIDHelperActionInProgress = false
+        refreshVirtualHIDStatus()
+    }
+
+    @MainActor
+    private func uninstallVirtualHIDHelper() async {
+        guard !settings.isRunning else { return }
+        settings.virtualHIDHelperActionInProgress = true
+        settings.virtualHIDHelperMessage = "Removing helper..."
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try VirtualHIDHelperInstaller.uninstallForCurrentUser()
+            }.value
+            settings.virtualHIDHelperMessage = "Helper removed."
+        } catch {
+            settings.virtualHIDHelperMessage = "Helper removal failed: \(error.localizedDescription)"
+        }
+        settings.virtualHIDHelperActionInProgress = false
+        refreshVirtualHIDStatus()
     }
 
     @MainActor
@@ -277,6 +313,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { [weak self] in
                     await self?.startServer()
                 }
+            }
+        }
+        settings.onInstallVirtualHIDHelper = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.installVirtualHIDHelper()
+            }
+        }
+        settings.onUninstallVirtualHIDHelper = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.uninstallVirtualHIDHelper()
+            }
+        }
+        settings.onRefreshVirtualHIDStatus = { [weak self] in
+            Task { @MainActor in
+                self?.refreshVirtualHIDStatus()
             }
         }
     }
@@ -519,26 +572,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
-            let inputSelection = InputBackendFactory.make(mode: settings.inputBackendMode)
+            let inputSelection = InputBackendFactory.make(mode: settings.inputBackendMode) { [weak self] diagnostics in
+                Task { @MainActor [weak self] in
+                    self?.settings.inputPressedKeys = diagnostics.pressedKeyCount
+                    self?.settings.inputPressedButtons = diagnostics.pressedButtonCount
+                    self?.settings.inputReleaseAllCount = diagnostics.releaseAllCount
+                    self?.settings.inputDroppedStaleCount = diagnostics.droppedStaleCount
+                    self?.settings.inputSequenceGapCount = diagnostics.sequenceGapCount
+                    self?.settings.inputCoalescedPointerMoves = diagnostics.coalescedPointerMoves
+                    self?.settings.inputLastReleaseReason = diagnostics.lastReleaseReason
+                }
+            }
             let inputPort = UInt16(min(Int(settings.port) + 1, Int(UInt16.max)))
             settings.activeInputBackend = inputSelection.activeBackend.title
             settings.virtualHIDStatus = inputSelection.status.title
             settings.virtualHIDStatusDetail = inputSelection.status.detail
             inputServer = InputServer(
                 port: inputPort,
-                expectedAuthToken: settings.connectionMode == .wireless ? WirelessAuth.loadOrCreate() : nil,
+                validateAuthToken: settings.connectionMode == .wireless ? { [weak self] token, deviceId, sessionId in
+                    self?.remoteSessionStore.validateInputToken(token, deviceId: deviceId, sessionId: sessionId) == true
+                } : nil,
                 backend: inputSelection.backend,
-                activeBackend: inputSelection.activeBackend
+                activeBackend: inputSelection.activeBackend,
+                isDeviceRevoked: { [weak self] deviceId in
+                    self?.pairedDeviceStore.isRevoked(id: deviceId) == true
+                }
             )
             streamingServer?.touchEnabled = settings.touchEnabled
             if settings.connectionMode == .wireless {
                 streamingServer?.expectedAuthToken = WirelessAuth.loadOrCreate()
-                streamingServer?.onWirelessClientPaired = { [weak self] deviceName in
+                streamingServer?.isWirelessDeviceRevoked = { [weak self] deviceId in
+                    self?.pairedDeviceStore.isRevoked(id: deviceId) == true
+                }
+                streamingServer?.wirelessDeviceSecret = { [weak self] deviceId in
+                    self?.pairedDeviceStore.deviceSecret(id: deviceId)
+                }
+                streamingServer?.makeWirelessSessionCredentials = { [weak self] deviceId in
+                    try self?.remoteSessionStore.create(deviceId: deviceId)
+                }
+                streamingServer?.onWirelessClientPaired = { [weak self] deviceId, deviceName, deviceSecret in
                     guard let self = self else { return }
                     Task { @MainActor in
-                        self.currentWirelessDevice = deviceName
+                        let device = PairedDevice(id: deviceId, name: deviceName, deviceSecret: deviceSecret, lastConnected: Date(), revoked: false)
+                        self.currentWirelessDevice = device
+                        self.settings.currentWirelessDeviceId = deviceId
                         self.settings.currentWirelessDevice = deviceName
-                        self.pairedDeviceStore.upsert(name: deviceName, lastConnected: Date())
+                        self.pairedDeviceStore.upsert(id: deviceId, name: deviceName, deviceSecret: deviceSecret, lastConnected: Date())
                     }
                 }
             }
@@ -585,9 +664,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     // Final lastConnected snapshot at the disconnect moment, then
                     // freeze (currentWirelessDevice = nil stops the rolling update
                     // in refreshStatusIndicators).
-                    if let name = self.currentWirelessDevice {
-                        self.pairedDeviceStore.upsert(name: name, lastConnected: Date())
+                    if let device = self.currentWirelessDevice {
+                        self.pairedDeviceStore.upsert(id: device.id, name: device.name, deviceSecret: device.deviceSecret, lastConnected: Date())
+                        self.remoteSessionStore.revoke(deviceId: device.id)
                         self.currentWirelessDevice = nil
+                        self.settings.currentWirelessDeviceId = nil
                         self.settings.currentWirelessDevice = nil
                     }
                 }
@@ -642,6 +723,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         screenCapture?.stopStreaming()
         inputServer?.stop()
         streamingServer?.stop()
+        remoteSessionStore.clear()
         virtualDisplayManager?.destroyDisplay()
         inputServer = nil
 

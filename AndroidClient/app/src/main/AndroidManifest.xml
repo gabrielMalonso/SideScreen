@@ -29,6 +29,18 @@
             android:name=".QRScannerActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+
+        <service
+            android:name=".SideScreenAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/sidescreen_accessibility_service" />
+        </service>
     </application>
 
 </manifest>

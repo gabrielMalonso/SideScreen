@@ -6,6 +6,7 @@ enum RemoteInputProtocolError: Error, Equatable {
     case invalidVersion
     case invalidFrame
     case unsupportedEvent
+    case deviceRevoked
 }
 
 enum RemoteInputEventType: UInt8 {
@@ -15,6 +16,7 @@ enum RemoteInputEventType: UInt8 {
     case pointerWheel = 0x12
     case allInputsUp = 0x20
     case inputPing = 0x30
+    case inputPong = 0x31
 }
 
 enum RemoteInputAction: UInt8 {
@@ -25,6 +27,7 @@ enum RemoteInputAction: UInt8 {
 struct InputChannelHello {
     let token: Data
     let deviceId: String
+    let sessionId: Data?
     let capabilities: UInt32
 }
 
@@ -57,6 +60,7 @@ enum RemoteInputEvent {
     case pointerWheel(PointerWheelEvent)
     case allInputsUp(sequence: UInt64)
     case ping(sequence: UInt64, value: UInt64)
+    case pong(InputPongEvent)
 
     var sequence: UInt64 {
         switch self {
@@ -66,6 +70,7 @@ enum RemoteInputEvent {
         case .pointerWheel(let event): return event.sequence
         case .allInputsUp(let sequence): return sequence
         case .ping(let sequence, _): return sequence
+        case .pong(let event): return event.sequence
         }
     }
 
@@ -125,6 +130,13 @@ enum RemoteInputEvent {
         case .inputPing:
             guard bytes.count == 8 else { throw RemoteInputProtocolError.invalidFrame }
             return .ping(sequence: sequence, value: bytes.readUInt64LE(at: 0))
+        case .inputPong:
+            guard bytes.count == 16 else { throw RemoteInputProtocolError.invalidFrame }
+            return .pong(InputPongEvent(
+                clientTimestampNanos: bytes.readUInt64LE(at: 0),
+                serverTimestampNanos: bytes.readUInt64LE(at: 8),
+                sequence: sequence
+            ))
         }
     }
 }
@@ -166,31 +178,41 @@ struct PointerWheelEvent {
     let sequence: UInt64
 }
 
+struct InputPongEvent {
+    let clientTimestampNanos: UInt64
+    let serverTimestampNanos: UInt64
+    let sequence: UInt64
+}
+
 enum RemoteInputCodec {
     static let helloMagic = Array("RMIP".utf8)
     static let acceptMagic = Array("RMIA".utf8)
     static let rejectMagic = Array("RMIR".utf8)
     static let helloFixedLength = 4 + 1 + 1 + 32 + 1
+    private static let flagHasSessionId: UInt8 = 0x01
 
-    static func parseHelloPrefix(_ data: Data) throws -> (token: Data, deviceIdLength: Int) {
+    static func parseHelloPrefix(_ data: Data) throws -> (token: Data, flags: UInt8, deviceIdLength: Int) {
         let bytes = [UInt8](data)
         guard bytes.count == helloFixedLength,
               Array(bytes[0..<4]) == helloMagic else {
             throw RemoteInputProtocolError.invalidHello
         }
         guard bytes[4] == 1 else { throw RemoteInputProtocolError.invalidVersion }
+        let flags = bytes[5]
+        guard flags & ~flagHasSessionId == 0 else { throw RemoteInputProtocolError.invalidHello }
         let token = Data(bytes[6..<38])
         let deviceIdLength = Int(bytes[38])
         guard (1...64).contains(deviceIdLength) else {
             throw RemoteInputProtocolError.invalidHello
         }
-        return (token, deviceIdLength)
+        return (token, flags, deviceIdLength)
     }
 
     static func parseHello(prefix: Data, suffix: Data) throws -> InputChannelHello {
         let parsed = try parseHelloPrefix(prefix)
         let bytes = [UInt8](suffix)
-        guard bytes.count == parsed.deviceIdLength + 4 else {
+        let expectedLength = parsed.deviceIdLength + 4 + ((parsed.flags & flagHasSessionId) != 0 ? RemoteSessionCredentials.sessionIdLength : 0)
+        guard bytes.count == expectedLength else {
             throw RemoteInputProtocolError.invalidHello
         }
         let nameBytes = Array(bytes[0..<parsed.deviceIdLength])
@@ -198,7 +220,14 @@ enum RemoteInputCodec {
             throw RemoteInputProtocolError.invalidHello
         }
         let capabilities = bytes.readUInt32LE(at: parsed.deviceIdLength)
-        return InputChannelHello(token: parsed.token, deviceId: deviceId, capabilities: capabilities)
+        let sessionId: Data?
+        if (parsed.flags & flagHasSessionId) != 0 {
+            let start = parsed.deviceIdLength + 4
+            sessionId = Data(bytes[start..<(start + RemoteSessionCredentials.sessionIdLength)])
+        } else {
+            sessionId = nil
+        }
+        return InputChannelHello(token: parsed.token, deviceId: deviceId, sessionId: sessionId, capabilities: capabilities)
     }
 
     static func acceptResponse(backend: UInt8 = 1) -> Data {
@@ -207,6 +236,24 @@ enum RemoteInputCodec {
 
     static func rejectResponse(reason: UInt8) -> Data {
         Data(rejectMagic + [reason])
+    }
+
+    static func inputPongFrame(
+        sequence: UInt64,
+        clientTimestampNanos: UInt64,
+        serverTimestampNanos: UInt64 = DispatchTime.now().uptimeNanoseconds
+    ) -> Data {
+        var payload = Data()
+        payload.appendUInt64LE(clientTimestampNanos)
+        payload.appendUInt64LE(serverTimestampNanos)
+
+        var data = Data()
+        data.append(RemoteInputEventType.inputPong.rawValue)
+        data.appendUInt64LE(sequence)
+        data.appendUInt64LE(serverTimestampNanos)
+        data.appendUInt16LE(UInt16(payload.count))
+        data.append(payload)
+        return data
     }
 }
 
@@ -232,5 +279,18 @@ private extension Array where Element == UInt8 {
 
     func readFloat32LE(at offset: Int) -> Float {
         Float(bitPattern: readUInt32LE(at: offset))
+    }
+}
+
+private extension Data {
+    mutating func appendUInt16LE(_ value: UInt16) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+    }
+
+    mutating func appendUInt64LE(_ value: UInt64) {
+        for shift in stride(from: 0, through: 56, by: 8) {
+            append(UInt8((value >> UInt64(shift)) & 0xff))
+        }
     }
 }

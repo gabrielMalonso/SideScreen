@@ -158,6 +158,24 @@
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/inputRateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:text="0 ev/s"
+                android:textColor="#88FFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/inputLatencyText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:text="input --"
+                android:textColor="#88FFFFFF"
+                android:textSize="12sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/releasePointerButton"
                 style="?attr/materialButtonOutlinedStyle"
@@ -787,6 +805,98 @@
                         android:text="Open Settings"
                         app:cornerRadius="16dp"
                         app:backgroundTint="#007AFF" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/wirelessDiagnostics"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp"
+                    android:background="@drawable/instruction_bg"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Connection Diagnostics"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="10dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessEndpointModeText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Endpoint: not paired"
+                        android:textColor="#DDFFFFFF"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessRouteText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Route: scan a Mac QR code"
+                        android:textColor="#BBBBBB"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessInputRouteText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Input: waiting"
+                        android:textColor="#BBBBBB"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessLimitationText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="No-root mode captures Activity keyboard events and pointer capture. Android system keys may stay local."
+                        android:textColor="#888888"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/accessibilityAssistCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp"
+                    android:background="@drawable/instruction_bg"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/accessibilityAssistStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Assist: off"
+                        android:textColor="#BBBBBB"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Optional keyboard assist can catch a few extra key events. It does not read screen content, and root is still off."
+                        android:textColor="#999999"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/accessibilityAssistButton"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="Open Accessibility Settings"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        app:strokeColor="#66FFFFFF" />
                 </LinearLayout>
 
             </LinearLayout>

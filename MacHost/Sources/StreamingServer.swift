@@ -58,7 +58,10 @@ class StreamingServer {
     // 32-byte token before being allowed to proceed. nil means wireless mode
     // is inactive — non-loopback connections are rejected immediately.
     var expectedAuthToken: Data?
-    var onWirelessClientPaired: ((String) -> Void)?
+    var onWirelessClientPaired: ((String, String, Data?) -> Void)?
+    var isWirelessDeviceRevoked: ((String) -> Bool)?
+    var wirelessDeviceSecret: ((String) -> Data?)?
+    var makeWirelessSessionCredentials: ((String) throws -> RemoteSessionCredentials?)?
 
     private let frameQueue = DispatchQueue(label: "frameQueue", qos: .userInteractive)
     private let receiveQueue = DispatchQueue(label: "receiveQueue", qos: .userInteractive)
@@ -77,6 +80,7 @@ class StreamingServer {
     private var clientSupportsFrameMetadata = false
     private var clientIsAvcOnly = false
     private var inputBuffer = Data()
+    private var seenAuthNonces = Set<String>()
 
     init(port: UInt16) {
         self.port = port
@@ -205,11 +209,10 @@ class StreamingServer {
     }
 
     private func runAuthHandshake(connection conn: NWConnection, expectedToken: Data) {
-        // Read fixed prefix [magic 4][token 32][name_len 1] = 37 bytes.
         conn.receive(minimumIncompleteLength: HandshakeCodec.fixedPrefixLen,
                      maximumLength: HandshakeCodec.fixedPrefixLen) { [weak self] prefixData, _, _, error in
-            guard let self = self else { return }
-            if let error = error {
+            guard let self else { return }
+            if let error {
                 debugLog("Auth read error: \(error)")
                 conn.cancel()
                 return
@@ -218,55 +221,176 @@ class StreamingServer {
                 self.sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
                 return
             }
-            let prefixBytes = Array(prefix)
-            guard Array(prefixBytes[0..<4]) == HandshakeCodec.requestMagic else {
+
+            let format: HandshakeCodec.RequestFormat
+            let nameLen: Int
+            do {
+                format = try HandshakeCodec.requestFormat(fromPrefix: prefix)
+                nameLen = try HandshakeCodec.nameLength(fromPrefix: prefix)
+            } catch HandshakeError.invalidName {
+                self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
+                return
+            } catch {
                 self.sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
                 return
             }
-            let nameLen = Int(prefixBytes[36])
-            guard (1...64).contains(nameLen) else {
-                self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
-                return
-            }
-            // Read variable name.
-            conn.receive(minimumIncompleteLength: nameLen, maximumLength: nameLen) { nameData, _, _, error in
-                if let error = error {
+
+            conn.receive(minimumIncompleteLength: nameLen, maximumLength: nameLen) { [weak self] nameData, _, _, error in
+                guard let self else { return }
+                if let error {
                     debugLog("Auth name read error: \(error)")
                     conn.cancel()
                     return
                 }
-                guard let nameData = nameData, nameData.count == nameLen else {
+                guard let nameData, nameData.count == nameLen else {
                     self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
                     return
                 }
-                let full = prefix + nameData
-                do {
-                    let parsed = try HandshakeCodec.parseRequest(full)
-                    if WirelessAuth.validate(parsed.token, expected: expectedToken) {
-                        debugLog("Wireless auth OK — device: \(parsed.deviceName)")
-                        self.sendAuthResponse(conn, status: .ok, thenClose: false)
-                        self.onWirelessClientPaired?(parsed.deviceName)
-                        self.beginExistingProtocol(on: conn)
-                    } else {
-                        debugLog("Wireless auth rejected: token mismatch")
-                        self.sendAuthResponse(conn, status: .invalidToken, thenClose: true)
-                    }
-                } catch HandshakeError.invalidMagic {
-                    self.sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
-                } catch HandshakeError.invalidName {
-                    self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
-                } catch {
-                    self.sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
+                let prefixAndName = prefix + nameData
+                if format != .legacy {
+                    self.receiveAuthDeviceId(prefixAndName: prefixAndName, format: format, connection: conn, expectedToken: expectedToken)
+                } else {
+                    self.finishAuthHandshake(request: prefixAndName, connection: conn, expectedToken: expectedToken)
                 }
             }
         }
     }
 
+    private func receiveAuthDeviceId(
+        prefixAndName: Data,
+        format: HandshakeCodec.RequestFormat,
+        connection conn: NWConnection,
+        expectedToken: Data
+    ) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] lengthData, _, _, error in
+            guard let self else { return }
+            if let error {
+                debugLog("Auth device id length read error: \(error)")
+                conn.cancel()
+                return
+            }
+            guard let lengthData, lengthData.count == 1, let deviceIdLength = lengthData.first, (1...64).contains(Int(deviceIdLength)) else {
+                self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
+                return
+            }
+            conn.receive(minimumIncompleteLength: Int(deviceIdLength), maximumLength: Int(deviceIdLength)) { [weak self] deviceIdData, _, _, error in
+                guard let self else { return }
+                if let error {
+                    debugLog("Auth device id read error: \(error)")
+                    conn.cancel()
+                    return
+                }
+                guard let deviceIdData, deviceIdData.count == Int(deviceIdLength) else {
+                    self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
+                    return
+                }
+                let requestWithoutSecret = prefixAndName + lengthData + deviceIdData
+                if format == .deviceSecret {
+                    self.receiveAuthDeviceAuthenticator(requestWithoutSecret: requestWithoutSecret, connection: conn, expectedToken: expectedToken)
+                } else {
+                    self.finishAuthHandshake(request: requestWithoutSecret, connection: conn, expectedToken: expectedToken)
+                }
+            }
+        }
+    }
+
+    private func receiveAuthDeviceAuthenticator(requestWithoutSecret: Data, connection conn: NWConnection, expectedToken: Data) {
+        let authLength = HandshakeCodec.deviceSecretLength + HandshakeCodec.authNonceLength + HandshakeCodec.authTagLength
+        conn.receive(minimumIncompleteLength: authLength, maximumLength: authLength) { [weak self] secretData, _, _, error in
+            guard let self else { return }
+            if let error {
+                debugLog("Auth device authenticator read error: \(error)")
+                conn.cancel()
+                return
+            }
+            guard let secretData, secretData.count == authLength else {
+                self.sendAuthResponse(conn, status: .invalidName, thenClose: true)
+                return
+            }
+            self.finishAuthHandshake(request: requestWithoutSecret + secretData, connection: conn, expectedToken: expectedToken)
+        }
+    }
+
+    private func finishAuthHandshake(request: Data, connection conn: NWConnection, expectedToken: Data) {
+        do {
+            let parsed = try HandshakeCodec.parseRequest(request)
+            let tokenValid = WirelessAuth.validate(parsed.token, expected: expectedToken)
+            let storedSecret = wirelessDeviceSecret?(parsed.deviceId)
+            let hmacValidWithSentSecret = HandshakeCodec.validateAuthenticationTag(
+                parsed.authTag,
+                deviceSecret: parsed.deviceSecret,
+                deviceId: parsed.deviceId,
+                deviceName: parsed.deviceName,
+                clientNonce: parsed.clientNonce
+            )
+            let hmacValidWithStoredSecret = HandshakeCodec.validateAuthenticationTag(
+                parsed.authTag,
+                deviceSecret: storedSecret,
+                deviceId: parsed.deviceId,
+                deviceName: parsed.deviceName,
+                clientNonce: parsed.clientNonce
+            )
+
+            let acceptedByLegacyToken = parsed.isLegacyIdentity || parsed.deviceSecret == nil
+            let acceptedByPairingToken = tokenValid && (acceptedByLegacyToken || hmacValidWithSentSecret)
+            let acceptedByDeviceSecret = !tokenValid && hmacValidWithStoredSecret
+            guard acceptedByPairingToken || acceptedByDeviceSecret else {
+                debugLog("Wireless auth rejected: token/HMAC mismatch id=...\(parsed.deviceId.suffix(4))")
+                sendAuthResponse(conn, status: .invalidToken, thenClose: true)
+                return
+            }
+            if !parsed.isLegacyIdentity,
+               let clientNonce = parsed.clientNonce,
+               !rememberAuthNonce(clientNonce, deviceId: parsed.deviceId) {
+                debugLog("Wireless auth rejected: replayed nonce id=...\(parsed.deviceId.suffix(4))")
+                sendAuthResponse(conn, status: .invalidToken, thenClose: true)
+                return
+            }
+            if isWirelessDeviceRevoked?(parsed.deviceId) == true {
+                debugLog("Wireless auth rejected: device revoked id=...\(parsed.deviceId.suffix(4))")
+                sendAuthResponse(conn, status: .deviceRevoked, thenClose: true)
+                return
+            }
+            debugLog("Wireless auth OK — device: \(parsed.deviceName), id=...\(parsed.deviceId.suffix(4))")
+            if parsed.isLegacyIdentity {
+                sendAuthResponse(conn, status: .ok, thenClose: false)
+            } else if let credentials = try makeWirelessSessionCredentials?(parsed.deviceId) {
+                sendAuthResponse(conn, bytes: HandshakeCodec.encodeV2AcceptResponse(credentials: credentials), thenClose: false)
+            } else {
+                debugLog("Wireless auth rejected: session creation failed")
+                sendAuthResponse(conn, status: .invalidToken, thenClose: true)
+                return
+            }
+            let secretToStore = tokenValid && hmacValidWithSentSecret ? parsed.deviceSecret : nil
+            onWirelessClientPaired?(parsed.deviceId, parsed.deviceName, secretToStore)
+            beginExistingProtocol(on: conn)
+        } catch HandshakeError.invalidMagic {
+            sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
+        } catch HandshakeError.invalidName {
+            sendAuthResponse(conn, status: .invalidName, thenClose: true)
+        } catch HandshakeError.invalidDeviceId {
+            sendAuthResponse(conn, status: .invalidName, thenClose: true)
+        } catch {
+            sendAuthResponse(conn, status: .invalidMagic, thenClose: true)
+        }
+    }
+
+    private func rememberAuthNonce(_ nonce: Data, deviceId: String) -> Bool {
+        let key = "\(deviceId):\(nonce.base64EncodedString())"
+        if seenAuthNonces.count > 4096 {
+            seenAuthNonces.removeAll(keepingCapacity: true)
+        }
+        return seenAuthNonces.insert(key).inserted
+    }
+
     private func sendAuthResponse(_ conn: NWConnection, status: HandshakeStatus, thenClose: Bool) {
-        let bytes = HandshakeCodec.encodeResponse(status: status)
+        sendAuthResponse(conn, bytes: HandshakeCodec.encodeResponse(status: status), thenClose: thenClose)
+    }
+
+    private func sendAuthResponse(_ conn: NWConnection, bytes: Data, thenClose: Bool) {
         conn.send(content: bytes, completion: .contentProcessed { _ in
             if thenClose {
-                debugLog("Auth rejected (\(status)), closing connection")
+                debugLog("Auth rejected, closing connection")
                 conn.cancel()
             }
         })

@@ -353,8 +353,16 @@ InputPong
 
 Uso:
 
+- manter o canal de input vivo;
+- impedir que o watchdog do Mac solte teclas/botões durante um hold legítimo;
 - medir latência específica do canal de input;
 - não misturar com frame latency.
+
+Implementação sem-root atual:
+
+- Android envia `InputPing` a cada 2s enquanto o canal de input está aceito.
+- Mac trata `InputPing` como sinal de vida e rearma o watchdog.
+- `InputPong` fica reservado para métrica fina de latência de input.
 
 ## Compatibilidade com MVP
 
@@ -366,6 +374,7 @@ PointerRelative
 PointerButton
 PointerWheel
 AllInputsUp
+InputPing
 ```
 
 Campos opcionais podem ser zero/default.
@@ -446,4 +455,3 @@ Logar em modo debug:
 - key up sem key down;
 - key down duplicado;
 - latência média/p95 do input.
-

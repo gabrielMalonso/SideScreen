@@ -17,7 +17,10 @@ let package = Package(
     products: [
         .executable(
             name: "SideScreen",
-            targets: ["SideScreen"])
+            targets: ["SideScreen"]),
+        .executable(
+            name: "SideScreenVirtualHIDHelper",
+            targets: ["SideScreenVirtualHIDHelper"])
     ],
     targets: [
         .executableTarget(
@@ -27,6 +30,13 @@ let package = Package(
             cSettings: [
                 .unsafeFlags(["-I", sourcesDirectory])
             ],
+            swiftSettings: [
+                .unsafeFlags(["-Xcc", "-fmodule-map-file=\(moduleMapFile)"])
+            ]),
+        .executableTarget(
+            name: "SideScreenVirtualHIDHelper",
+            dependencies: [],
+            path: "VirtualHIDHelperSources",
             swiftSettings: [
                 .unsafeFlags(["-Xcc", "-fmodule-map-file=\(moduleMapFile)"])
             ]),

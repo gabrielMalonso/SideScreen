@@ -49,6 +49,10 @@ class WirelessTabController(
         val idleMacIp: TextView,
         val repairTitle: TextView,
         val repairMessage: TextView,
+        val endpointModeText: TextView,
+        val routeText: TextView,
+        val inputRouteText: TextView,
+        val limitationText: TextView,
     )
 
     enum class State { FIRST_TIME, CONNECTING, CONNECTED, PAIRED_IDLE, REPAIR_NEEDED, PERM_DENIED }
@@ -73,9 +77,11 @@ class WirelessTabController(
                     transition(State.FIRST_TIME)
                     return@setOnClickListener
                 }
+            updateDiagnostics(entry, "Input: connecting")
             showConnecting("Reconnecting to ${entry.macName}", "${entry.host}:${entry.port}")
             attemptAutoConnect(entry)
         }
+        updateDiagnostics(storage.load(), "Input: waiting")
     }
 
     /**
@@ -89,11 +95,13 @@ class WirelessTabController(
         )
         val entry =
             storage.load() ?: run {
+                updateDiagnostics(null, "Input: waiting")
                 transition(State.FIRST_TIME)
                 return
             }
         views.idleMacName.text = entry.macName
-        views.idleMacIp.text = "${entry.host}:${entry.port}"
+        views.idleMacIp.text = entry.endpointSummary()
+        updateDiagnostics(entry, "Input: disconnected")
         transition(State.PAIRED_IDLE)
     }
 
@@ -118,12 +126,19 @@ class WirelessTabController(
      */
     fun show() {
         when {
-            cameraPerm.isPermanentlyDenied() -> transition(State.PERM_DENIED)
-            storage.load() == null -> transition(State.FIRST_TIME)
+            cameraPerm.isPermanentlyDenied() -> {
+                updateDiagnostics(storage.load(), "Input: waiting for camera permission")
+                transition(State.PERM_DENIED)
+            }
+            storage.load() == null -> {
+                updateDiagnostics(null, "Input: waiting")
+                transition(State.FIRST_TIME)
+            }
             else -> {
                 val entry = storage.load()!!
                 views.idleMacName.text = entry.macName
-                views.idleMacIp.text = "${entry.host}:${entry.port}"
+                views.idleMacIp.text = entry.endpointSummary()
+                updateDiagnostics(entry, "Input: ready to reconnect")
                 transition(State.PAIRED_IDLE)
             }
         }
@@ -132,21 +147,24 @@ class WirelessTabController(
     fun onScanResult(url: String) {
         val parsed = PairingURL.parse(url) ?: return
         val deviceName = (android.os.Build.MODEL ?: "Android").take(64)
-        storage.save(PairedHostStorage.Entry(parsed.host, parsed.port, parsed.token, parsed.macName, parsed.endpointMode))
-        showConnecting("Connecting to ${parsed.macName}", "${parsed.host}:${parsed.port}")
+        val entry = PairedHostStorage.Entry(parsed.host, parsed.port, parsed.token, parsed.macName, parsed.endpointMode)
+        storage.save(entry)
+        updateDiagnostics(entry, "Input: waiting for secure session")
+        showConnecting("Connecting to ${parsed.macName}", entry.endpointSummary())
         onConnectRequested(parsed.host, parsed.port, parsed.token, deviceName, parsed.macName, parsed.endpointMode)
     }
 
     fun onConnectError(error: StreamClient.WirelessConnectError) {
         val cached = storage.load()
+        updateDiagnostics(cached, "Input: not connected")
         when (error) {
             is StreamClient.WirelessConnectError.NetworkUnreachable -> {
                 views.repairTitle.text = "⚠ Couldn't reach Mac"
                 views.repairMessage.text =
                     if (cached != null) {
                         "No response from ${cached.macName} at ${cached.host}:${cached.port}.\n\n" +
-                            "The Mac may have switched WiFi networks, changed its port, or is not " +
-                            "running. Open SideScreen on the Mac and scan the new QR to re-pair."
+                            cached.endpointMode.failureChecklist + "\n\n" +
+                            "If the Mac changed endpoint or port, scan a fresh QR."
                     } else {
                         "No response from your Mac. Make sure both devices are on the same WiFi " +
                             "and the Mac app is running, then scan the QR again."
@@ -161,6 +179,16 @@ class WirelessTabController(
                             "reinstalled). Scan the new QR to pair again."
                     } else {
                         "The Mac reset its pairing token. Scan the new QR to pair again."
+                }
+                transition(State.REPAIR_NEEDED)
+            }
+            is StreamClient.WirelessConnectError.DeviceRevoked -> {
+                views.repairTitle.text = "Device blocked on Mac"
+                views.repairMessage.text =
+                    if (cached != null) {
+                        "${cached.macName} rejected this Android device. Open SideScreen on the Mac, go to Paired Devices, and click Allow for this device."
+                    } else {
+                        "The Mac rejected this Android device. Open SideScreen on the Mac and allow this device in Paired Devices."
                     }
                 transition(State.REPAIR_NEEDED)
             }
@@ -185,9 +213,15 @@ class WirelessTabController(
         macName: String,
         ip: String,
     ) {
+        val entry = storage.load()
         views.connectedMacName.text = macName
-        views.connectedMacIp.text = ip
+        views.connectedMacIp.text = entry?.endpointSummary() ?: ip
+        updateDiagnostics(entry, "Input: connecting on port +1")
         transition(State.CONNECTED)
+    }
+
+    fun onInputBackendAccepted(backendName: String) {
+        updateDiagnostics(storage.load(), "Input: $backendName active")
     }
 
     fun onCameraPermissionResult(granted: Boolean) {
@@ -221,6 +255,28 @@ class WirelessTabController(
         val deviceName = (android.os.Build.MODEL ?: "Android").take(64)
         onConnectRequested(entry.host, entry.port, entry.token, deviceName, entry.macName, entry.endpointMode)
     }
+
+    private fun updateDiagnostics(
+        entry: PairedHostStorage.Entry?,
+        inputState: String,
+    ) {
+        if (entry == null) {
+            views.endpointModeText.text = "Endpoint: not paired"
+            views.routeText.text = "Route: scan a QR from the Mac"
+            views.inputRouteText.text = inputState
+            views.limitationText.text =
+                "No-root mode captures Activity keyboard events and pointer capture. Android system keys may stay local."
+            return
+        }
+        views.endpointModeText.text = "Endpoint: ${entry.endpointMode.displayName} · ${entry.host}:${entry.port}"
+        views.routeText.text = "Route: ${entry.endpointMode.routeDescription}"
+        views.inputRouteText.text = "$inputState · input port ${entry.port + 1}"
+        views.limitationText.text =
+            "No-root input handles normal keys, modifiers delivered by Android, mouse move, buttons, drag and wheel. Home, Power, Recents and some Meta shortcuts may stay on Android."
+    }
+
+    private fun PairedHostStorage.Entry.endpointSummary(): String =
+        "${endpointMode.displayName}: $host:$port"
 
     companion object {
         const val REQ_SCAN = 1001

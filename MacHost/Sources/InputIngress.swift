@@ -1,7 +1,18 @@
 import Foundation
 
+struct InputIngressDiagnostics {
+    let pressedKeyCount: Int
+    let pressedButtonCount: Int
+    let releaseAllCount: UInt64
+    let droppedStaleCount: UInt64
+    let sequenceGapCount: UInt64
+    let coalescedPointerMoves: UInt64
+    let lastReleaseReason: String
+}
+
 final class InputIngress: InputBackend {
     private let downstream: InputBackend
+    private let onDiagnosticsChanged: ((InputIngressDiagnostics) -> Void)?
     private let lock = NSLock()
     private var activeDeviceId: String?
     private var lastSequence: UInt64?
@@ -9,11 +20,16 @@ final class InputIngress: InputBackend {
     private var pressedButtons = Set<UInt8>()
     private var pendingPointerRelative: PointerRelativeEvent?
     private var coalescedPointerMoves: UInt64 = 0
+    private var releaseAllCount: UInt64 = 0
+    private var droppedStaleCount: UInt64 = 0
+    private var sequenceGapCount: UInt64 = 0
+    private var lastReleaseReason = "None"
     private var watchdog: DispatchSourceTimer?
     private let watchdogQueue = DispatchQueue(label: "inputIngressWatchdogQueue", qos: .userInteractive)
 
-    init(downstream: InputBackend) {
+    init(downstream: InputBackend, onDiagnosticsChanged: ((InputIngressDiagnostics) -> Void)? = nil) {
         self.downstream = downstream
+        self.onDiagnosticsChanged = onDiagnosticsChanged
     }
 
     func beginSession(deviceId: String) {
@@ -24,7 +40,12 @@ final class InputIngress: InputBackend {
         pressedButtons.removeAll()
         pendingPointerRelative = nil
         coalescedPointerMoves = 0
+        releaseAllCount = 0
+        droppedStaleCount = 0
+        sequenceGapCount = 0
+        lastReleaseReason = "None"
         armWatchdogLocked()
+        emitDiagnosticsLocked()
         lock.unlock()
 
         downstream.beginSession(deviceId: deviceId)
@@ -47,11 +68,13 @@ final class InputIngress: InputBackend {
         case .keyboard(let key):
             flushPendingPointerRelativeLocked()
             updateKeyboardStateLocked(key)
+            emitDiagnosticsLocked()
             lock.unlock()
             downstream.handle(event)
         case .pointerButton(let button):
             flushPendingPointerRelativeLocked()
             updateButtonStateLocked(button)
+            emitDiagnosticsLocked()
             lock.unlock()
             downstream.handle(event)
         case .pointerWheel:
@@ -62,6 +85,7 @@ final class InputIngress: InputBackend {
             flushPendingPointerRelativeLocked()
             pressedKeys.removeAll()
             pressedButtons.removeAll()
+            emitDiagnosticsLocked()
             lock.unlock()
             downstream.handle(event)
         case .ping:
@@ -76,6 +100,9 @@ final class InputIngress: InputBackend {
         flushPendingPointerRelativeLocked()
         pressedKeys.removeAll()
         pressedButtons.removeAll()
+        releaseAllCount += 1
+        lastReleaseReason = reason
+        emitDiagnosticsLocked()
         lock.unlock()
         downstream.releaseAll(reason: reason)
     }
@@ -87,10 +114,13 @@ final class InputIngress: InputBackend {
         flushPendingPointerRelativeLocked()
         pressedKeys.removeAll()
         pressedButtons.removeAll()
+        releaseAllCount += 1
+        lastReleaseReason = reason
         let coalesced = coalescedPointerMoves
         activeDeviceId = nil
         lastSequence = nil
         coalescedPointerMoves = 0
+        emitDiagnosticsLocked()
         lock.unlock()
 
         downstream.releaseAll(reason: reason)
@@ -110,10 +140,13 @@ final class InputIngress: InputBackend {
                 debugLog("InputIngress processing stale all-inputs-up seq=\(sequence), last=\(previous)")
                 return true
             }
+            droppedStaleCount += 1
+            emitDiagnosticsLocked()
             debugLog("InputIngress dropped stale input seq=\(sequence), last=\(previous)")
             return false
         }
         if sequence > previous + 1 {
+            sequenceGapCount += 1
             debugLog("InputIngress sequence gap: last=\(previous), next=\(sequence)")
         }
         return true
@@ -129,6 +162,7 @@ final class InputIngress: InputBackend {
                 sequence: move.sequence
             )
             coalescedPointerMoves += 1
+            emitDiagnosticsLocked()
         } else {
             pendingPointerRelative = move
             schedulePointerFlush()
@@ -176,5 +210,17 @@ final class InputIngress: InputBackend {
         }
         watchdog = timer
         timer.resume()
+    }
+
+    private func emitDiagnosticsLocked() {
+        onDiagnosticsChanged?(InputIngressDiagnostics(
+            pressedKeyCount: pressedKeys.count,
+            pressedButtonCount: pressedButtons.count,
+            releaseAllCount: releaseAllCount,
+            droppedStaleCount: droppedStaleCount,
+            sequenceGapCount: sequenceGapCount,
+            coalescedPointerMoves: coalescedPointerMoves,
+            lastReleaseReason: lastReleaseReason
+        ))
     }
 }

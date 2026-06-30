@@ -461,8 +461,61 @@ struct SettingsView: View {
                                 StatusRow(
                                     title: "Virtual HID",
                                     status: settings.virtualHIDStatus,
-                                    color: settings.virtualHIDStatus == "Ready" ? .green : .orange,
+                                    color: settings.virtualHIDStatus.hasPrefix("Ready") ? .green : .orange,
                                     hint: settings.virtualHIDStatusDetail.isEmpty ? "Karabiner VirtualHID status has not been checked yet." : settings.virtualHIDStatusDetail
+                                )
+                                HStack(spacing: 8) {
+                                    Button(settings.virtualHIDHelperInstalled ? "Reinstall Helper" : "Install Helper") {
+                                        settings.onInstallVirtualHIDHelper?()
+                                    }
+                                    .disabled(settings.isRunning || settings.virtualHIDHelperActionInProgress)
+
+                                    Button("Remove Helper") {
+                                        settings.onUninstallVirtualHIDHelper?()
+                                    }
+                                    .disabled(settings.isRunning || settings.virtualHIDHelperActionInProgress || !settings.virtualHIDHelperInstalled)
+
+                                    Button("Refresh") {
+                                        settings.onRefreshVirtualHIDStatus?()
+                                    }
+                                    .disabled(settings.virtualHIDHelperActionInProgress)
+
+                                    if settings.virtualHIDHelperActionInProgress {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
+                                }
+                                .font(.system(size: 11))
+
+                                if !settings.virtualHIDHelperMessage.isEmpty {
+                                    Text(settings.virtualHIDHelperMessage)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                StatusRow(
+                                    title: "Pressed state",
+                                    status: "\(settings.inputPressedKeys) keys / \(settings.inputPressedButtons) buttons",
+                                    color: settings.inputPressedKeys == 0 && settings.inputPressedButtons == 0 ? .green : .orange,
+                                    hint: "Current remote input state tracked by InputIngress. It should return to 0/0 after disconnect, pause, or pointer capture release."
+                                )
+                                StatusRow(
+                                    title: "Release-all",
+                                    status: "\(settings.inputReleaseAllCount)",
+                                    color: .green,
+                                    hint: settings.inputLastReleaseReason
+                                )
+                                StatusRow(
+                                    title: "Sequence",
+                                    status: "\(settings.inputSequenceGapCount) gaps / \(settings.inputDroppedStaleCount) stale",
+                                    color: settings.inputDroppedStaleCount == 0 ? .green : .orange,
+                                    hint: "Gaps suggest packet loss or reconnect churn. Stale events are dropped except all-inputs-up."
+                                )
+                                StatusRow(
+                                    title: "Mouse coalescing",
+                                    status: "\(settings.inputCoalescedPointerMoves) moves",
+                                    color: .green,
+                                    hint: "Consecutive relative mouse moves coalesced before hitting the backend."
                                 )
 
                                 if settings.inputBackendMode == .virtualHID && settings.virtualHIDStatus != "Ready" {
@@ -1124,8 +1177,9 @@ class DisplaySettings: ObservableObject {
     // Runtime state (not persisted)
     @Published var displayCreated = false
     @Published var clientConnected = false
-    /// Device name of the wireless client currently streaming (nil when none).
+    /// Device identity of the wireless client currently streaming (nil when none).
     /// WirelessSection reads this to show a "Connected" badge on the matching row.
+    @Published var currentWirelessDeviceId: String?
     @Published var currentWirelessDevice: String?
     @Published var hasScreenRecordingPermission = false
     @Published var hasAccessibilityPermission = false
@@ -1141,8 +1195,21 @@ class DisplaySettings: ObservableObject {
     @Published var activeInputBackend: String = "CGEvent"
     @Published var virtualHIDStatus: String = "Not checked"
     @Published var virtualHIDStatusDetail: String = ""
+    @Published var virtualHIDHelperInstalled: Bool = false
+    @Published var virtualHIDHelperActionInProgress: Bool = false
+    @Published var virtualHIDHelperMessage: String = ""
+    @Published var inputPressedKeys: Int = 0
+    @Published var inputPressedButtons: Int = 0
+    @Published var inputReleaseAllCount: UInt64 = 0
+    @Published var inputDroppedStaleCount: UInt64 = 0
+    @Published var inputSequenceGapCount: UInt64 = 0
+    @Published var inputCoalescedPointerMoves: UInt64 = 0
+    @Published var inputLastReleaseReason: String = "None"
 
     var onToggleServer: (() -> Void)?
+    var onInstallVirtualHIDHelper: (() -> Void)?
+    var onUninstallVirtualHIDHelper: (() -> Void)?
+    var onRefreshVirtualHIDStatus: (() -> Void)?
 
     init() {
         self.resolution = defaults.string(forKey: keyPrefix + "resolution") ?? "1920x1200"
@@ -1429,23 +1496,30 @@ struct WirelessSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     VStack(spacing: 6) {
-                        ForEach(pairedDevices, id: \.name) { device in
-                            let isLive = settings.currentWirelessDevice == device.name
+                        ForEach(pairedDevices, id: \.id) { device in
+                            let isLive = settings.currentWirelessDeviceId == device.id
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(device.name).font(.system(size: 12, weight: .medium))
                                     HStack(spacing: 4) {
                                         Circle()
-                                            .fill(isLive ? Color.green : Color.secondary)
+                                            .fill(device.revoked ? Color.red : (isLive ? Color.green : Color.secondary))
                                             .frame(width: 6, height: 6)
-                                        Text(isLive ? "Connected" : relativeTimeString(from: device.lastConnected, to: nowTick))
+                                        Text(device.revoked ? "Revoked" : (isLive ? "Connected" : relativeTimeString(from: device.lastConnected, to: nowTick)))
                                             .font(.system(size: 10))
-                                            .foregroundColor(isLive ? .green : .secondary)
+                                            .foregroundColor(device.revoked ? .red : (isLive ? .green : .secondary))
+                                        Text(device.id.suffix(8))
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(.secondary)
                                     }
                                 }
                                 Spacer()
-                                Button("Forget") {
-                                    pairedDeviceStore.forget(name: device.name)
+                                Button(device.revoked ? "Allow" : "Revoke") {
+                                    if device.revoked {
+                                        pairedDeviceStore.restore(id: device.id)
+                                    } else {
+                                        pairedDeviceStore.revoke(id: device.id)
+                                    }
                                     refreshPaired()
                                 }
                                 .buttonStyle(.bordered)
