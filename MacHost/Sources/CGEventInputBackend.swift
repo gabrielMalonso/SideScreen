@@ -32,7 +32,7 @@ final class CGEventInputBackend: InputBackend {
             handlePointerWheel(wheel)
         case .allInputsUp:
             releaseAll(reason: "client all-inputs-up")
-        case .ping:
+        case .ping, .pong:
             break
         }
     }

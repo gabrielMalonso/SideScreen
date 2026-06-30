@@ -88,7 +88,7 @@ final class InputIngress: InputBackend {
             emitDiagnosticsLocked()
             lock.unlock()
             downstream.handle(event)
-        case .ping:
+        case .ping, .pong:
             flushPendingPointerRelativeLocked()
             lock.unlock()
             downstream.handle(event)

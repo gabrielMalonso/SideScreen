@@ -523,7 +523,7 @@ final class KarabinerVirtualHIDBackend: InputBackend {
                 try postPointerWheel(wheel)
             case .allInputsUp:
                 releaseAll(reason: "client all-inputs-up")
-            case .ping:
+            case .ping, .pong:
                 break
             }
         } catch {

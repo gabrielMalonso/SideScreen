@@ -37,11 +37,10 @@ class RemoteInputProtocolTest {
     @Test
     fun envelopeCarriesLittleEndianSequenceAndLength() {
         val bytes = RemoteInputProtocol.envelope(0x20, 42, byteArrayOf(1, 2, 3))
-        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        assertEquals(0x20, buffer.get().toInt())
-        assertEquals(42, buffer.long)
-        buffer.long
-        assertEquals(3, buffer.short.toInt())
+        val header = RemoteInputProtocol.parseEnvelopeHeader(bytes.copyOfRange(0, RemoteInputProtocol.ENVELOPE_HEADER_LENGTH))
+        assertEquals(0x20, header.eventType)
+        assertEquals(42, header.sequence)
+        assertEquals(3, header.payloadLength)
     }
 
     @Test
@@ -57,5 +56,19 @@ class RemoteInputProtocolTest {
     fun exposesAccessibilityAssistCapabilityAndKeyboardFlag() {
         assertEquals(1 shl 4, RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST)
         assertEquals(2, RemoteInputProtocol.FLAG_FROM_ACCESSIBILITY)
+    }
+
+    @Test
+    fun parsesInputPongPayload() {
+        val payload =
+            ByteBuffer.allocate(16)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putLong(0x0102_0304_0506_0708L)
+                .putLong(0x1112_1314_1516_1718L)
+                .array()
+
+        val pong = RemoteInputProtocol.parseInputPongPayload(payload)
+        assertEquals(0x0102_0304_0506_0708L, pong.clientTimestampNanos)
+        assertEquals(0x1112_1314_1516_1718L, pong.serverTimestampNanos)
     }
 }
