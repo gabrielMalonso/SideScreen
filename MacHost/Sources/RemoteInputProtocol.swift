@@ -55,8 +55,19 @@ enum RemoteInputEvent {
     case pointerRelative(PointerRelativeEvent)
     case pointerButton(PointerButtonEvent)
     case pointerWheel(PointerWheelEvent)
-    case allInputsUp
-    case ping(UInt64)
+    case allInputsUp(sequence: UInt64)
+    case ping(sequence: UInt64, value: UInt64)
+
+    var sequence: UInt64 {
+        switch self {
+        case .keyboard(let event): return event.sequence
+        case .pointerRelative(let event): return event.sequence
+        case .pointerButton(let event): return event.sequence
+        case .pointerWheel(let event): return event.sequence
+        case .allInputsUp(let sequence): return sequence
+        case .ping(let sequence, _): return sequence
+        }
+    }
 
     static func parse(type: RemoteInputEventType, sequence: UInt64, timestamp: UInt64, payload: Data) throws -> RemoteInputEvent {
         let bytes = [UInt8](payload)
@@ -110,10 +121,10 @@ enum RemoteInputEvent {
             ))
         case .allInputsUp:
             guard bytes.isEmpty else { throw RemoteInputProtocolError.invalidFrame }
-            return .allInputsUp
+            return .allInputsUp(sequence: sequence)
         case .inputPing:
             guard bytes.count == 8 else { throw RemoteInputProtocolError.invalidFrame }
-            return .ping(bytes.readUInt64LE(at: 0))
+            return .ping(sequence: sequence, value: bytes.readUInt64LE(at: 0))
         }
     }
 }
@@ -156,9 +167,9 @@ struct PointerWheelEvent {
 }
 
 enum RemoteInputCodec {
-    static let helloMagic = [UInt8]("RMIP".utf8)
-    static let acceptMagic = [UInt8]("RMIA".utf8)
-    static let rejectMagic = [UInt8]("RMIR".utf8)
+    static let helloMagic = Array("RMIP".utf8)
+    static let acceptMagic = Array("RMIA".utf8)
+    static let rejectMagic = Array("RMIR".utf8)
     static let helloFixedLength = 4 + 1 + 1 + 32 + 1
 
     static func parseHelloPrefix(_ data: Data) throws -> (token: Data, deviceIdLength: Int) {
@@ -223,4 +234,3 @@ private extension Array where Element == UInt8 {
         Float(bitPattern: readUInt32LE(at: offset))
     }
 }
-

@@ -435,6 +435,45 @@ struct SettingsView: View {
                             }
                         }
 
+                        FrostedGroupBox(title: "Remote Input", icon: "keyboard") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("Backend")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Picker("", selection: $settings.inputBackendMode) {
+                                        ForEach(InputBackendMode.allCases, id: \.self) { mode in
+                                            Text(mode.title).tag(mode)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .frame(width: 230)
+                                    .disabled(settings.isRunning)
+                                }
+
+                                StatusRow(
+                                    title: "Active backend",
+                                    status: settings.activeInputBackend,
+                                    color: settings.activeInputBackend == "CGEvent" ? .orange : .green,
+                                    hint: "Which backend is currently applying keyboard and mouse events on macOS. Virtual HID is preferred when a privileged helper is available; CGEvent is the fallback."
+                                )
+                                StatusRow(
+                                    title: "Virtual HID",
+                                    status: settings.virtualHIDStatus,
+                                    color: settings.virtualHIDStatus == "Ready" ? .green : .orange,
+                                    hint: settings.virtualHIDStatusDetail.isEmpty ? "Karabiner VirtualHID status has not been checked yet." : settings.virtualHIDStatusDetail
+                                )
+
+                                if settings.inputBackendMode == .virtualHID && settings.virtualHIDStatus != "Ready" {
+                                    Text(settings.virtualHIDStatusDetail)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+
                         // Network Settings (port — applies to both modes; listener binds on it)
                         FrostedGroupBox(title: "Network Settings", icon: "network") {
                             VStack(alignment: .leading, spacing: 8) {
@@ -1078,6 +1117,9 @@ class DisplaySettings: ObservableObject {
     @Published var tailnetHost: String {
         didSet { save("tailnetHost", tailnetHost) }
     }
+    @Published var inputBackendMode: InputBackendMode {
+        didSet { save("inputBackendMode", inputBackendMode.rawValue) }
+    }
 
     // Runtime state (not persisted)
     @Published var displayCreated = false
@@ -1096,6 +1138,9 @@ class DisplaySettings: ObservableObject {
     @Published var currentFPS: Double = 0
     @Published var currentBitrate: Double = 0
     @Published var captureMethod: String = "Initializing..."
+    @Published var activeInputBackend: String = "CGEvent"
+    @Published var virtualHIDStatus: String = "Not checked"
+    @Published var virtualHIDStatusDetail: String = ""
 
     var onToggleServer: (() -> Void)?
 
@@ -1119,6 +1164,8 @@ class DisplaySettings: ObservableObject {
         let endpointRaw = defaults.string(forKey: keyPrefix + "endpointMode") ?? EndpointMode.lan.rawValue
         self.endpointMode = EndpointMode(rawValue: endpointRaw) ?? .lan
         self.tailnetHost = defaults.string(forKey: keyPrefix + "tailnetHost") ?? ""
+        let inputBackendRaw = defaults.string(forKey: keyPrefix + "inputBackendMode") ?? InputBackendMode.automatic.rawValue
+        self.inputBackendMode = InputBackendMode(rawValue: inputBackendRaw) ?? .automatic
 
         print("Loaded settings: \(resolution) @ \(refreshRate)Hz, bitrate=\(bitrate), quality=\(quality)")
     }
@@ -1182,7 +1229,8 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality",
                     "gamingBoost", "port", "rotation", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "endpointMode", "tailnetHost"]
+                    "customWidth", "customHeight", "touchEnabled", "endpointMode", "tailnetHost",
+                    "inputBackendMode"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
         }
@@ -1201,6 +1249,7 @@ class DisplaySettings: ObservableObject {
         touchEnabled = true
         endpointMode = .lan
         tailnetHost = ""
+        inputBackendMode = .automatic
 
         print("Settings reset to defaults")
     }

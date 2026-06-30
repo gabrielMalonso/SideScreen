@@ -2,8 +2,17 @@ import ApplicationServices
 import Foundation
 
 protocol InputBackend: AnyObject {
+    func beginSession(deviceId: String)
     func handle(_ event: RemoteInputEvent)
     func releaseAll(reason: String)
+    func endSession(reason: String)
+}
+
+extension InputBackend {
+    func beginSession(deviceId: String) {}
+    func endSession(reason: String) {
+        releaseAll(reason: reason)
+    }
 }
 
 final class CGEventInputBackend: InputBackend {
@@ -159,4 +168,3 @@ final class CGEventInputBackend: InputBackend {
         0xE4: 62, 0xE5: 60, 0xE6: 61, 0xE7: 54
     ]
 }
-

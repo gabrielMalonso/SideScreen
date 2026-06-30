@@ -2,6 +2,7 @@ package com.sidescreen.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.util.UUID
 
 class PreferencesManager(
     context: Context,
@@ -40,4 +41,12 @@ class PreferencesManager(
     var connectionMode: ConnectionMode
         get() = ConnectionMode.fromName(prefs.getString("connection_mode", null))
         set(value) = prefs.edit().putString("connection_mode", value.name).apply()
+
+    val remoteInputDeviceId: String
+        get() {
+            prefs.getString("remote_input_device_id", null)?.let { return it }
+            val generated = UUID.randomUUID().toString()
+            prefs.edit().putString("remote_input_device_id", generated).apply()
+            return generated
+        }
 }

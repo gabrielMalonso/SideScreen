@@ -99,6 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settings.adbInstalled = StatusDetector.adbInstalled()
         settings.wifiConnected = StatusDetector.wifiReachable()
         settings.listeningAddress = LANAddressResolver.primaryIPv4()
+        refreshVirtualHIDStatus()
 
         // While a wireless client is actively streaming, keep its lastConnected
         // rolling forward so the UI shows "just now". On disconnect, the
@@ -118,6 +119,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.settings.usbDeviceConnected = !devices.isEmpty
                 self.settings.adbReverseConfigured = reverseOK
             }
+        }
+    }
+
+    @MainActor
+    private func refreshVirtualHIDStatus() {
+        let status = KarabinerVirtualHIDDetector.status()
+        settings.virtualHIDStatus = status.title
+        settings.virtualHIDStatusDetail = status.detail
+        if !settings.isRunning {
+            settings.activeInputBackend = "Not running"
         }
     }
 
@@ -200,6 +211,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self = self else { return }
                 Task { @MainActor in
                     await self.handleConnectionModeChange(to: mode)
+                }
+            }
+            .store(in: &cancellables)
+
+        settings.$inputBackendMode
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    guard self.settings.isRunning else {
+                        self.refreshVirtualHIDStatus()
+                        return
+                    }
+                    debugLog("Input backend changed — restarting server to rebuild input pipeline")
+                    self.stopServer()
+                    await self.startServer()
                 }
             }
             .store(in: &cancellables)
@@ -492,12 +519,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
-            let inputBackend = CGEventInputBackend()
+            let inputSelection = InputBackendFactory.make(mode: settings.inputBackendMode)
             let inputPort = UInt16(min(Int(settings.port) + 1, Int(UInt16.max)))
+            settings.activeInputBackend = inputSelection.activeBackend.title
+            settings.virtualHIDStatus = inputSelection.status.title
+            settings.virtualHIDStatusDetail = inputSelection.status.detail
             inputServer = InputServer(
                 port: inputPort,
                 expectedAuthToken: settings.connectionMode == .wireless ? WirelessAuth.loadOrCreate() : nil,
-                backend: inputBackend
+                backend: inputSelection.backend,
+                activeBackend: inputSelection.activeBackend
             )
             streamingServer?.touchEnabled = settings.touchEnabled
             if settings.connectionMode == .wireless {

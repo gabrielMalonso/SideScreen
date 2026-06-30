@@ -1,18 +1,36 @@
 import Foundation
 import Network
 
+private extension NWEndpoint {
+    var isLoopback: Bool {
+        switch self {
+        case .hostPort(let host, _):
+            switch host {
+            case .ipv4(let v4): return v4.isLoopback
+            case .ipv6(let v6): return v6.isLoopback
+            case .name(let name, _): return name == "localhost"
+            @unknown default: return false
+            }
+        default:
+            return false
+        }
+    }
+}
+
 final class InputServer {
     private let port: UInt16
     private let expectedAuthToken: Data?
     private let backend: InputBackend
+    private let activeBackend: ActiveInputBackend
     private var listener: NWListener?
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "inputServerQueue", qos: .userInteractive)
 
-    init(port: UInt16, expectedAuthToken: Data?, backend: InputBackend) {
+    init(port: UInt16, expectedAuthToken: Data?, backend: InputBackend, activeBackend: ActiveInputBackend) {
         self.port = port
         self.expectedAuthToken = expectedAuthToken
         self.backend = backend
+        self.activeBackend = activeBackend
     }
 
     func start() {
@@ -44,13 +62,13 @@ final class InputServer {
         listener?.cancel()
         connection = nil
         listener = nil
-        backend.releaseAll(reason: "input server stopped")
+        backend.endSession(reason: "input server stopped")
     }
 
     private func handleConnection(_ conn: NWConnection) {
         debugLog("InputServer incoming connection")
         connection?.cancel()
-        backend.releaseAll(reason: "new input connection")
+        backend.endSession(reason: "new input connection")
         connection = conn
 
         conn.stateUpdateHandler = { [weak self, weak conn] state in
@@ -60,10 +78,10 @@ final class InputServer {
                 self.receiveHelloPrefix(on: conn)
             case .failed(let error):
                 debugLog("InputServer connection failed: \(error)")
-                self.backend.releaseAll(reason: "input connection failed")
+                self.backend.endSession(reason: "input connection failed")
             case .cancelled:
                 debugLog("InputServer connection cancelled")
-                self.backend.releaseAll(reason: "input connection cancelled")
+                self.backend.endSession(reason: "input connection cancelled")
             default:
                 break
             }
@@ -88,9 +106,10 @@ final class InputServer {
             guard let self, let conn else { return }
             do {
                 let hello = try RemoteInputCodec.parseHello(prefix: prefix, suffix: suffix)
-                try self.authorize(hello)
+                try self.authorize(hello, connection: conn)
                 debugLog("InputServer auth OK — device=\(hello.deviceId), caps=\(hello.capabilities)")
-                conn.send(content: RemoteInputCodec.acceptResponse(), completion: .contentProcessed { _ in })
+                self.backend.beginSession(deviceId: hello.deviceId)
+                conn.send(content: RemoteInputCodec.acceptResponse(backend: self.activeBackend.rawValue), completion: .contentProcessed { _ in })
                 self.receiveEventHeader(on: conn)
             } catch RemoteInputProtocolError.invalidToken {
                 self.reject(conn, reason: 2)
@@ -100,11 +119,13 @@ final class InputServer {
         }
     }
 
-    private func authorize(_ hello: InputChannelHello) throws {
+    private func authorize(_ hello: InputChannelHello, connection: NWConnection) throws {
         if let expectedAuthToken {
             guard WirelessAuth.validate(hello.token, expected: expectedAuthToken) else {
                 throw RemoteInputProtocolError.invalidToken
             }
+        } else if !connection.endpoint.isLoopback {
+            throw RemoteInputProtocolError.invalidToken
         }
     }
 
@@ -128,7 +149,7 @@ final class InputServer {
                 }
             } catch {
                 debugLog("InputServer invalid header: \(error)")
-                self.backend.releaseAll(reason: "invalid input header")
+                self.backend.endSession(reason: "invalid input header")
                 conn.cancel()
             }
         }
@@ -143,7 +164,7 @@ final class InputServer {
                 self.receiveEventHeader(on: conn)
             } catch {
                 debugLog("InputServer invalid payload: \(error)")
-                self.backend.releaseAll(reason: "invalid input payload")
+                self.backend.endSession(reason: "invalid input payload")
                 conn.cancel()
             }
         }
@@ -154,12 +175,12 @@ final class InputServer {
             guard let self else { return }
             if let error {
                 debugLog("InputServer receive error: \(error)")
-                self.backend.releaseAll(reason: "input receive error")
+                self.backend.endSession(reason: "input receive error")
                 conn.cancel()
                 return
             }
             guard let data, data.count == length, !isComplete else {
-                self.backend.releaseAll(reason: "input closed")
+                self.backend.endSession(reason: "input closed")
                 conn.cancel()
                 return
             }
@@ -167,4 +188,3 @@ final class InputServer {
         }
     }
 }
-

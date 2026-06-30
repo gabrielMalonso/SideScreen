@@ -16,6 +16,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.View
@@ -47,6 +49,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: PreferencesManager
     private var videoDecoder: VideoDecoder? = null
     private var streamClient: StreamClient? = null
+    private var inputClient: InputClient? = null
+    private var activeInputHost: String? = null
+    private var activeInputPort: Int = 0
+    private var activeInputToken: ByteArray? = null
+    private var activeInputDeviceId: String = "Android"
+    private var activeInputEndpointMode: EndpointMode = EndpointMode.LAN
+    private var lastMouseButtonMask = 0
     private var currentSurfaceHolder: SurfaceHolder? = null
     private var displayWidth = 0 // 0 = no config received yet
     private var displayHeight = 0 // 0 = no config received yet
@@ -276,6 +285,14 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSurface() {
+        binding.surfaceView.isFocusable = true
+        binding.surfaceView.isFocusableInTouchMode = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            binding.surfaceView.setOnCapturedPointerListener { _, event ->
+                handleRemoteMouseEvent(event, fromPointerCapture = true)
+            }
+        }
+
         binding.surfaceView.holder.addCallback(
             object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) {
@@ -314,6 +331,10 @@ class MainActivity : AppCompatActivity() {
         binding.surfaceView.setOnTouchListener { view, event ->
             handleTouch(view, event)
             true
+        }
+
+        binding.releasePointerButton.setOnClickListener {
+            releasePointerCaptureForLocalUse()
         }
     }
 
@@ -653,7 +674,7 @@ class MainActivity : AppCompatActivity() {
      * Supports 8 positions: 4 corners + 4 edges
      */
     private fun updateSettingsButtonPosition(position: Int) {
-        val constraintLayout = binding.root as ConstraintLayout
+        val constraintLayout = binding.root
         val constraintSet = ConstraintSet()
         constraintSet.clone(constraintLayout)
 
@@ -835,6 +856,7 @@ class MainActivity : AppCompatActivity() {
                 dec.decode(frameData, frameSize, timestamp, isKeyframe)
             } else {
                 mainDiag("FRAME DROPPED: videoDecoder is null!")
+                streamClient?.releaseBuffer(frameData)
             }
         }
 
@@ -863,10 +885,12 @@ class MainActivity : AppCompatActivity() {
                 )
                 if (connected) {
                     startPingTimer()
+                    connectInputChannel()
                     stopChecklistUpdates()
                     enableFullscreenMode()
                     binding.settingsPanel.visibility = View.GONE
                     binding.settingsButton.visibility = View.VISIBLE
+                    binding.inputCaptureBar.visibility = View.VISIBLE
                     restoreSettingsButtonPosition()
                     updateOverlayVisibility(prefs.showStatsOverlay)
                     // For wireless mode, transition controller to CONNECTED here —
@@ -881,11 +905,13 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                 } else {
+                    disconnectInputChannel()
                     stopPingTimer()
                     disableFullscreenMode()
                     resetOrientationToSensor()
                     binding.settingsPanel.visibility = View.VISIBLE
                     binding.settingsButton.visibility = View.GONE
+                    binding.inputCaptureBar.visibility = View.GONE
                     binding.statusBar.visibility = View.GONE
                     val mode = prefs.connectionMode
                     val willTransition = mode == ConnectionMode.WIRELESS
@@ -951,7 +977,8 @@ class MainActivity : AppCompatActivity() {
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                log("Connecting wirelessly to $host:$port...")
+                log("Connecting wirelessly to $macName at $host:$port...")
+                configureInputChannel(host, port + 1, token, deviceName, endpointMode)
                 streamClient = StreamClient(host, port, applicationContext)
                 setupStreamClientCallbacks()
                 streamClient?.connectWireless(token, deviceName, endpointMode)
@@ -980,131 +1007,15 @@ class MainActivity : AppCompatActivity() {
             try {
                 log("Connecting to $host:$port...")
 
+                configureInputChannel(
+                    host = host,
+                    port = port + 1,
+                    token = ByteArray(32),
+                    deviceName = (Build.MODEL ?: "Android").take(64),
+                    endpointMode = EndpointMode.LAN,
+                )
                 streamClient = StreamClient(host, port)
-                streamClient?.onFrameReceived = { frameData, frameSize, timestamp, isKeyframe ->
-                    val dec = videoDecoder
-                    if (dec != null) {
-                        dec.decode(frameData, frameSize, timestamp, isKeyframe)
-                    } else {
-                        streamClient?.releaseBuffer(frameData)
-                    }
-                }
-
-                // Wire up buffer release callback for buffer pooling
-                // When decode completes, buffer is returned to StreamClient's pool
-                videoDecoder?.onFrameDecoded = { buffer ->
-                    streamClient?.releaseBuffer(buffer)
-                }
-                videoDecoder?.onKeyframeRequired = { force, reason ->
-                    streamClient?.requestKeyframe(force = force, reason = reason)
-                }
-
-                // Latency measurement via ping/pong
-                streamClient?.onLatencyMeasured = { rttMs ->
-                    runOnUiThread {
-                        binding.latencyText.text = String.format("%.1f ms", rttMs)
-                    }
-                }
-
-                streamClient?.onConnectionStatus = { connected ->
-                    runOnUiThread {
-                        // Update connection state flag
-                        isConnected = connected
-
-                        if (connected) {
-                            updateStatus("Connected - Streaming active")
-                        } else {
-                            updateStatus("Disconnected")
-                        }
-
-                        binding.connectButton.isEnabled = !connected
-                        binding.disconnectButton.isEnabled = connected
-
-                        // Update status indicator color
-                        binding.statusIndicator.setBackgroundResource(
-                            if (connected) {
-                                android.R.color.holo_green_light
-                            } else {
-                                android.R.color.holo_red_light
-                            },
-                        )
-
-                        if (connected) {
-                            // Start periodic ping for latency measurement
-                            startPingTimer()
-
-                            // Stop checklist updates when connected (prevents socket conflicts)
-                            stopChecklistUpdates()
-
-                            // Enter fullscreen mode when connected
-                            enableFullscreenMode()
-
-                            binding.settingsPanel.visibility = View.GONE
-                            binding.settingsButton.visibility = View.VISIBLE
-                            restoreSettingsButtonPosition()
-                            updateOverlayVisibility(prefs.showStatsOverlay)
-                        } else {
-                            // Stop ping timer
-                            stopPingTimer()
-
-                            // Exit fullscreen mode when disconnected
-                            disableFullscreenMode()
-
-                            // Reset to follow device sensor when disconnected
-                            resetOrientationToSensor()
-
-                            binding.settingsPanel.visibility = View.VISIBLE
-                            binding.settingsButton.visibility = View.GONE
-                            binding.statusBar.visibility = View.GONE
-
-                            // Restart checklist updates immediately
-                            log("📋 Restarting checklist updates")
-                            startChecklistUpdates()
-                        }
-                    }
-                }
-
-                streamClient?.onDisplaySize = { width, height, rotation ->
-                    mainDiag("onDisplaySize: ${width}x$height @ $rotation°")
-                    warnIfAvcOnlyWithoutNegotiation()
-                    displayWidth = width
-                    displayHeight = height
-                    displayRotation = rotation
-
-                    if (videoDecoder != null) {
-                        // Decoder already exists — update its resolution
-                        videoDecoder?.updateResolution(width, height)
-                    } else {
-                        // Decoder not yet created — create it now with correct resolution
-                        val holder = currentSurfaceHolder
-                        if (holder != null && holder.surface.isValid) {
-                            mainDiag("Display config arrived, initializing decoder ${width}x$height")
-                            runOnUiThread {
-                                // Re-check under UI thread to prevent race with surfaceChanged
-                                if (videoDecoder == null) {
-                                    initializeDecoder(holder)
-                                }
-                            }
-                        } else {
-                            mainDiag("Display config arrived but no valid surface yet")
-                        }
-                    }
-
-                    runOnUiThread {
-                        binding.resolutionText.text = "${width}x$height"
-                        // Apply rotation to SurfaceView
-                        applyRotation(rotation)
-                    }
-                    log("Display: ${width}x$height @ $rotation°")
-                }
-
-                streamClient?.onStats = { fps, mbps ->
-                    runOnUiThread {
-                        binding.fpsText.text = String.format("%.1f", fps)
-                        binding.bitrateText.text = String.format("%.1f Mbps", mbps)
-                    }
-                }
-
+                setupStreamClientCallbacks()
                 streamClient?.connect()
             } catch (e: Exception) {
                 val errorMessage =
@@ -1136,6 +1047,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun disconnect() {
         stopPingTimer()
+        disconnectInputChannel()
         streamClient?.disconnect()
         // Reset display config so next connect defers decoder init until config arrives
         displayWidth = 0
@@ -1162,6 +1074,8 @@ class MainActivity : AppCompatActivity() {
     private fun cleanup() {
         try {
             disconnect()
+            inputClient?.shutdown()
+            inputClient = null
             videoDecoder?.release()
             videoDecoder = null
 
@@ -1230,6 +1144,166 @@ class MainActivity : AppCompatActivity() {
                 streamClient?.sendTouch(x, y, 2, 1)
             }
         }
+    }
+
+    private fun configureInputChannel(
+        host: String,
+        port: Int,
+        token: ByteArray,
+        deviceName: String,
+        endpointMode: EndpointMode,
+    ) {
+        activeInputHost = host
+        activeInputPort = port
+        activeInputToken = token.copyOf()
+        activeInputDeviceId = prefs.remoteInputDeviceId
+        activeInputEndpointMode = endpointMode
+        mainDiag("Input channel configured for $deviceName as ${activeInputDeviceId.take(8)}..., mode=$endpointMode")
+    }
+
+    private fun connectInputChannel() {
+        val host = activeInputHost ?: return
+        val token = activeInputToken ?: return
+        disconnectInputChannel()
+        inputClient =
+            InputClient(
+                host = host,
+                port = activeInputPort,
+                token = token,
+                deviceId = activeInputDeviceId,
+                context = applicationContext,
+                endpointMode = activeInputEndpointMode,
+            ).also { client ->
+                client.connect()
+            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            binding.surfaceView.requestFocus()
+            binding.surfaceView.requestPointerCapture()
+        } else {
+            updatePointerCaptureUi(false)
+        }
+    }
+
+    private fun disconnectInputChannel() {
+        lastMouseButtonMask = 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
+            binding.surfaceView.releasePointerCapture()
+        }
+        inputClient?.shutdown()
+        inputClient = null
+        updatePointerCaptureUi(false)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val handled = inputClient?.sendKey(event) == true
+        if (handled) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onPointerCaptureChanged(hasCapture: Boolean) {
+        super.onPointerCaptureChanged(hasCapture)
+        updatePointerCaptureUi(hasCapture)
+        if (!hasCapture) {
+            inputClient?.sendAllInputsUp()
+            lastMouseButtonMask = 0
+        }
+    }
+
+    override fun onPause() {
+        inputClient?.sendAllInputsUp()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
+            binding.surfaceView.releasePointerCapture()
+        }
+        lastMouseButtonMask = 0
+        super.onPause()
+    }
+
+    private fun releasePointerCaptureForLocalUse() {
+        inputClient?.sendAllInputsUp()
+        lastMouseButtonMask = 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
+            binding.surfaceView.releasePointerCapture()
+        } else {
+            updatePointerCaptureUi(false)
+        }
+    }
+
+    private fun updatePointerCaptureUi(hasCapture: Boolean) {
+        runOnUiThread {
+            binding.inputCaptureText.text = if (hasCapture) "Mouse captured" else "Input ready"
+            binding.releasePointerButton.isEnabled = hasCapture
+            binding.releasePointerButton.alpha = if (hasCapture) 1f else 0.55f
+        }
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (handleRemoteMouseEvent(event, fromPointerCapture = false)) return true
+        return super.onGenericMotionEvent(event)
+    }
+
+    private fun handleRemoteMouseEvent(
+        event: MotionEvent,
+        fromPointerCapture: Boolean,
+    ): Boolean {
+        val source = event.source
+        val isMouse =
+            (source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE ||
+                (source and InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE
+        if (!isMouse || inputClient == null) return false
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_MOVE -> {
+                val dx =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        event.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
+                    } else {
+                        0f
+                    }
+                val dy =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
+                    } else {
+                        0f
+                    }
+                inputClient?.sendPointerRelative(dx, dy, fromPointerCapture)
+                sendMouseButtonDiff(event.buttonState)
+                return true
+            }
+            MotionEvent.ACTION_SCROLL -> {
+                inputClient?.sendPointerWheel(
+                    deltaX = event.getAxisValue(MotionEvent.AXIS_HSCROLL) * 48f,
+                    deltaY = event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 48f,
+                )
+                return true
+            }
+            MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
+                sendMouseButtonDiff(event.buttonState)
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                inputClient?.sendAllInputsUp()
+                lastMouseButtonMask = 0
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun sendMouseButtonDiff(newMask: Int) {
+        val changed = lastMouseButtonMask xor newMask
+        if (changed == 0) return
+        listOf(
+            MotionEvent.BUTTON_PRIMARY to 0,
+            MotionEvent.BUTTON_SECONDARY to 1,
+            MotionEvent.BUTTON_TERTIARY to 2,
+            MotionEvent.BUTTON_BACK to 3,
+            MotionEvent.BUTTON_FORWARD to 4,
+        ).forEach { (androidButton, remoteButton) ->
+            if ((changed and androidButton) != 0) {
+                inputClient?.sendPointerButton(remoteButton, (newMask and androidButton) != 0)
+            }
+        }
+        lastMouseButtonMask = newMask
     }
 
     /**

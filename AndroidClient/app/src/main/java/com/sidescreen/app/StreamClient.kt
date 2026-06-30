@@ -192,7 +192,7 @@ class StreamClient(
                         wifiNetwork.bindSocket(sock)
                     } else {
                         Log.w(TAG, "connectWireless: LAN mode, no WiFi network found, using default routing")
-                        }
+                    }
                 }
                 sock.connect(java.net.InetSocketAddress(host, port), 5000)
                 sock
