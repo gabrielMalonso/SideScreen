@@ -55,10 +55,21 @@ final class InputIngress: InputBackend {
     func handle(_ event: RemoteInputEvent) {
         lock.lock()
         armWatchdogLocked()
-        let shouldProcess = validateSequenceLocked(event)
-        if !shouldProcess {
+        let validation = validateSequenceLocked(event)
+        if !validation.shouldProcess {
             lock.unlock()
             return
+        }
+        if let releaseReason = validation.releaseReason {
+            flushPendingPointerRelativeLocked()
+            pressedKeys.removeAll()
+            pressedButtons.removeAll()
+            releaseAllCount += 1
+            lastReleaseReason = releaseReason
+            emitDiagnosticsLocked()
+            lock.unlock()
+            downstream.releaseAll(reason: releaseReason)
+            lock.lock()
         }
 
         switch event {
@@ -85,10 +96,12 @@ final class InputIngress: InputBackend {
             flushPendingPointerRelativeLocked()
             lock.unlock()
             downstream.handle(event)
-        case .allInputsUp:
+        case .allInputsUp(let allUp):
             flushPendingPointerRelativeLocked()
             pressedKeys.removeAll()
             pressedButtons.removeAll()
+            releaseAllCount += 1
+            lastReleaseReason = "client all-inputs-up: \(allUp.diagnosticReason)"
             emitDiagnosticsLocked()
             lock.unlock()
             downstream.handle(event)
@@ -134,26 +147,29 @@ final class InputIngress: InputBackend {
         }
     }
 
-    private func validateSequenceLocked(_ event: RemoteInputEvent) -> Bool {
+    private func validateSequenceLocked(_ event: RemoteInputEvent) -> (shouldProcess: Bool, releaseReason: String?) {
         let sequence = event.sequence
         defer { lastSequence = max(lastSequence ?? 0, sequence) }
 
-        guard let previous = lastSequence else { return true }
+        guard let previous = lastSequence else { return (true, nil) }
         if sequence <= previous {
             if case .allInputsUp = event {
                 debugLog("InputIngress processing stale all-inputs-up seq=\(sequence), last=\(previous)")
-                return true
+                return (true, nil)
             }
             droppedStaleCount += 1
             emitDiagnosticsLocked()
             debugLog("InputIngress dropped stale input seq=\(sequence), last=\(previous)")
-            return false
+            return (false, nil)
         }
         if sequence > previous + 1 {
             sequenceGapCount += 1
             debugLog("InputIngress sequence gap: last=\(previous), next=\(sequence)")
+            if !pressedKeys.isEmpty || !pressedButtons.isEmpty {
+                return (true, "sequence gap")
+            }
         }
-        return true
+        return (true, nil)
     }
 
     private func enqueuePointerRelativeLocked(_ move: PointerRelativeEvent) {

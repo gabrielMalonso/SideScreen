@@ -4,6 +4,10 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 FULL=0
 
 if [ "${1:-}" = "--full" ]; then
@@ -170,6 +174,8 @@ fi
 
 if [ -n "${SIDESCREEN_CODESIGN_IDENTITY:-}" ] && [ "${SIDESCREEN_CODESIGN_IDENTITY:-}" != "-" ]; then
     pass "Mac Developer ID signing identity configured"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"Developer ID Application:'; then
+    pass "Mac Developer ID signing identity available for auto-signing"
 else
     warn "Mac Developer ID signing identity missing; Mac app/DMG will be ad-hoc signed and not notarized"
 fi
@@ -180,10 +186,11 @@ if command -v adb >/dev/null 2>&1; then
     if grep -q " device " /tmp/sidescreen-preflight-adb.out || grep -q $'\tdevice' /tmp/sidescreen-preflight-adb.out; then
         pass "ADB Android device connected"
         sed 's/^/   /' /tmp/sidescreen-preflight-adb.out
-        if adb reverse --list 2>/dev/null | grep -q "tcp:$PORT tcp:$PORT"; then
-            pass "ADB reverse active on $PORT"
+        if adb reverse --list 2>/dev/null | grep -q "tcp:$PORT tcp:$PORT" &&
+           adb reverse --list 2>/dev/null | grep -q "tcp:$INPUT_PORT tcp:$INPUT_PORT"; then
+            pass "ADB reverse active on $PORT and $INPUT_PORT"
         else
-            warn "ADB reverse not active on $PORT; run ./scripts/setup-usb.sh"
+            warn "ADB reverse not active on $PORT and $INPUT_PORT; run ./scripts/setup-usb.sh"
         fi
     else
         warn "No ADB Android device connected"

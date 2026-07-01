@@ -1,4 +1,4 @@
-# 10 — Risks and Open Questions
+# 10 — Risks and Resolved Questions
 
 ## Riscos técnicos principais
 
@@ -80,39 +80,39 @@ Mitigação:
 - criar diagnóstico de keyCode/scanCode;
 - adicionar layout ABNT2 na Alpha/Beta.
 
-## Perguntas em aberto
+## Perguntas resolvidas ou condicionais
 
 ### A. Projeto novo ou fork?
 
-Recomendação: fork fortemente refatorado ou novo projeto que importe partes do SideScreen.
+Decisão: manter um fork fortemente refatorado enquanto o motor de vídeo do SideScreen continuar sendo reaproveitado.
 
-Decisão prática depende de quanto histórico/estrutura atual se quer preservar.
+Novo projeto só vale se a estrutura herdada começar a atrapalhar mais do que ajuda. Hoje não atrapalha o bastante.
 
 ### B. Uma porta ou múltiplas portas?
 
-MVP: `port` para vídeo/control legacy e `port+1` para input.
+Decisão MVP: `port` para vídeo/control legacy e `port+1` para input.
 
 Alpha/final: avaliar single-port multi-channel para simplificar Tailscale/firewall.
 
 ### C. CGEvent primeiro ou VirtualHID direto?
 
-Recomendação: CGEvent primeiro para validar input channel. VirtualHID na Alpha.
+Decisão: CGEvent fica como fallback e VirtualHID vira backend preferencial quando estiver pronto no Mac.
 
 ### D. Karabiner VirtualHID ou DriverKit próprio?
 
-Recomendação: Karabiner VirtualHID primeiro. DriverKit próprio só se o produto justificar custo.
+Decisão: Karabiner VirtualHID primeiro, com helper privilegiado do SideScreen quando necessário. DriverKit próprio só entra se o produto justificar o custo.
 
 ### E. Accessibility entra quando?
 
-Depois do input normal funcionar. Não usar como base do MVP.
+Decisão: Accessibility é assist opcional. Não é base do MVP e não substitui pointer capture/Activity.
 
 ### F. Root entra quando?
 
-Depois da Alpha sem root. Primeiro como diagnóstico passivo, depois como backend de input.
+Decisão: depois da Alpha sem root. Primeiro como diagnóstico passivo, depois como backend de input.
 
 ### G. QUIC entra quando?
 
-Somente se medições mostrarem que TCP multi-channel não é suficiente.
+Decisão: somente se medições mostrarem que TCP multi-channel não é suficiente.
 
 ## Decisões já tomadas nesta spec
 
@@ -125,4 +125,3 @@ Somente se medições mostrarem que TCP multi-channel não é suficiente.
 7. CGEvent será fallback/MVP.
 8. Virtual HID será backend profissional posterior.
 9. Root será backend opcional futuro.
-

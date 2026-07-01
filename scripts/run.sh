@@ -4,11 +4,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 
 echo "🚀 Starting Side Screen..."
 
 # Kill any existing instance
-pkill -f SideScreen 2>/dev/null || true
+pkill -x SideScreen 2>/dev/null || true
 sleep 0.3
 
 # Check if app bundle exists
@@ -37,7 +41,9 @@ echo ""
 if . "$SCRIPT_DIR/adb-env.sh" >/tmp/sidescreen-run-adb.out 2>&1 && sidescreen_select_adb_device >/tmp/sidescreen-run-device.out 2>&1; then
     echo "📱 Android device detected, setting up USB..."
     adb reverse --remove "tcp:$PORT" 2>/dev/null || true
+    adb reverse --remove "tcp:$INPUT_PORT" 2>/dev/null || true
     adb reverse "tcp:$PORT" "tcp:$PORT"
+    adb reverse "tcp:$INPUT_PORT" "tcp:$INPUT_PORT"
     echo "  ✓ Port forwarding ready"
 else
     echo "📱 No single authorized Android device detected; USB forwarding skipped"

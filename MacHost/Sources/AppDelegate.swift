@@ -358,6 +358,57 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.promptAccessibilityPermission()
             }
         }
+        settings.onSetPairedDeviceRevoked = { [weak self] deviceId, revoked in
+            Task { @MainActor in
+                self?.setPairedDeviceRevoked(id: deviceId, revoked: revoked)
+            }
+        }
+        settings.onResetWirelessPairing = { [weak self] in
+            Task { @MainActor in
+                self?.resetWirelessPairing()
+            }
+        }
+    }
+
+    @MainActor
+    private func setPairedDeviceRevoked(id deviceId: String, revoked: Bool) {
+        if revoked {
+            pairedDeviceStore.revoke(id: deviceId)
+            remoteSessionStore.revoke(deviceId: deviceId)
+            if currentWirelessDevice?.id == deviceId {
+                dropActiveWirelessConnection(reason: "device revoked", recordLastConnected: true)
+            }
+        } else {
+            pairedDeviceStore.restore(id: deviceId)
+        }
+    }
+
+    @MainActor
+    private func resetWirelessPairing() {
+        let freshToken = WirelessAuth.reset()
+        pairedDeviceStore.clear()
+        remoteSessionStore.clear()
+        streamingServer?.expectedAuthToken = settings.connectionMode == .wireless ? freshToken : nil
+        dropActiveWirelessConnection(reason: "wireless token reset", recordLastConnected: false)
+    }
+
+    @MainActor
+    private func dropActiveWirelessConnection(reason: String, recordLastConnected: Bool) {
+        releaseLegacyTouchState(reason: reason)
+        if let device = currentWirelessDevice {
+            if recordLastConnected {
+                pairedDeviceStore.upsert(id: device.id, name: device.name, deviceSecret: device.deviceSecret, lastConnected: Date())
+            }
+            remoteSessionStore.revoke(deviceId: device.id)
+        }
+        inputServer?.dropActiveConnection(reason: reason)
+        streamingServer?.dropActiveConnection(reason: reason)
+        currentWirelessDevice = nil
+        settings.currentWirelessDeviceId = nil
+        settings.currentWirelessDevice = nil
+        settings.clientConnected = false
+        settings.currentFPS = 0
+        settings.currentBitrate = 0
     }
 
     @MainActor
@@ -466,7 +517,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Setup ADB reverse port forwarding for USB connection
     func setupADBReverse() async {
         let port = settings.port
-        print("🔌 Setting up ADB reverse for port \(port)...")
+        let inputPort = UInt16(min(Int(port) + 1, Int(UInt16.max)))
+        let ports = [port, inputPort]
+        print("🔌 Setting up ADB reverse for ports \(ports.map(String.init).joined(separator: ", "))...")
 
         await Task.detached(priority: .utility) {
             // Try common adb paths
@@ -510,47 +563,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             guard let finalAdbPath = adbPath else {
                 print("⚠️  ADB not found - USB connection may not work")
-                print("💡 Install Android SDK or run manually: adb reverse tcp:\(port) tcp:\(port)")
+                print("💡 Install Android SDK or run manually: adb reverse tcp:\(port) tcp:\(port) && adb reverse tcp:\(inputPort) tcp:\(inputPort)")
                 return
             }
 
             print("📱 Found ADB at: \(finalAdbPath)")
 
             // Retry adb reverse up to 3 times — handles first-install authorization delay
-            for attempt in 1...3 {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: finalAdbPath)
-                process.arguments = ["reverse", "tcp:\(port)", "tcp:\(port)"]
+            for reversePort in ports {
+                for attempt in 1...3 {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: finalAdbPath)
+                    process.arguments = ["reverse", "tcp:\(reversePort)", "tcp:\(reversePort)"]
 
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
+                    let pipe = Pipe()
+                    process.standardOutput = pipe
+                    process.standardError = pipe
 
-                do {
-                    try process.run()
-                    process.waitUntilExit()
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
+                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: data, encoding: .utf8) ?? ""
 
-                    if process.terminationStatus == 0 {
-                        print("✅ ADB reverse setup successful: tcp:\(port) -> tcp:\(port)")
-                        return
-                    } else {
-                        print("⚠️  ADB reverse attempt \(attempt)/3 failed: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
+                        if process.terminationStatus == 0 {
+                            print("✅ ADB reverse setup successful: tcp:\(reversePort) -> tcp:\(reversePort)")
+                            break
+                        } else {
+                            print("⚠️  ADB reverse port \(reversePort) attempt \(attempt)/3 failed: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
+                            if attempt < 3 {
+                                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                            }
+                        }
+                    } catch {
+                        print("⚠️  Failed to run ADB for port \(reversePort) (attempt \(attempt)/3): \(error.localizedDescription)")
                         if attempt < 3 {
                             try? await Task.sleep(nanoseconds: 1_000_000_000)
                         }
                     }
-                } catch {
-                    print("⚠️  Failed to run ADB (attempt \(attempt)/3): \(error.localizedDescription)")
-                    if attempt < 3 {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    if attempt == 3 {
+                        print("💡 Make sure Android device is connected via USB with debugging enabled")
                     }
                 }
             }
-
-            print("💡 Make sure Android device is connected via USB with debugging enabled")
         }.value
     }
 
@@ -733,7 +789,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             streamingServer?.onClientDisconnected = { [weak self] in
                 guard let self = self else { return }
+                self.inputServer?.dropActiveConnection(reason: "stream disconnected")
                 Task { @MainActor in
+                    self.releaseLegacyTouchState(reason: "stream disconnected")
                     self.settings.clientConnected = false
                     // Final lastConnected snapshot at the disconnect moment, then
                     // freeze (currentWirelessDevice = nil stops the rolling update
@@ -794,6 +852,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Save display position before destroying
         virtualDisplayManager?.saveDisplayPosition()
 
+        releaseLegacyTouchState(reason: "server stopped")
         screenCapture?.stopStreaming()
         inputServer?.stop()
         streamingServer?.stop()
@@ -1200,6 +1259,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         momentumTimer = nil
         momentumVelocityX = 0
         momentumVelocityY = 0
+    }
+
+    private func releaseLegacyTouchState(reason: String) {
+        cancelLongPressTimer()
+        stopMomentumScroll()
+        if gestureState == .dragging {
+            injectMouseUp(at: touchLastPosition == .zero ? touchStartPosition : touchLastPosition)
+            debugLog("Released legacy touch drag: \(reason)")
+        }
+        gestureState = .idle
+        touchStartPosition = .zero
+        touchLastPosition = .zero
     }
 
     func applicationWillTerminate(_ notification: Notification) {

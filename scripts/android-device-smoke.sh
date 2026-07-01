@@ -5,14 +5,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK_PATH="$ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 DURATION=15
 INSTALL=1
 REVERSE=1
 TAILNET_HOST=""
 EXPECT_STREAM=0
+TAP_CONNECT=0
 
 usage() {
-    echo "Usage: ./scripts/android-device-smoke.sh [--no-install] [--no-reverse] [--duration seconds] [--tailnet-host host] [--expect-stream]"
+    echo "Usage: ./scripts/android-device-smoke.sh [--no-install] [--no-reverse] [--duration seconds] [--tailnet-host host] [--expect-stream] [--tap-connect]"
     echo ""
     echo "Use --expect-stream for manual long runs: start the Mac app, launch this script,"
     echo "tap Connect/Reconnect on Android, and the script fails if no stream connection is logged."
@@ -38,6 +43,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --expect-stream)
             EXPECT_STREAM=1
+            shift
+            ;;
+        --tap-connect)
+            TAP_CONNECT=1
             shift
             ;;
         -h|--help)
@@ -93,8 +102,10 @@ ADB=(adb -s "$DEVICE_SERIAL")
 echo "# Side Screen Android Device Smoke"
 echo "Device: $DEVICE_SERIAL"
 echo "Port: $PORT"
+echo "Input port: $INPUT_PORT"
 echo "Duration: ${DURATION}s"
 echo "Expect stream: $EXPECT_STREAM"
+echo "Tap connect: $TAP_CONNECT"
 echo ""
 
 if "${ADB[@]}" get-state >/tmp/sidescreen-device-smoke.out 2>&1; then
@@ -130,15 +141,19 @@ fi
 
 if [ "$REVERSE" -eq 1 ]; then
     "${ADB[@]}" reverse --remove "tcp:$PORT" >/dev/null 2>&1 || true
+    "${ADB[@]}" reverse --remove "tcp:$INPUT_PORT" >/dev/null 2>&1 || true
     if "${ADB[@]}" reverse "tcp:$PORT" "tcp:$PORT" >/tmp/sidescreen-device-smoke.out 2>&1 &&
-       "${ADB[@]}" reverse --list | grep -q "tcp:$PORT tcp:$PORT"; then
-        pass "ADB reverse active on $PORT"
+       "${ADB[@]}" reverse "tcp:$INPUT_PORT" "tcp:$INPUT_PORT" >>/tmp/sidescreen-device-smoke.out 2>&1 &&
+       "${ADB[@]}" reverse --list | grep -q "tcp:$PORT tcp:$PORT" &&
+       "${ADB[@]}" reverse --list | grep -q "tcp:$INPUT_PORT tcp:$INPUT_PORT"; then
+        pass "ADB reverse active on $PORT and $INPUT_PORT"
     else
         fail "ADB reverse setup failed"
         sed 's/^/   /' /tmp/sidescreen-device-smoke.out | tail -40
     fi
 else
     "${ADB[@]}" reverse --remove "tcp:$PORT" >/dev/null 2>&1 || true
+    "${ADB[@]}" reverse --remove "tcp:$INPUT_PORT" >/dev/null 2>&1 || true
     pass "ADB reverse disabled for network/Tailnet test"
 fi
 
@@ -158,6 +173,43 @@ if "${ADB[@]}" shell am start -n com.sidescreen.app/.MainActivity >/tmp/sidescre
 else
     fail "MainActivity launch failed"
     sed 's/^/   /' /tmp/sidescreen-device-smoke.out | tail -40
+fi
+
+tap_connect_button() {
+    local dump_file="/tmp/sidescreen-ui-$DEVICE_SERIAL.xml"
+    sleep 1
+    if ! "${ADB[@]}" shell uiautomator dump /sdcard/sidescreen-ui.xml >/tmp/sidescreen-device-smoke.out 2>&1; then
+        return 1
+    fi
+    if ! "${ADB[@]}" exec-out cat /sdcard/sidescreen-ui.xml > "$dump_file" 2>/tmp/sidescreen-device-smoke.out; then
+        return 1
+    fi
+
+    local bounds
+    bounds="$(
+        tr '><' '\n\n' < "$dump_file" |
+            grep -Ei 'text="(connect|reconnect)"|content-desc="(connect|reconnect)"|resource-id="com\.sidescreen\.app:id/(connectButton|wirelessReconnectButton)"' |
+            grep -Eiv 'text="disconnect"|content-desc="disconnect"|resource-id="com\.sidescreen\.app:id/(disconnectButton|wirelessDisconnectButton)"' |
+            sed -n 's/.*bounds="\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]\[\([0-9][0-9]*\),\([0-9][0-9]*\)\]".*/\1 \2 \3 \4/p' |
+            head -1
+    )"
+    if [ -z "$bounds" ]; then
+        return 1
+    fi
+
+    set -- $bounds
+    local x=$(((($1 + $3)) / 2))
+    local y=$(((($2 + $4)) / 2))
+    "${ADB[@]}" shell input tap "$x" "$y" >/tmp/sidescreen-device-smoke.out 2>&1
+}
+
+if [ "$TAP_CONNECT" -eq 1 ]; then
+    if tap_connect_button; then
+        pass "Connect/Reconnect tapped"
+    else
+        fail "Could not find Connect/Reconnect button to tap"
+        sed 's/^/   /' /tmp/sidescreen-device-smoke.out | tail -40
+    fi
 fi
 
 sleep "$DURATION"
@@ -187,8 +239,10 @@ else
 fi
 
 if [ "$EXPECT_STREAM" -eq 1 ]; then
+    STREAM_EVIDENCE_FILE="/tmp/sidescreen-device-stream-evidence.out"
+    cat /tmp/sidescreen-device-diag-full.out /tmp/sidescreen-device-logcat.out > "$STREAM_EVIDENCE_FILE" 2>/dev/null || true
     if grep -E "Stream connected|Connected to .*:$PORT|Wireless connected to .*:$PORT|First video frame|First output frame|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*" \
-        /tmp/sidescreen-device-diag-full.out /tmp/sidescreen-device-logcat.out >/dev/null 2>&1; then
+        "$STREAM_EVIDENCE_FILE" >/dev/null 2>&1; then
         pass "Stream connection and frame flow observed"
     else
         fail "No stream connection/frame flow observed; tap Connect/Reconnect during the run and keep the Mac app running"

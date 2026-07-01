@@ -6,6 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
 INSTALL_MAC=1
 INSTALL_ANDROID=1
@@ -158,13 +162,16 @@ if [ "$INSTALL_ANDROID" -eq 1 ]; then
         # Setup ADB reverse (with retry)
         echo "🔧 Setting up USB port forwarding..."
         adb reverse --remove "tcp:$PORT" 2>/dev/null || true
+        adb reverse --remove "tcp:$INPUT_PORT" 2>/dev/null || true
         sleep 0.5
         adb reverse "tcp:$PORT" "tcp:$PORT"
+        adb reverse "tcp:$INPUT_PORT" "tcp:$INPUT_PORT"
 
         # Verify ADB reverse is active
         echo "🔍 Verifying port forwarding..."
-        if adb reverse --list | grep -q "tcp:$PORT"; then
-            echo "  ✓ Port $PORT forwarded successfully"
+        if adb reverse --list | grep -q "tcp:$PORT tcp:$PORT" &&
+           adb reverse --list | grep -q "tcp:$INPUT_PORT tcp:$INPUT_PORT"; then
+            echo "  ✓ Ports $PORT and $INPUT_PORT forwarded successfully"
         else
             echo "  ⚠️  Port forwarding setup but verification failed"
             echo "  Run './scripts/setup-usb.sh' if connection issues occur"

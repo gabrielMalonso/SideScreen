@@ -74,7 +74,7 @@ class InputClient(
                 sock.connect(InetSocketAddress(host, port), 5000)
                 DiagLog.log(
                     "IC",
-                    "Input hello to $host:$port session=${sessionId?.shortHex() ?: "none"} token=${token.shortHex()}",
+                    "Input hello to $host:$port session=${sessionId?.shortHex() ?: "none"}",
                 )
                 val out = BufferedOutputStream(sock.getOutputStream(), 8192)
                 out.write(
@@ -165,11 +165,40 @@ class InputClient(
 
     fun sendTextCommit(text: String): Boolean {
         if (text.isEmpty()) return false
-        send(
-            RemoteInputProtocol.EVENT_TEXT_COMMIT,
-            RemoteInputProtocol.textCommitPayload(text),
-        )
-        return true
+        return try {
+            for (chunk in splitTextCommit(text)) {
+                send(
+                    RemoteInputProtocol.EVENT_TEXT_COMMIT,
+                    RemoteInputProtocol.textCommitPayload(chunk),
+                )
+            }
+            true
+        } catch (e: IllegalArgumentException) {
+            DiagLog.log("IC", "TextCommit rejected: ${e.message}")
+            false
+        }
+    }
+
+    private fun splitTextCommit(text: String): List<String> {
+        val chunks = mutableListOf<String>()
+        val current = StringBuilder()
+        var currentBytes = 0
+        var index = 0
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            val value = String(Character.toChars(codePoint))
+            val byteCount = value.toByteArray(Charsets.UTF_8).size
+            if (currentBytes + byteCount > RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES && current.isNotEmpty()) {
+                chunks.add(current.toString())
+                current.clear()
+                currentBytes = 0
+            }
+            current.append(value)
+            currentBytes += byteCount
+            index += Character.charCount(codePoint)
+        }
+        if (current.isNotEmpty()) chunks.add(current.toString())
+        return chunks
     }
 
     fun sendPointerRelative(

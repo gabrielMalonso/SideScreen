@@ -35,4 +35,12 @@ final class PairingURLTests: XCTestCase {
         let url = PairingURL.build(host: "mac-mini.example.ts.net", port: 54321, token: token, name: "Mac", mode: .tailnet)
         XCTAssertTrue(url.contains("mode=tailnet"))
     }
+
+    func testTailnetAdvertiserRequiresConfiguredHost() {
+        XCTAssertNil(EndpointAdvertiser.advertisedHost(mode: .tailnet, tailnetHost: "   "))
+        XCTAssertEqual(
+            EndpointAdvertiser.advertisedHost(mode: .tailnet, tailnetHost: " mac-mini.example.ts.net "),
+            "mac-mini.example.ts.net"
+        )
+    }
 }

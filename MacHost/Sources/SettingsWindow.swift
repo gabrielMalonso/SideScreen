@@ -1399,6 +1399,8 @@ class DisplaySettings: ObservableObject {
     var onRefreshPermissions: (() -> Void)?
     var onCopyDiagnostics: (() -> Void)?
     var onPromptAccessibility: (() -> Void)?
+    var onSetPairedDeviceRevoked: ((String, Bool) -> Void)?
+    var onResetWirelessPairing: (() -> Void)?
 
     init() {
         self.resolution = defaults.string(forKey: keyPrefix + "resolution") ?? "1920x1200"
@@ -1639,6 +1641,7 @@ struct WirelessSection: View {
     @ObservedObject var settings: DisplaySettings
     let pairedDeviceStore: PairedDeviceStore
     @State private var qrImage: NSImage?
+    @State private var qrUnavailableReason: String?
     @State private var pairedDevices: [PairedDevice] = []
     @State private var showResetConfirm = false
     @State private var tailnetDiagnostic: TailnetDiagnostic?
@@ -1687,7 +1690,7 @@ struct WirelessSection: View {
                             .background(Color.white)
                             .cornerRadius(8)
                     } else {
-                        Text("Generating QR…").foregroundColor(.secondary)
+                        Text(qrUnavailableReason ?? "Generating QR…").foregroundColor(.secondary)
                     }
                     Text("Scan this QR from Side Screen Android (Wireless tab)")
                         .font(.system(size: 11))
@@ -1751,9 +1754,9 @@ struct WirelessSection: View {
                                 Spacer()
                                 Button(device.revoked ? "Allow" : "Revoke") {
                                     if device.revoked {
-                                        pairedDeviceStore.restore(id: device.id)
+                                        settings.onSetPairedDeviceRevoked?(device.id, false)
                                     } else {
-                                        pairedDeviceStore.revoke(id: device.id)
+                                        settings.onSetPairedDeviceRevoked?(device.id, true)
                                     }
                                     refreshPaired()
                                 }
@@ -1811,8 +1814,7 @@ struct WirelessSection: View {
         .alert("Reset Token?", isPresented: $showResetConfirm) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {
-                _ = WirelessAuth.reset()
-                pairedDeviceStore.clear()
+                settings.onResetWirelessPairing?()
                 refreshQR()
                 refreshPaired()
             }
@@ -1823,10 +1825,17 @@ struct WirelessSection: View {
 
     private func refreshQR() {
         let token = WirelessAuth.loadOrCreate()
-        let host = EndpointAdvertiser.advertisedHost(mode: settings.endpointMode, tailnetHost: settings.tailnetHost) ?? "0.0.0.0"
+        guard let host = EndpointAdvertiser.advertisedHost(mode: settings.endpointMode, tailnetHost: settings.tailnetHost) else {
+            qrImage = nil
+            qrUnavailableReason = settings.endpointMode == .tailnet
+                ? "Enter a Tailnet MagicDNS name or 100.x IP to generate the QR."
+                : "No LAN address available yet."
+            return
+        }
         let name = Host.current().localizedName ?? "Mac"
         let url = PairingURL.build(host: host, port: settings.port, token: token, name: name, mode: settings.endpointMode)
         qrImage = QRRenderer.render(url: url, size: 180)
+        qrUnavailableReason = nil
     }
 
     private func refreshTailnetDiagnostic() {

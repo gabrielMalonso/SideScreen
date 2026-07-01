@@ -1,5 +1,4 @@
 # Remote Mac Terminal — Relatório completo / Spec unificada
-
 Este arquivo concatena a documentação principal para leitura linear. Para uso no Codex, prefira manter também os arquivos separados.
 
 
@@ -31,12 +30,13 @@ A documentação foi estruturada para permitir evolução incremental: primeiro 
 8. `07-IMPLEMENTATION-ROADMAP.md` — MVP, Alpha, Beta e versão final.
 9. `08-CODEX-TASK-BACKLOG.md` — backlog técnico acionável para desenvolvimento.
 10. `09-TEST-PLAN.md` — plano de validação funcional, rede, latência e input.
-11. `10-RISKS-AND-OPEN-QUESTIONS.md` — riscos arquiteturais e decisões pendentes.
+11. `10-RISKS-AND-OPEN-QUESTIONS.md` — riscos arquiteturais e decisões resolvidas/condicionais.
 12. `11-REMOTE-INPUT-PROTOCOL-V1.md` — especificação do protocolo de input.
 13. `12-SESSION-AND-TRANSPORT-SPEC.md` — sessão, canais e transporte.
 14. `13-SECURITY-MODEL.md` — modelo de segurança.
-15. `adr/` — decisões arquiteturais registradas.
-16. `appendix/` — referências de código do SideScreen e referências externas.
+15. `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` — matriz de cobertura, estado atual e definição de documentação 100%.
+16. `adr/` — decisões arquiteturais registradas.
+17. `appendix/` — referências de código do SideScreen e referências externas.
 
 ## Resumo executivo
 
@@ -56,6 +56,7 @@ Tailscale como underlay de rede
 
 O desenvolvimento deve começar sem root. Isso valida vídeo, Tailscale, sessão, latência real, mouse capture, teclado comum e UX. Root deve ser uma fase posterior, implementada como backend opcional de captura de input, não como premissa do produto.
 
+Para continuar o projeto sem se perder em backlog antigo, leia `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` antes de implementar. Ele separa o que já existe, o que está documentado e o que é futuro intencional.
 
 
 ---
@@ -65,6 +66,8 @@ O desenvolvimento deve começar sem root. Isso valida vídeo, Tailscale, sessão
 # 00 — Codex Start Here
 
 Este documento é o briefing para continuar o projeto em uma máquina local usando Codex.
+
+Antes de editar código, leia também `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`. Ele é a fotografia atual da documentação: o backlog mostra a decomposição das tarefas, mas nem toda tarefa ainda está pendente.
 
 ## Missão do projeto
 
@@ -179,6 +182,8 @@ AndroidClient:
 
 ## Caminho de implementação sugerido para Codex
 
+Se a base local já tiver parte destes passos implementada, não refaça. Compare primeiro com `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`, os testes existentes e o código real.
+
 ### Passo 1 — preparar refactor mínimo de rede
 
 - Criar conceito de `EndpointMode`: USB, LAN, TailnetManualHost, TailnetMagicDNS.
@@ -235,7 +240,6 @@ AndroidClient/app/src/main/java/com/sidescreen/app/AuthHandshake.kt
 ```
 
 Mais detalhes estão em `appendix/A-SIDESCREEN-CODE-REFERENCE.md`.
-
 
 
 ---
@@ -366,7 +370,6 @@ Novo projeto/fork estruturado
 ## Licença da base
 
 O snapshot analisado contém `LICENSE` MIT. Ao reaproveitar código, preservar o copyright e a licença em cópias substanciais do código.
-
 
 
 ---
@@ -638,7 +641,6 @@ Refatorar ou descartar:
 O SideScreen é forte onde o novo projeto precisa de vídeo. Ele é fraco onde o novo projeto precisa de terminal remoto: sessão, Tailnet e input.
 
 A melhor estratégia é preservar o motor de vídeo e construir ao redor dele uma arquitetura nova de produto remoto.
-
 
 
 ---
@@ -1020,7 +1022,6 @@ Tailscale
 ```
 
 
-
 ---
 
 <!-- FILE: 04-TAILSCALE-NETWORKING-SPEC.md -->
@@ -1173,6 +1174,16 @@ else if endpointMode == LAN and workaroundEnabled:
   pode bindar Wi-Fi opcionalmente
 ```
 
+Estado implementado:
+
+- `StreamClient` e `InputClient` compartilham `NetworkRoute`.
+- Tailnet/manual usam rota padrão do Android, permitindo VPN/Tailscale.
+- LAN tenta localizar uma rede Wi-Fi com `NetworkCallback` filtrado por `TRANSPORT_WIFI` e `NET_CAPABILITY_INTERNET`.
+- Se Wi-Fi não for encontrado, LAN cai para rota padrão e registra diagnóstico.
+- O código não depende mais de `ConnectivityManager.allNetworks`.
+- Android Wireless Diagnostics mostra transportes da rota ativa, validação de rede e aviso quando Tailnet está sem transporte VPN.
+- Mac Settings valida host Tailnet no card de QR: diferencia IP 100.64.0.0/10, MagicDNS `.ts.net`, host manual e URL/porta digitada por engano.
+
 ## Split tunneling no Android
 
 Tailscale Android suporta split tunneling por app. Se o usuário excluir o app cliente da Tailnet, MagicDNS/IP 100.x podem falhar.
@@ -1275,7 +1286,6 @@ Android:
 - Falhas de Tailnet têm mensagens específicas, não genéricas.
 
 
-
 ---
 
 <!-- FILE: 05-INPUT-ARCHITECTURE-SPEC.md -->
@@ -1350,6 +1360,11 @@ Limitações:
 - pode perder alguns eventos com Meta/Super;
 - depende da Activity estar focada.
 
+Estado implementado:
+
+- `RemoteKeyboardCapture` concentra a captura de `KeyEvent`, filtragem de duplicatas do Accessibility Assist, diagnóstico e envio para `InputClient`;
+- `MainActivity` só delega `dispatchKeyEvent`.
+
 ### 2. PointerCaptureBackend
 
 Fase: MVP/Alpha.
@@ -1376,6 +1391,11 @@ Responsável por:
 
 Este backend é essencial para o app parecer terminal, não tablet touch.
 
+Estado implementado:
+
+- `RemoteMouseCapture` concentra movimento relativo, botões, wheel, pointer tuning, coalescing via `InputClient` e release-all em cancelamento;
+- `MainActivity` só delega eventos de pointer capture/generic motion.
+
 ### 3. TouchBackend
 
 Fase: manter como opcional.
@@ -1391,7 +1411,7 @@ TouchGesture
 
 ### 4. AccessibilityAssistBackend
 
-Fase: pós-MVP.
+Fase: Alpha sem root.
 
 Accessibility pode pedir para filtrar eventos de tecla, mas não deve ser backend principal.
 
@@ -1401,6 +1421,29 @@ Uso recomendado:
 - tentar obter eventos adicionais de teclado;
 - não prometer captura de Home/Power/Recents;
 - explicar claramente ao usuário por que a permissão é sensível.
+- não ler conteúdo de tela;
+- evitar duplicar eventos que também chegam via Activity.
+
+Implementação atual:
+
+- `SideScreenAccessibilityService` solicita `flagRequestFilterKeyEvents`;
+- encaminha `KeyEvent` para o mesmo `InputClient` quando há sessão de input ativa;
+- marca eventos com `FLAG_FROM_ACCESSIBILITY`;
+- consome eventos encaminhados para evitar efeito local;
+- a Activity ignora duplicatas recentes enviadas pelo serviço.
+
+## Diagnóstico de captura sem root
+
+O Android deve mostrar diagnóstico honesto sobre input:
+
+- `captured`: eventos entregues pelo Android que foram convertidos e enviados ao Mac;
+- `unsupported`: eventos entregues pelo Android, mas sem mapeamento HID/remote conhecido;
+- `assist`: eventos enviados pelo Accessibility Assist;
+- `dup`: eventos da Activity ignorados porque o Accessibility Assist já os encaminhou;
+- `last`: último evento observado com fonte, ação, keyCode, scanCode e repeat.
+- `TextCommit`: registrar apenas tamanho/metadata, nunca o texto digitado.
+
+Isso não mede teclas que o Android nunca entrega ao app, como Home/Power/Recents em muitos dispositivos. Essas continuam documentadas como limitação sem root.
 
 ### 5. RootEvdevBackend
 
@@ -1456,6 +1499,15 @@ KeyboardKey
 - Se o backend detectar cancelamento, enviar up/fail-safe.
 - Manter mapa de pressed keys no Android e no Mac.
 
+### Modifier mapping
+
+Estado implementado:
+
+- Android Settings permite configurar `Meta/Super` como Command, Option, Control ou Off.
+- O padrão é Command para preservar comportamento de Mac remoto.
+- A escolha altera o `usageId` HID antes do envio, sem mudar o protocolo.
+- `Off` transforma Meta/Super em unsupported quando o Android entrega a tecla ao app.
+
 ## TextCommit
 
 Nem todo texto é melhor representado como tecla física. IME, dead keys e composição podem exigir evento de texto.
@@ -1475,6 +1527,14 @@ Uso:
 
 Regra: atalhos precisam de `KeyboardKey`, não `TextCommit`.
 
+Estado implementado:
+
+- `RemoteSurfaceView` expõe `InputConnection.commitText()` para IME/dead keys;
+- `ACTION_MULTIPLE` também é convertido como fallback legado;
+- Android serializa texto UTF-8 com comprimento validado;
+- Mac valida o payload e injeta texto Unicode;
+- diagnóstico registra somente tamanho do texto, não conteúdo.
+
 ## PointerRelative
 
 Campos:
@@ -1491,6 +1551,13 @@ Regras:
 - usar movimento relativo quando origem for mouse;
 - coalescer apenas movimentos consecutivos sem botões/wheel entre eles;
 - não transformar mouse em touch absoluto.
+
+Estado implementado:
+
+- Android Settings expõe sensibilidade de pointer de `0.25x` a `3.0x`;
+- a sensibilidade é aplicada antes de serializar `PointerRelative`;
+- Android coalesce `PointerRelative` por uma janela curta e força flush antes de teclado, botões, wheel, ping e `AllInputsUp`;
+- valores persistidos fora da faixa são normalizados.
 
 ## PointerButton
 
@@ -1522,7 +1589,14 @@ PointerWheel
 Regras:
 
 - preservar horizontal scroll quando disponível;
-- considerar direção natural configurável.
+- direção natural deve ser configurável.
+
+Estado implementado:
+
+- Android Settings expõe sensibilidade de scroll de `0.25x` a `3.0x`;
+- Android Settings expõe toggle de natural scroll;
+- a configuração é aplicada antes de serializar `PointerWheel`;
+- horizontal e vertical scroll usam a mesma direção e sensibilidade.
 
 ## PointerAbsolute
 
@@ -1760,7 +1834,6 @@ Registrar:
 - input continua responsivo com vídeo em resolução alta.
 
 
-
 ---
 
 <!-- FILE: 06-ANDROID-LIMITATIONS-AND-ROOT-PLAN.md -->
@@ -1848,6 +1921,15 @@ Não colocar Accessibility no caminho obrigatório porque:
 - pode afetar confiança;
 - nem toda tecla passa;
 - comportamento varia por OEM.
+
+Estado implementado sem root:
+
+- o app registra um `AccessibilityService` opcional;
+- a permissão abre pelo painel Wireless do Android;
+- o serviço solicita apenas filtro de teclas e não recupera conteúdo de janelas;
+- eventos enviados por Accessibility usam flag própria no protocolo;
+- a Activity evita mandar duplicatas quando o serviço já encaminhou a mesma tecla;
+- se o usuário não habilitar Accessibility, o modo normal continua funcionando.
 
 ## Root muda o cenário
 
@@ -1957,7 +2039,6 @@ Depois:
 Por último:
   RootEvdevBackend
 ```
-
 
 
 ---
@@ -2125,6 +2206,18 @@ Tornar o sistema utilizável diariamente e preparar root.
 - Tela “por que algumas teclas não funcionam sem root”.
 - Perfis: Productivity, Low-latency, Low-bandwidth.
 
+Estado implementado sem root:
+
+- Mac Settings tem seletor de perfil Manual/Productivity/Low latency/Low bandwidth.
+- Os perfis aplicam resolução, FPS, bitrate, qualidade e HiDPI de forma conjunta.
+- Ajustes manuais voltam o perfil para Manual.
+- Mudanças de resolução/FPS/HiDPI com servidor rodando reiniciam o pipeline com debounce.
+- Android Wireless Diagnostics mostra endpoint, rota, input, limitação sem root e últimos erros relevantes do log local.
+- Android Wireless Diagnostics mostra contadores de teclas capturadas, unsupported, assistidas por Accessibility e duplicatas filtradas.
+- Android Wireless Diagnostics mostra transporte ativo da rota, validação e alerta quando Tailnet está sem VPN/Tailscale ativa para o app.
+- Mac Settings mostra diagnóstico de host Tailnet no card de QR.
+- Android Settings permite configurar Meta/Super como Command, Option, Control ou Off.
+
 ### Critérios de aceite
 
 - Usável por horas sem stuck keys.
@@ -2155,6 +2248,17 @@ Consolidar arquitetura, instalação e modos avançados.
 - Modo root Pro.
 - Escape seguro para root/grab.
 - Configurações avançadas de teclado/mouse.
+
+Estado implementado sem root:
+
+- Configuração de Meta/Super para Command, Option, Control ou Off.
+- Sensibilidade de pointer configurável.
+- Sensibilidade de scroll configurável.
+- Natural scroll configurável.
+- `TextCommit` para IME/dead keys via `InputConnection`, sem logar texto digitado.
+- `AllInputsUp` com motivo específico.
+- Latência de input com último RTT, média e p95.
+- Captura de teclado/mouse sem root separada em classes dedicadas no Android.
 
 #### Transporte
 
@@ -2245,7 +2349,6 @@ Consolidar arquitetura, instalação e modos avançados.
 3. Mostrar eventos crus em tela de diagnóstico.
 4. Comparar com Activity backend.
 5. Não substituir backend ainda.
-
 
 
 ---
@@ -2597,7 +2700,6 @@ Critérios de aceite:
 - Nada é enviado ao Mac ainda.
 
 
-
 ---
 
 <!-- FILE: 09-TEST-PLAN.md -->
@@ -2757,11 +2859,14 @@ Testar:
 - Control + C em Terminal;
 - Option + tecla, quando possível;
 - Meta/Super como Command, quando Android entregar.
+- Meta/Super com mapeamento Command, Option, Control e Off.
 
 Aceite:
 
 - Modificadores pressionam e soltam corretamente.
-- Se Meta não chegar, app registra limitação em diagnóstico.
+- Meta/Super segue o mapeamento escolhido no Android Settings.
+- Se Meta chegar mas não for mapeado, o contador `unsupported` aumenta.
+- Se Meta não chegar ao app, a UI mantém a limitação sem root visível em diagnóstico.
 
 ### KEY-003 — Stuck key fail-safe
 
@@ -2788,7 +2893,8 @@ Testar:
 Aceite:
 
 - App não promete sucesso.
-- Diagnóstico registra quais eventos chegaram ou não.
+- Diagnóstico registra eventos que chegaram como `captured` ou `unsupported`.
+- Teclas que o Android não entrega continuam tratadas como limitação sem root, não como falha do protocolo.
 - Falha não quebra sessão.
 
 ## Testes de mouse
@@ -2806,6 +2912,7 @@ Aceite:
 - Mouse move o cursor do Mac de forma relativa.
 - Cursor não fica limitado à borda do tablet.
 - Há mecanismo de escape do capture.
+- Sensibilidade de pointer no Android Settings altera o movimento enviado.
 
 ### MOU-002 — Botões
 
@@ -2840,12 +2947,14 @@ Testar:
 
 - scroll vertical;
 - scroll horizontal se mouse suportar;
-- direção natural configurável no futuro.
+- sensibilidade de scroll;
+- direção natural configurável.
 
 Aceite:
 
 - Scroll funciona em navegador/Finder.
 - Eventos não geram backlog.
+- Natural scroll inverte vertical e horizontal de forma consistente.
 
 ## Testes de input sob carga
 
@@ -2870,7 +2979,55 @@ Aceite:
 - Android timestampa evento.
 - Mac registra chegada.
 - Mac registra dispatch ao backend.
-- UI/log exibe percentis ou médias básicas.
+- UI/log exibe último RTT, média e p95 do canal de input.
+
+### LAT-003 — AllInputsUp com motivo
+
+Passos:
+
+1. Conectar input.
+2. Perder pointer capture.
+3. Sair do app.
+4. Desconectar a sessão.
+
+Aceite:
+
+- Android envia `AllInputsUp` com motivo específico.
+- Mac aceita payload legado vazio, mas registra o motivo quando presente.
+
+## Testes de perfis e diagnóstico
+
+### PROF-001 — Perfis de streaming no Mac
+
+Passos:
+
+1. Abrir Settings no Mac.
+2. Selecionar Productivity, Low latency e Low bandwidth.
+3. Observar resolução, FPS, bitrate e qualidade aplicados.
+4. Alterar manualmente bitrate, qualidade, resolução, HiDPI ou FPS.
+
+Aceite:
+
+- Productivity aplica valores estáveis para texto e uso geral.
+- Low latency aplica FPS alto e qualidade ultralow.
+- Low bandwidth reduz resolução/FPS/bitrate para Tailnet ruim ou relay.
+- Qualquer ajuste manual muda o perfil para Manual.
+- Se o servidor estiver rodando, mudanças de resolução/FPS/HiDPI reiniciam o pipeline uma vez, de forma coalescida.
+
+### DIAG-001 — Diagnóstico Android mostra últimos erros
+
+Passos:
+
+1. Gerar uma falha de conexão, token rejeitado ou timeout.
+2. Abrir a aba Wireless.
+3. Ler o card Connection Diagnostics.
+
+Aceite:
+
+- Card mostra endpoint, rota, estado do input e últimos erros relevantes.
+- Em Tailnet, rota mostra transporte ativo e avisa se VPN/Tailscale não está ativo para o app.
+- Erros comuns como failed, rejected, timeout e unreachable aparecem resumidos.
+- Sem erro recente, a UI mostra `Recent errors: none`.
 
 ## Testes de lifecycle Android
 
@@ -2949,12 +3106,11 @@ Aceite Alpha:
 - UI mostra backend ativo.
 
 
-
 ---
 
 <!-- FILE: 10-RISKS-AND-OPEN-QUESTIONS.md -->
 
-# 10 — Risks and Open Questions
+# 10 — Risks and Resolved Questions
 
 ## Riscos técnicos principais
 
@@ -3036,39 +3192,39 @@ Mitigação:
 - criar diagnóstico de keyCode/scanCode;
 - adicionar layout ABNT2 na Alpha/Beta.
 
-## Perguntas em aberto
+## Perguntas resolvidas ou condicionais
 
 ### A. Projeto novo ou fork?
 
-Recomendação: fork fortemente refatorado ou novo projeto que importe partes do SideScreen.
+Decisão: manter um fork fortemente refatorado enquanto o motor de vídeo do SideScreen continuar sendo reaproveitado.
 
-Decisão prática depende de quanto histórico/estrutura atual se quer preservar.
+Novo projeto só vale se a estrutura herdada começar a atrapalhar mais do que ajuda. Hoje não atrapalha o bastante.
 
 ### B. Uma porta ou múltiplas portas?
 
-MVP: `port` para vídeo/control legacy e `port+1` para input.
+Decisão MVP: `port` para vídeo/control legacy e `port+1` para input.
 
 Alpha/final: avaliar single-port multi-channel para simplificar Tailscale/firewall.
 
 ### C. CGEvent primeiro ou VirtualHID direto?
 
-Recomendação: CGEvent primeiro para validar input channel. VirtualHID na Alpha.
+Decisão: CGEvent fica como fallback e VirtualHID vira backend preferencial quando estiver pronto no Mac.
 
 ### D. Karabiner VirtualHID ou DriverKit próprio?
 
-Recomendação: Karabiner VirtualHID primeiro. DriverKit próprio só se o produto justificar custo.
+Decisão: Karabiner VirtualHID primeiro, com helper privilegiado do SideScreen quando necessário. DriverKit próprio só entra se o produto justificar o custo.
 
 ### E. Accessibility entra quando?
 
-Depois do input normal funcionar. Não usar como base do MVP.
+Decisão: Accessibility é assist opcional. Não é base do MVP e não substitui pointer capture/Activity.
 
 ### F. Root entra quando?
 
-Depois da Alpha sem root. Primeiro como diagnóstico passivo, depois como backend de input.
+Decisão: depois da Alpha sem root. Primeiro como diagnóstico passivo, depois como backend de input.
 
 ### G. QUIC entra quando?
 
-Somente se medições mostrarem que TCP multi-channel não é suficiente.
+Decisão: somente se medições mostrarem que TCP multi-channel não é suficiente.
 
 ## Decisões já tomadas nesta spec
 
@@ -3081,7 +3237,6 @@ Somente se medições mostrarem que TCP multi-channel não é suficiente.
 7. CGEvent será fallback/MVP.
 8. Virtual HID será backend profissional posterior.
 9. Root será backend opcional futuro.
-
 
 
 ---
@@ -3190,12 +3345,20 @@ Todos os eventos devem carregar metadados comuns:
 
 ```text
 RemoteInputEnvelope
-  eventType
-  sequence
-  androidTimestampNanos
-  deviceId
-  payloadLength
+  eventType: UInt8
+  sequence: UInt64
+  androidTimestampNanos: UInt64
+  payloadLength: UInt16
   payload
+```
+
+O header binário tem 19 bytes:
+
+```text
+1 eventType
+8 sequence
+8 androidTimestampNanos
+2 payloadLength
 ```
 
 ### eventType
@@ -3428,6 +3591,11 @@ AllInputsUp
 - Deve resetar modificadores.
 - Deve registrar métrica.
 
+Implementação sem-root atual:
+
+- Android envia `reason` em lifecycle pause, perda de pointer capture, ação explícita e disconnect.
+- Mac aceita payload legado vazio como `explicitUserAction`, mas registra motivo quando recebido.
+
 ## Ping/Pong de input
 
 Separado do ping de vídeo/sessão.
@@ -3443,8 +3611,17 @@ InputPong
 
 Uso:
 
+- manter o canal de input vivo;
+- impedir que o watchdog do Mac solte teclas/botões durante um hold legítimo;
 - medir latência específica do canal de input;
 - não misturar com frame latency.
+
+Implementação sem-root atual:
+
+- Android envia `InputPing` a cada 2s enquanto o canal de input está aceito.
+- Mac trata `InputPing` como sinal de vida e rearma o watchdog.
+- Mac responde `InputPong` com timestamp do cliente e timestamp do servidor.
+- Android calcula e mostra RTT específico do canal de input com último valor, média e p95.
 
 ## Compatibilidade com MVP
 
@@ -3456,6 +3633,7 @@ PointerRelative
 PointerButton
 PointerWheel
 AllInputsUp
+InputPing
 ```
 
 Campos opcionais podem ser zero/default.
@@ -3536,7 +3714,6 @@ Logar em modo debug:
 - key up sem key down;
 - key down duplicado;
 - latência média/p95 do input.
-
 
 
 ---
@@ -3829,7 +4006,6 @@ Durante a migração:
 - logs identificam channel e session.
 
 
-
 ---
 
 <!-- FILE: 13-SECURITY-MODEL.md -->
@@ -3895,6 +4071,7 @@ MVP pode reaproveitar token atual de 32 bytes, com cuidados:
 - QR deve poder ser resetado;
 - conexões non-loopback sem token devem ser rejeitadas;
 - input channel deve exigir token/sessão, não aceitar input anônimo.
+- Android não deve incluir pairing token/device secret em backup automático do sistema.
 
 ## Alpha
 
@@ -4026,6 +4203,123 @@ Isso é requisito de segurança, não apenas UX.
 - rate limit de tentativas de auth.
 
 
+---
+
+<!-- FILE: 14-DOCUMENTATION-COVERAGE-AND-STATUS.md -->
+
+# 14 — Documentation Coverage and Status
+
+Data: 2026-07-01
+
+Este documento fecha a documentação da spec. "100%" aqui significa cobertura documental completa do produto atual: o que existe, onde está descrito, como validar, o que ainda é futuro e qual arquivo usar para implementar sem chute.
+
+Não significa que o produto final está 100% pronto. Significa que a documentação não deixa buraco conceitual relevante para continuar o desenvolvimento.
+
+## Mapa de cobertura
+
+| Área | Status da documentação | Fonte principal | Evidência no código/projeto |
+| --- | --- | --- | --- |
+| Objetivo de produto | Completo | `01-PROJECT-BRIEF.md` | README principal e fluxo Mac/Android existentes |
+| Arquitetura macro | Completo | `03-TARGET-ARCHITECTURE.md` | `MacHost/Sources/*`, `AndroidClient/app/src/main/java/com/sidescreen/app/*` |
+| Reuso do vídeo SideScreen | Completo | `02-SIDESCREEN-DEEP-DIVE.md`, ADR-0002 | `VirtualDisplayManager.swift`, `ScreenCapture.swift`, `VideoEncoder.swift`, `VideoDecoder.kt` |
+| Tailnet/LAN/manual | Completo | `04-TAILSCALE-NETWORKING-SPEC.md` | `EndpointMode.swift`, `EndpointMode.kt`, `EndpointAdvertiser.swift`, `NetworkRoute.kt` |
+| Pareamento e sessão | Completo | `12-SESSION-AND-TRANSPORT-SPEC.md`, `13-SECURITY-MODEL.md` | `WirelessAuth.swift`, `AuthHandshake.kt`, `RemoteSessionStore.swift` |
+| Canal dedicado de input | Completo | `05-INPUT-ARCHITECTURE-SPEC.md`, `11-REMOTE-INPUT-PROTOCOL-V1.md` | `InputServer.swift`, `InputClient.kt` |
+| Protocolo de input v1 | Completo | `11-REMOTE-INPUT-PROTOCOL-V1.md` | `RemoteInputProtocol.swift`, `RemoteInputProtocol.kt` |
+| Fail-safe de input | Completo | `05-INPUT-ARCHITECTURE-SPEC.md`, `13-SECURITY-MODEL.md` | `InputIngress.swift`, `CGEventInputBackend.swift`, `KarabinerVirtualHIDBackend.swift` |
+| CGEvent fallback | Completo | `05-INPUT-ARCHITECTURE-SPEC.md`, ADR-0006 | `CGEventInputBackend.swift` |
+| Virtual HID | Completo | `05-INPUT-ARCHITECTURE-SPEC.md`, ADR-0006 | `KarabinerVirtualHIDBackend.swift`, `VirtualHIDHelperInstaller.swift`, `VirtualHIDHelperSources/main.swift` |
+| Android sem root | Completo | `06-ANDROID-LIMITATIONS-AND-ROOT-PLAN.md` | `InputClient.kt`, `RemoteInputBridge.kt`, `SideScreenAccessibilityService.kt` |
+| Accessibility assist | Completo | `06-ANDROID-LIMITATIONS-AND-ROOT-PLAN.md` | `SideScreenAccessibilityService.kt`, `RemoteInputBridge.kt` |
+| Diagnóstico operacional | Completo | `07-IMPLEMENTATION-ROADMAP.md`, `09-TEST-PLAN.md` | `DiagLog.kt`, `TailnetDiagnostics.swift`, `scripts/collect-qa-evidence.sh` |
+| Testes automatizados | Completo | `09-TEST-PLAN.md` | `MacHost/Tests/SideScreenTests/*`, `AndroidClient/app/src/test/*` |
+| QA manual diário | Completo | `09-TEST-PLAN.md` | `../../DAILY_USE_QA.md`, `../../qa-evidence/*` |
+| Riscos e decisões | Completo | `10-RISKS-AND-OPEN-QUESTIONS.md`, `adr/*` | ADRs 0001-0006 |
+| Estrutura sugerida | Completo | `appendix/C-SUGGESTED-PROJECT-STRUCTURE.md` | Estrutura atual já segue boa parte da divisão sugerida |
+
+## Estado implementado
+
+| Marco | Estado | Notas práticas |
+| --- | --- | --- |
+| Tailnet endpoint support | Implementado | QR e parser têm modo de endpoint; Tailnet não deve prender socket em Wi-Fi. |
+| Input channel separado | Implementado | Input usa porta dedicada no MVP e `TCP_NODELAY`. |
+| Remote Input Protocol v1 | Implementado | Envelope com tipo, sequência, timestamp e payload; inclui ping/pong de latência. |
+| Teclado sem root | Implementado | Activity/Accessibility enviam eventos mapeados para HID usage quando Android entrega a tecla. |
+| Mouse sem root | Implementado | Movimento relativo, botões e wheel; pointer capture é o caminho preferido. |
+| `TextCommit` | Implementado | Cobre IME/dead keys sem logar texto digitado. |
+| `AllInputsUp` com motivo | Implementado | Usado em disconnect, lifecycle, perda de pointer capture e troca de backend. |
+| CGEvent backend | Implementado | Fallback inicial e caminho de compatibilidade. |
+| Virtual HID | Implementado | Suporta Karabiner VirtualHID direto quando possível e helper privilegiado do SideScreen. |
+| Device registry/revogação | Implementado | Existe store de dispositivos pareados/revogados no Mac. |
+| Diagnóstico Mac/Android | Implementado | Diagnósticos cobrem endpoint, rota, input, permissões, logs e erros recentes. |
+| Evidence collection | Implementado | Scripts coletam preflight, artefatos, Tailnet, assinatura, testes e smoke Android. |
+| Root backend | Futuro intencional | A spec cobre plano e limites; não deve virar requisito do MVP. |
+| QUIC/single-port final | Futuro condicional | Só entra se medições reais mostrarem que TCP multi-channel é gargalo. |
+
+## Fluxo atual
+
+```text
+Android tablet
+  captura Activity / pointer capture / Accessibility assist
+  gera Remote Input Protocol v1
+  envia input por canal dedicado
+        |
+        v
+MacHost InputServer
+  valida token/sessão/dispositivo
+  passa por InputIngress
+  coalesce mouse move
+  rastreia teclas/botões pressionados
+  solta tudo em falha
+        |
+        v
+Input backend
+  Virtual HID quando pronto
+  CGEvent como fallback
+```
+
+## O que ainda é futuro, sem fingimento
+
+| Item | Por que não bloqueia 100% da documentação | Próximo passo correto |
+| --- | --- | --- |
+| Root no Android | Está documentado como backend opcional posterior, com riscos e escape. | Fazer discovery passivo antes de qualquer envio remoto. |
+| DriverKit próprio | Existe alternativa prática com Karabiner/SideScreen helper. | Só justificar se instalação/controle exigirem. |
+| QUIC | TCP com canais separados já cobre o desenho atual. | Medir latência/queda em rede real antes de trocar transporte. |
+| ABNT2 perfeito | Layout depende de teclado, Android e mapeamento físico. | Ampliar testes reais e tabela de key mapping. |
+| Installer polido | Arquitetura e permissões estão documentadas. | Transformar onboarding/installer em tarefa de produto. |
+| Áudio/clipboard/multimonitor/file drop | São extras, não fazem parte do terminal remoto mínimo. | Tratar cada um como epic separado depois da base estável. |
+
+## Regra de leitura para próximas sessões
+
+Use esta ordem:
+
+1. `README.md`
+2. `00-CODEX-START-HERE.md`
+3. `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`
+4. `07-IMPLEMENTATION-ROADMAP.md`
+5. `08-CODEX-TASK-BACKLOG.md`
+6. O documento específico da área que será alterada
+
+Se houver conflito entre um backlog antigo e este documento, este documento vence para status atual. O backlog continua útil como decomposição de trabalho, não como retrato fiel do que ainda falta.
+
+## Critério de "documentação 100%"
+
+A documentação está 100% quando uma pessoa consegue responder, sem ler o código inteiro:
+
+- o que o produto quer ser;
+- quais decisões arquiteturais já foram tomadas;
+- quais partes do SideScreen são reaproveitadas;
+- como Tailnet, LAN e manual diferem;
+- como o input sai do Android e entra no Mac;
+- como a sessão protege o canal de input;
+- quais backends existem no Mac;
+- o que acontece quando uma conexão cai;
+- o que é limitação real do Android sem root;
+- quais testes e evidências validam o sistema;
+- quais itens são futuro deliberado, não buraco esquecido.
+
+Com este arquivo, essa lista está coberta.
+
 
 ---
 
@@ -4076,7 +4370,6 @@ InputCaptureBackend
 ```
 
 
-
 ---
 
 <!-- FILE: adr/ADR-0002-reuse-sidescreen-video-engine.md -->
@@ -4122,7 +4415,6 @@ EncodeService
 VideoTransport
 MediaCodecRenderer
 ```
-
 
 
 ---
@@ -4171,7 +4463,6 @@ Em modo Tailnet, não chamar bindSocket em Network Wi-Fi.
 ```
 
 
-
 ---
 
 <!-- FILE: adr/ADR-0004-separate-input-from-video.md -->
@@ -4218,7 +4509,6 @@ InputServer
 InputIngress
 InputBackend
 ```
-
 
 
 ---
@@ -4271,7 +4561,6 @@ AllInputsUp
 ```
 
 
-
 ---
 
 <!-- FILE: adr/ADR-0006-cgevent-first-virtualhid-second.md -->
@@ -4314,7 +4603,6 @@ InputBackend
   KarabinerVirtualHIDBackend
   DriverKitOwnBackend futuro
 ```
-
 
 
 ---
@@ -4672,7 +4960,6 @@ Novo projeto:
 - preservar compatibilidade com QR antigo.
 
 
-
 ---
 
 <!-- FILE: appendix/B-EXTERNAL-REFERENCES.md -->
@@ -4909,7 +5196,6 @@ Relevância:
 - acompanhar versões e mudanças de compatibilidade.
 
 
-
 ---
 
 <!-- FILE: appendix/C-SUGGESTED-PROJECT-STRUCTURE.md -->
@@ -5018,7 +5304,6 @@ Sequência segura:
 5. Só depois extrair partes de `MainActivity` e `AppDelegate`.
 
 
-
 ---
 
 <!-- FILE: CODEX_PROMPT.md -->
@@ -5034,11 +5319,12 @@ Estou trabalhando em um fork/novo projeto baseado no SideScreen para transformar
 Leia primeiro toda a documentação em `remote-mac-terminal-spec/`, começando por:
 
 1. `00-CODEX-START-HERE.md`
-2. `02-SIDESCREEN-DEEP-DIVE.md`
-3. `03-TARGET-ARCHITECTURE.md`
-4. `04-TAILSCALE-NETWORKING-SPEC.md`
-5. `05-INPUT-ARCHITECTURE-SPEC.md`
-6. `08-CODEX-TASK-BACKLOG.md`
+2. `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`
+3. `02-SIDESCREEN-DEEP-DIVE.md`
+4. `03-TARGET-ARCHITECTURE.md`
+5. `04-TAILSCALE-NETWORKING-SPEC.md`
+6. `05-INPUT-ARCHITECTURE-SPEC.md`
+7. `08-CODEX-TASK-BACKLOG.md`
 
 Depois, inspecione o código atual do repositório. Não implemente nada antes de confirmar que entendeu:
 
@@ -5047,8 +5333,9 @@ Depois, inspecione o código atual do repositório. Não implemente nada antes d
 - como o Android decodifica vídeo;
 - como o pareamento wireless funciona;
 - onde o Android força `bindSocket` para Wi-Fi;
-- onde touch é enviado pelo mesmo socket do vídeo;
+- se ainda existe fluxo legado enviando touch pelo mesmo socket do vídeo;
 - onde o Mac injeta input via `CGEvent`.
+- quais tarefas do backlog já foram implementadas.
 
 Objetivo da primeira fase:
 
@@ -5070,8 +5357,7 @@ Restrições:
 - não quebrar USB/LAN existentes;
 - preservar licença MIT da base.
 
-Comece propondo um plano de mudanças pequeno para a Sprint 1 do roadmap, focado somente em Tailnet endpoint support. Antes de editar, liste os arquivos que pretende tocar e os riscos de regressão.
+Comece propondo um plano de mudanças pequeno para a próxima lacuna real, não para uma tarefa que o código já resolveu. Antes de editar, liste os arquivos que pretende tocar e os riscos de regressão.
 
 ---
-
 

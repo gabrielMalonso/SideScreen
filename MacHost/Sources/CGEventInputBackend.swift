@@ -102,6 +102,10 @@ final class CGEventInputBackend: InputBackend {
     }
 
     private func handlePointerButton(_ button: PointerButtonEvent) {
+        guard Self.mouseMapping(for: button.button) != nil else {
+            debugLog("Input mouse button ignored: unsupported button=\(button.button)")
+            return
+        }
         let location = currentPointerLocation()
         if button.action == .down {
             pressedButtons.insert(button.button)
@@ -125,21 +129,23 @@ final class CGEventInputBackend: InputBackend {
     }
 
     private func postMouseButton(_ button: UInt8, down: Bool, at location: CGPoint) {
-        let eventType: CGEventType
-        let mouseButton: CGMouseButton
-        switch button {
-        case 1:
-            eventType = down ? .rightMouseDown : .rightMouseUp
-            mouseButton = .right
-        case 2:
-            eventType = down ? .otherMouseDown : .otherMouseUp
-            mouseButton = .center
-        default:
-            eventType = down ? .leftMouseDown : .leftMouseUp
-            mouseButton = .left
-        }
-        CGEvent(mouseEventSource: eventSource, mouseType: eventType, mouseCursorPosition: location, mouseButton: mouseButton)?
+        guard let mapping = Self.mouseMapping(for: button) else { return }
+        let eventType = down ? mapping.downEvent : mapping.upEvent
+        CGEvent(mouseEventSource: eventSource, mouseType: eventType, mouseCursorPosition: location, mouseButton: mapping.button)?
             .post(tap: .cghidEventTap)
+    }
+
+    private static func mouseMapping(for button: UInt8) -> (downEvent: CGEventType, upEvent: CGEventType, button: CGMouseButton)? {
+        switch button {
+        case 0:
+            return (.leftMouseDown, .leftMouseUp, .left)
+        case 1:
+            return (.rightMouseDown, .rightMouseUp, .right)
+        case 2:
+            return (.otherMouseDown, .otherMouseUp, .center)
+        default:
+            return nil
+        }
     }
 
     private func currentPointerLocation() -> CGPoint {

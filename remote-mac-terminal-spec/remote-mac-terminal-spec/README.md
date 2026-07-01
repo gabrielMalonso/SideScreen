@@ -22,12 +22,13 @@ A documentação foi estruturada para permitir evolução incremental: primeiro 
 8. `07-IMPLEMENTATION-ROADMAP.md` — MVP, Alpha, Beta e versão final.
 9. `08-CODEX-TASK-BACKLOG.md` — backlog técnico acionável para desenvolvimento.
 10. `09-TEST-PLAN.md` — plano de validação funcional, rede, latência e input.
-11. `10-RISKS-AND-OPEN-QUESTIONS.md` — riscos arquiteturais e decisões pendentes.
+11. `10-RISKS-AND-OPEN-QUESTIONS.md` — riscos arquiteturais e decisões resolvidas/condicionais.
 12. `11-REMOTE-INPUT-PROTOCOL-V1.md` — especificação do protocolo de input.
 13. `12-SESSION-AND-TRANSPORT-SPEC.md` — sessão, canais e transporte.
 14. `13-SECURITY-MODEL.md` — modelo de segurança.
-15. `adr/` — decisões arquiteturais registradas.
-16. `appendix/` — referências de código do SideScreen e referências externas.
+15. `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` — matriz de cobertura, estado atual e definição de documentação 100%.
+16. `adr/` — decisões arquiteturais registradas.
+17. `appendix/` — referências de código do SideScreen e referências externas.
 
 ## Resumo executivo
 
@@ -47,3 +48,4 @@ Tailscale como underlay de rede
 
 O desenvolvimento deve começar sem root. Isso valida vídeo, Tailscale, sessão, latência real, mouse capture, teclado comum e UX. Root deve ser uma fase posterior, implementada como backend opcional de captura de input, não como premissa do produto.
 
+Para continuar o projeto sem se perder em backlog antigo, leia `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` antes de implementar. Ele separa o que já existe, o que está documentado e o que é futuro intencional.

@@ -7,15 +7,20 @@ VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 STAMP="$(date '+%Y%m%d-%H%M%S')-$$"
 OUT_DIR="$ROOT_DIR/qa-evidence/$STAMP"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 DURATION=15
 RUN_SMOKE=0
 EXPECT_STREAM=0
 TAILNET_HOST=""
 NO_REVERSE=0
+TAP_CONNECT=0
 SMOKE_STATUS=0
 
 usage() {
-    echo "Usage: ./scripts/collect-qa-evidence.sh [--smoke] [--expect-stream] [--no-reverse] [--duration seconds] [--tailnet-host host]"
+    echo "Usage: ./scripts/collect-qa-evidence.sh [--smoke] [--expect-stream] [--no-reverse] [--tap-connect] [--duration seconds] [--tailnet-host host]"
     echo ""
     echo "Examples:"
     echo "  ./scripts/collect-qa-evidence.sh"
@@ -46,6 +51,11 @@ while [ "$#" -gt 0 ]; do
         --no-reverse)
             RUN_SMOKE=1
             NO_REVERSE=1
+            shift
+            ;;
+        --tap-connect)
+            RUN_SMOKE=1
+            TAP_CONNECT=1
             shift
             ;;
         -h|--help)
@@ -99,11 +109,13 @@ capture_shell() {
     echo "Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
     echo "Root: $ROOT_DIR"
     echo "Port: $PORT"
+    echo "Input port: $INPUT_PORT"
     echo "Smoke: $RUN_SMOKE"
     echo "Expect stream: $EXPECT_STREAM"
     echo "Duration: $DURATION"
     echo "Tailnet host: ${TAILNET_HOST:-none}"
     echo "No reverse: $NO_REVERSE"
+    echo "Tap connect: $TAP_CONNECT"
 } > "$OUT_DIR/manifest.txt"
 
 capture "Git status" "git-status.txt" git -C "$ROOT_DIR" status --short
@@ -150,6 +162,9 @@ if [ "$RUN_SMOKE" -eq 1 ]; then
     fi
     if [ "$NO_REVERSE" -eq 1 ]; then
         smoke_args+=(--no-reverse)
+    fi
+    if [ "$TAP_CONNECT" -eq 1 ]; then
+        smoke_args+=(--tap-connect)
     fi
     capture "Android device smoke" "android-device-smoke.txt" "$SCRIPT_DIR/android-device-smoke.sh" "${smoke_args[@]}"
     SMOKE_STATUS=$?

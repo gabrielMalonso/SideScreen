@@ -37,7 +37,7 @@ enum StatusDetector {
         }
     }
 
-    /// Heuristic: parse `adb reverse --list` for `tcp:<port> tcp:<port>`.
+    /// Heuristic: parse `adb reverse --list` for both video `port` and input `port + 1`.
     static func adbReverseConfigured(port: Int) -> Bool {
         guard let adbPath = adbExecutablePath() else { return false }
         let task = Process()
@@ -54,7 +54,9 @@ enum StatusDetector {
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? ""
-        return output.contains("tcp:\(port) tcp:\(port)")
+        let inputPort = min(port + 1, Int(UInt16.max))
+        return output.contains("tcp:\(port) tcp:\(port)") &&
+            output.contains("tcp:\(inputPort) tcp:\(inputPort)")
     }
 
     private static var cachedAdbPath: String?

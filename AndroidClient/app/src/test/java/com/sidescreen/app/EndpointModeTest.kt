@@ -20,4 +20,10 @@ class EndpointModeTest {
         assertFalse(EndpointMode.TAILNET.shouldBindWifi)
         assertFalse(EndpointMode.MANUAL.shouldBindWifi)
     }
+
+    @Test
+    fun inputPortUsesNextPortWithoutOverflow() {
+        assertEquals(54322, RemoteInputPorts.inputPortFor(54321))
+        assertEquals(65535, RemoteInputPorts.inputPortFor(65535))
+    }
 }

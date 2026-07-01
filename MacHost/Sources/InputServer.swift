@@ -73,6 +73,12 @@ final class InputServer {
         backend.endSession(reason: "input server stopped")
     }
 
+    func dropActiveConnection(reason: String) {
+        connection?.cancel()
+        connection = nil
+        backend.endSession(reason: reason)
+    }
+
     private func handleConnection(_ conn: NWConnection) {
         debugLog("InputServer incoming connection")
         connection?.cancel()

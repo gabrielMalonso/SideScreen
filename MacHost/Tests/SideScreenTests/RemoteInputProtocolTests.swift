@@ -210,6 +210,37 @@ final class InputIngressTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.lastReleaseReason, "test release")
     }
 
+    func testAllInputsUpUpdatesDiagnostics() {
+        let backend = RecordingInputBackend()
+        var snapshots: [InputIngressDiagnostics] = []
+        let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
+        ingress.beginSession(deviceId: "tablet")
+
+        ingress.handle(.keyboard(key(sequence: 1, action: .down)))
+        ingress.handle(.allInputsUp(AllInputsUpEvent(reason: 2, sequence: 2)))
+
+        XCTAssertEqual(snapshots.last?.pressedKeyCount, 0)
+        XCTAssertEqual(snapshots.last?.releaseAllCount, 1)
+        XCTAssertEqual(snapshots.last?.lastReleaseReason, "client all-inputs-up: pointer capture lost")
+        ingress.endSession(reason: "test")
+    }
+
+    func testSequenceGapReleasesPressedState() {
+        let backend = RecordingInputBackend()
+        var snapshots: [InputIngressDiagnostics] = []
+        let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
+        ingress.beginSession(deviceId: "tablet")
+
+        ingress.handle(.keyboard(key(sequence: 1, action: .down)))
+        ingress.handle(.keyboard(key(sequence: 3, action: .up)))
+
+        XCTAssertEqual(backend.releaseReasons, ["sequence gap"])
+        XCTAssertEqual(snapshots.last?.pressedKeyCount, 0)
+        XCTAssertEqual(snapshots.last?.releaseAllCount, 1)
+        XCTAssertEqual(snapshots.last?.sequenceGapCount, 1)
+        ingress.endSession(reason: "test")
+    }
+
     func testPingKeepsPressedStateAndSequenceAlive() {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []

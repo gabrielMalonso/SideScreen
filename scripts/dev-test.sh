@@ -6,6 +6,10 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
 APP_DIR="$ROOT_DIR/SideScreen.app"
 PORT="${SIDESCREEN_PORT:-54321}"
+INPUT_PORT=$((PORT + 1))
+if [ "$INPUT_PORT" -gt 65535 ]; then
+    INPUT_PORT=65535
+fi
 ADB_AVAILABLE=0
 
 echo "======================================="
@@ -96,11 +100,12 @@ fi
 
 # 5. Run macOS app
 echo "[5/5] Starting macOS app..."
-pkill -f "SideScreen.app" 2>/dev/null || true
+pkill -x SideScreen 2>/dev/null || true
 sleep 0.5
 
 if [ "$ADB_AVAILABLE" -eq 1 ] && [ -n "${ANDROID_SERIAL:-}" ]; then
     adb reverse "tcp:$PORT" "tcp:$PORT" 2>/dev/null || true
+    adb reverse "tcp:$INPUT_PORT" "tcp:$INPUT_PORT" 2>/dev/null || true
 fi
 open "$APP_DIR"
 
@@ -113,7 +118,7 @@ echo "======================================="
 echo ""
 read -p "Test result? [y=OK / n=failed]: " RESULT
 
-pkill -f "SideScreen.app" 2>/dev/null || true
+pkill -x SideScreen 2>/dev/null || true
 
 if [ "$RESULT" = "y" ]; then
     echo ""

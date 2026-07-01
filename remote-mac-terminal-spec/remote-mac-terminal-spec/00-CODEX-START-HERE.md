@@ -2,6 +2,8 @@
 
 Este documento é o briefing para continuar o projeto em uma máquina local usando Codex.
 
+Antes de editar código, leia também `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`. Ele é a fotografia atual da documentação: o backlog mostra a decomposição das tarefas, mas nem toda tarefa ainda está pendente.
+
 ## Missão do projeto
 
 Construir um app que transforme um tablet Android em um terminal remoto para um Mac mini em casa.
@@ -115,6 +117,8 @@ AndroidClient:
 
 ## Caminho de implementação sugerido para Codex
 
+Se a base local já tiver parte destes passos implementada, não refaça. Compare primeiro com `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`, os testes existentes e o código real.
+
 ### Passo 1 — preparar refactor mínimo de rede
 
 - Criar conceito de `EndpointMode`: USB, LAN, TailnetManualHost, TailnetMagicDNS.
@@ -171,4 +175,3 @@ AndroidClient/app/src/main/java/com/sidescreen/app/AuthHandshake.kt
 ```
 
 Mais detalhes estão em `appendix/A-SIDESCREEN-CODE-REFERENCE.md`.
-

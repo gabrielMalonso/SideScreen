@@ -9,11 +9,12 @@ Estou trabalhando em um fork/novo projeto baseado no SideScreen para transformar
 Leia primeiro toda a documentação em `remote-mac-terminal-spec/`, começando por:
 
 1. `00-CODEX-START-HERE.md`
-2. `02-SIDESCREEN-DEEP-DIVE.md`
-3. `03-TARGET-ARCHITECTURE.md`
-4. `04-TAILSCALE-NETWORKING-SPEC.md`
-5. `05-INPUT-ARCHITECTURE-SPEC.md`
-6. `08-CODEX-TASK-BACKLOG.md`
+2. `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`
+3. `02-SIDESCREEN-DEEP-DIVE.md`
+4. `03-TARGET-ARCHITECTURE.md`
+5. `04-TAILSCALE-NETWORKING-SPEC.md`
+6. `05-INPUT-ARCHITECTURE-SPEC.md`
+7. `08-CODEX-TASK-BACKLOG.md`
 
 Depois, inspecione o código atual do repositório. Não implemente nada antes de confirmar que entendeu:
 
@@ -22,8 +23,9 @@ Depois, inspecione o código atual do repositório. Não implemente nada antes d
 - como o Android decodifica vídeo;
 - como o pareamento wireless funciona;
 - onde o Android força `bindSocket` para Wi-Fi;
-- onde touch é enviado pelo mesmo socket do vídeo;
+- se ainda existe fluxo legado enviando touch pelo mesmo socket do vídeo;
 - onde o Mac injeta input via `CGEvent`.
+- quais tarefas do backlog já foram implementadas.
 
 Objetivo da primeira fase:
 
@@ -45,7 +47,6 @@ Restrições:
 - não quebrar USB/LAN existentes;
 - preservar licença MIT da base.
 
-Comece propondo um plano de mudanças pequeno para a Sprint 1 do roadmap, focado somente em Tailnet endpoint support. Antes de editar, liste os arquivos que pretende tocar e os riscos de regressão.
+Comece propondo um plano de mudanças pequeno para a próxima lacuna real, não para uma tarefa que o código já resolveu. Antes de editar, liste os arquivos que pretende tocar e os riscos de regressão.
 
 ---
-

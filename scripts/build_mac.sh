@@ -7,15 +7,45 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Read version
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
-SIGN_IDENTITY="${SIDESCREEN_CODESIGN_IDENTITY:--}"
+SIGN_IDENTITY="${SIDESCREEN_CODESIGN_IDENTITY:-auto}"
 NOTARIZE="${SIDESCREEN_NOTARIZE:-0}"
 echo "Building version $VERSION..."
+
+resolve_sign_identity() {
+    if [ "$SIGN_IDENTITY" != "auto" ]; then
+        echo "$SIGN_IDENTITY"
+        return
+    fi
+
+    local identity
+    identity="$(security find-identity -v -p codesigning 2>/dev/null |
+        sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' |
+        head -1)"
+    if [ -z "$identity" ]; then
+        identity="$(security find-identity -v -p codesigning 2>/dev/null |
+            sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' |
+            head -1)"
+    fi
+
+    if [ -n "$identity" ]; then
+        echo "$identity"
+    else
+        echo "-"
+    fi
+}
+
+SIGN_IDENTITY="$(resolve_sign_identity)"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "Code signing identity: ad-hoc (set SIDESCREEN_CODESIGN_IDENTITY for stable macOS permissions)"
+else
+    echo "Code signing identity: $SIGN_IDENTITY"
+fi
 
 cd "$ROOT_DIR/MacHost"
 
 # Kill running instance
 echo "Stopping running Side Screen..."
-pkill -f SideScreen 2>/dev/null || true
+pkill -x SideScreen 2>/dev/null || true
 sleep 0.5
 
 # Clean old build

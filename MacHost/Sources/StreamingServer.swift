@@ -671,4 +671,12 @@ class StreamingServer {
         connection = nil
         listener = nil
     }
+
+    func dropActiveConnection(reason: String) {
+        debugLog("Dropping active stream connection: \(reason)")
+        isReceiving = false
+        connection?.cancel()
+        connection = nil
+        connectionReady = false
+    }
 }

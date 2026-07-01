@@ -241,6 +241,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateAccessibilityAssistStatus()
+        requestPointerCaptureIfInputActive()
     }
 
     private fun updateAccessibilityAssistStatus() {
@@ -1196,7 +1197,7 @@ class MainActivity : AppCompatActivity() {
         log("Connecting wirelessly to ${target.macName} at ${target.host}:${target.port}...")
         configureInputChannel(
             target.host,
-            target.port + 1,
+            RemoteInputPorts.inputPortFor(target.port),
             target.token,
             target.deviceName,
             target.endpointMode,
@@ -1267,7 +1268,7 @@ class MainActivity : AppCompatActivity() {
 
                 configureInputChannel(
                     host = host,
-                    port = port + 1,
+                    port = RemoteInputPorts.inputPortFor(port),
                     token = ByteArray(32),
                     deviceName = (Build.MODEL ?: "Android").take(64),
                     endpointMode = EndpointMode.LAN,
@@ -1452,7 +1453,7 @@ class MainActivity : AppCompatActivity() {
             }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             binding.surfaceView.requestFocus()
-            binding.surfaceView.requestPointerCapture()
+            requestPointerCaptureIfInputActive()
         } else {
             updatePointerCaptureUi(false)
         }
@@ -1518,6 +1519,23 @@ class MainActivity : AppCompatActivity() {
                 }
             binding.releasePointerButton.isEnabled = hasCapture
             binding.releasePointerButton.alpha = if (hasCapture) 1f else 0.55f
+        }
+    }
+
+    private fun requestPointerCaptureIfInputActive() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            updatePointerCaptureUi(false)
+            return
+        }
+        if (!isConnected || inputClient?.isConnected != true) return
+        binding.surfaceView.post {
+            if (!isConnected || inputClient?.isConnected != true) return@post
+            binding.surfaceView.requestFocus()
+            if (!binding.surfaceView.hasPointerCapture()) {
+                binding.surfaceView.requestPointerCapture()
+            } else {
+                updatePointerCaptureUi(true)
+            }
         }
     }
 

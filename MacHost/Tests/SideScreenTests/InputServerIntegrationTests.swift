@@ -92,6 +92,26 @@ final class InputServerIntegrationTests: XCTestCase {
         wait(for: [accepted], timeout: 3)
     }
 
+    func testDropActiveConnectionKeepsListenerReadyForReconnect() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, _ in
+                receivedToken == token && deviceId == "tablet"
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        try Self.connectAndExpectAccept(port: port, token: token)
+        server.dropActiveConnection(reason: "stream disconnected")
+        try Self.connectAndExpectAccept(port: port, token: token)
+    }
+
     private static func hello(token: Data, deviceId: String, sessionId: Data? = nil) -> Data {
         let device = Array(deviceId.utf8)
         var data = Data(RemoteInputCodec.helloMagic)
@@ -156,6 +176,29 @@ final class InputServerIntegrationTests: XCTestCase {
             }
         XCTAssertEqual(nameResult, 0)
         return UInt16(bigEndian: bound.sin_port)
+    }
+
+    private static func connectAndExpectAccept(port: UInt16, token: Data) throws {
+        let accepted = XCTestExpectation(description: "server accepted input channel")
+        let connection = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(integerLiteral: port),
+            using: .tcp
+        )
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                connection.send(content: hello(token: token, deviceId: "tablet"), completion: .contentProcessed { _ in })
+                connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
+                    XCTAssertEqual(data, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
+                    accepted.fulfill()
+                }
+            }
+        }
+        connection.start(queue: .global(qos: .userInitiated))
+        defer { connection.cancel() }
+
+        let result = XCTWaiter.wait(for: [accepted], timeout: 3)
+        XCTAssertEqual(result, .completed)
     }
 }
 

@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -94,6 +95,27 @@ class RemoteInputProtocolTest {
                 "text commit payload too large: ${RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES + 1} bytes, max ${RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES}",
                 expected.message,
             )
+        }
+    }
+
+    @Test
+    fun inputClientChunksLargeTextCommitInsteadOfThrowing() {
+        val client =
+            InputClient(
+                host = "127.0.0.1",
+                port = 9,
+                token = ByteArray(32) { it.toByte() },
+                deviceId = "tablet",
+                sessionId = null,
+                context = null,
+                endpointMode = EndpointMode.MANUAL,
+                metaKeyMapping = MetaKeyMapping.COMMAND,
+            )
+
+        try {
+            assertTrue(client.sendTextCommit("🧪".repeat(2000)))
+        } finally {
+            client.shutdown()
         }
     }
 
