@@ -617,11 +617,16 @@ final class KarabinerVirtualHIDBackend: InputBackend {
         pressedKeys.removeAll()
         pressedButtons.removeAll()
         do {
-            try postKeyboardState()
-            try postPointingState()
+            try postReleasedState()
             debugLog("Karabiner VirtualHID release-all: \(reason)")
         } catch {
-            markFailure("VirtualHID release-all failed: \(error)")
+            debugLog("Karabiner VirtualHID release-all first attempt failed: \(error)")
+            do {
+                try postReleasedState()
+                debugLog("Karabiner VirtualHID release-all recovered after reconnect: \(reason)")
+            } catch {
+                markFailure("VirtualHID release-all failed after reconnect: \(error)")
+            }
         }
     }
 
@@ -645,6 +650,11 @@ final class KarabinerVirtualHIDBackend: InputBackend {
 
     private func postPointingState(dx: Int8 = 0, dy: Int8 = 0, verticalWheel: Int8 = 0, horizontalWheel: Int8 = 0) throws {
         try client.postPointingReport(buttonMask: buttonMask(), dx: dx, dy: dy, verticalWheel: verticalWheel, horizontalWheel: horizontalWheel)
+    }
+
+    private func postReleasedState() throws {
+        try postKeyboardState()
+        try postPointingState()
     }
 
     private func postPointerRelative(_ pointer: PointerRelativeEvent) throws {

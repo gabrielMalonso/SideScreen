@@ -49,7 +49,7 @@ struct KarabinerVirtualHIDStatus {
     }
 
     var canUseThroughHelper: Bool {
-        installed && daemonRunning && socketAvailable && helperSocketAvailable && helperStatus?.upstreamAvailable == true
+        installed && daemonRunning && helperSocketAvailable && helperStatus?.upstreamAvailable == true
     }
 
     var fallbackReason: String {
@@ -62,9 +62,9 @@ struct KarabinerVirtualHIDStatus {
         if canUseThroughHelper { return "Ready via helper" }
         if !installed { return "Not installed" }
         if !daemonRunning { return "Daemon not running" }
-        if !socketAvailable { return "Socket unavailable" }
         if helperSocketAvailable && helperStatus == nil { return "Helper legacy or not responding" }
         if helperBinaryInstalled && helperLaunchDaemonInstalled { return "Helper stopped" }
+        if !socketAvailable { return "Socket unavailable" }
         return "Requires privileged helper"
     }
 
@@ -82,9 +82,6 @@ struct KarabinerVirtualHIDStatus {
         if !daemonRunning {
             return "Start Karabiner-VirtualHIDDevice-Daemon. The driver accepts input only through its daemon."
         }
-        if !socketAvailable {
-            return "The daemon socket was not found at /Library/Application Support/org.pqrs/tmp/rootonly/karabiner_virtual_hid_device_service.sock."
-        }
         if helperSocketAvailable && helperStatus == nil {
             return probeFailure ?? "SideScreen helper did not answer the status probe. Reinstall the helper so the app and helper speak the same protocol."
         }
@@ -93,6 +90,9 @@ struct KarabinerVirtualHIDStatus {
         }
         if helperBinaryInstalled && helperLaunchDaemonInstalled {
             return "SideScreen helper is installed but its socket is not available. Try reinstalling or restarting the helper."
+        }
+        if !socketAvailable {
+            return "The daemon socket was not found at /Library/Application Support/org.pqrs/tmp/rootonly/karabiner_virtual_hid_device_service.sock."
         }
         return "Karabiner VirtualHID is installed, but the service socket is root-only. SideScreen is using CGEvent until a privileged Mac helper is installed."
     }

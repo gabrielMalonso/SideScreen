@@ -1,5 +1,8 @@
 import Foundation
 import AppKit
+import Darwin
+
+signal(SIGPIPE, SIG_IGN)
 
 print("🚀 Side Screen starting...")
 

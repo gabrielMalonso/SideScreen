@@ -78,6 +78,23 @@ final class KarabinerVirtualHIDBackendTests: XCTestCase {
         XCTAssertThrowsError(try SideScreenVirtualHIDHelperCodec.parseStatusResponse(Data(Array("SSHR".utf8) + [0])))
     }
 
+    func testReleaseAllRetriesReleasedStateAfterBrokenPipe() {
+        let client = FlakyVirtualHIDReportClient()
+        var failures: [String] = []
+        let backend = KarabinerVirtualHIDBackend(client: client) { failures.append($0) }
+
+        backend.handle(.keyboard(key(action: .down, usageId: 0xE3, sequence: 1)))
+        backend.handle(.pointerButton(PointerButtonEvent(action: .down, button: 0, flags: 0, sequence: 2)))
+
+        client.failNextKeyboardReport = true
+        backend.releaseAll(reason: "stream disconnected")
+
+        XCTAssertEqual(client.keyboardReports.suffix(2).map(\.modifiers), [0, 0])
+        XCTAssertEqual(client.keyboardReports.last?.keys, [])
+        XCTAssertEqual(client.pointingReports.last?.buttonMask, 0)
+        XCTAssertTrue(failures.isEmpty)
+    }
+
     func testHelperInstallerBuildsLaunchDaemonPlist() throws {
         let data = try VirtualHIDHelperInstaller.launchDaemonPlistData(uid: 501)
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
@@ -108,5 +125,52 @@ final class KarabinerVirtualHIDBackendTests: XCTestCase {
         XCTAssertTrue(candidates.contains("/App/Contents/Resources/../Library/PrivilegedHelperTools/SideScreenVirtualHIDHelper"))
         XCTAssertTrue(candidates.contains("/repo/MacHost/.build/out/Products/Release/SideScreenVirtualHIDHelper"))
         XCTAssertTrue(candidates.contains("/repo/MacHost/.build/out/Products/Debug/SideScreenVirtualHIDHelper"))
+    }
+
+    private func key(action: RemoteInputAction, usageId: UInt16, sequence: UInt64) -> KeyboardKeyEvent {
+        KeyboardKeyEvent(
+            action: action,
+            usagePage: 0x07,
+            usageId: usageId,
+            scanCode: 0,
+            androidKeyCode: 0,
+            location: 0,
+            repeatCount: 0,
+            modifiersSnapshot: 0,
+            flags: 0,
+            sequence: sequence,
+            androidTimestampNanos: 0
+        )
+    }
+}
+
+private final class FlakyVirtualHIDReportClient: VirtualHIDReportClient {
+    struct KeyboardReport {
+        let modifiers: UInt8
+        let keys: [UInt16]
+    }
+
+    struct PointingReport {
+        let buttonMask: UInt32
+    }
+
+    var keyboardReports: [KeyboardReport] = []
+    var pointingReports: [PointingReport] = []
+    var failNextKeyboardReport = false
+
+    func probe() throws {}
+    func initializeDevices() throws {}
+    func resetDevices() throws {}
+
+    func postKeyboardReport(modifiers: UInt8, keys: [UInt16]) throws {
+        keyboardReports.append(KeyboardReport(modifiers: modifiers, keys: keys))
+        if failNextKeyboardReport {
+            failNextKeyboardReport = false
+            throw KarabinerVirtualHIDError.writeFailed(EPIPE)
+        }
+    }
+
+    func postPointingReport(buttonMask: UInt32, dx: Int8, dy: Int8, verticalWheel: Int8, horizontalWheel: Int8) throws {
+        pointingReports.append(PointingReport(buttonMask: buttonMask))
     }
 }

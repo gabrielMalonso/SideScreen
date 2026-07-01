@@ -1,6 +1,8 @@
 import Darwin
 import Foundation
 
+signal(SIGPIPE, SIG_IGN)
+
 private enum HelperStatus: UInt8, Error {
     case ok = 0
     case invalidRequest = 1
