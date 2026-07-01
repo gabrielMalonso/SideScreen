@@ -20,19 +20,19 @@ sleep 0.5
 echo "Cleaning old build..."
 rm -rf .build
 
-# Build fresh (Universal Binary: arm64 + x86_64)
+# Build fresh. Modern SwiftPM/Xcode writes the release product under
+# .build/out/Products/Release for this package.
 echo "Building macOS Host (arm64)..."
-swift build -c release --arch arm64
+swift build -c release
 
-echo "Building macOS Host (x86_64)..."
-swift build -c release --arch x86_64
+RELEASE_DIR=".build/out/Products/Release"
+APP_BINARY="$RELEASE_DIR/SideScreen"
+HELPER_BINARY="$RELEASE_DIR/SideScreenVirtualHIDHelper"
 
-echo "Creating Universal Binary..."
-mkdir -p ".build/release-universal"
-lipo -create \
-  .build/arm64-apple-macosx/release/SideScreen \
-  .build/x86_64-apple-macosx/release/SideScreen \
-  -output .build/release-universal/SideScreen
+if [ ! -f "$APP_BINARY" ]; then
+    echo "❌ Expected app binary not found: $APP_BINARY"
+    exit 1
+fi
 
 # Create .app bundle
 APP_NAME="SideScreen"
@@ -43,8 +43,11 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
-# Copy universal binary
-cp .build/release-universal/SideScreen "$APP_DIR/Contents/MacOS/"
+# Copy binaries
+cp "$APP_BINARY" "$APP_DIR/Contents/MacOS/"
+if [ -f "$HELPER_BINARY" ]; then
+    cp "$HELPER_BINARY" "$APP_DIR/Contents/MacOS/"
+fi
 
 # Copy app icon if exists
 if [ -f "$ROOT_DIR/MacHost/Resources/AppIcon.icns" ]; then
@@ -111,7 +114,7 @@ echo "Creating DMG..."
 DMG_DIR=$(mktemp -d)
 cp -R "$APP_DIR" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-universal.dmg"
+DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-arm64.dmg"
 hdiutil create -volname "Side Screen" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
 rm -rf "$DMG_DIR"
 echo "DMG: $DMG_PATH"

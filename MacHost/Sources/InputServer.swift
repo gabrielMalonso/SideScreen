@@ -102,7 +102,7 @@ final class InputServer {
             guard let self, let conn else { return }
             do {
                 let parsed = try RemoteInputCodec.parseHelloPrefix(prefix)
-                self.receiveHelloSuffix(length: parsed.deviceIdLength + 4, prefix: prefix, on: conn)
+                self.receiveHelloSuffix(length: RemoteInputCodec.helloSuffixLength(for: parsed), prefix: prefix, on: conn)
             } catch {
                 self.reject(conn, reason: 1)
             }

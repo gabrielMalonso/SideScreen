@@ -250,10 +250,15 @@ enum RemoteInputCodec {
         return (token, flags, deviceIdLength)
     }
 
+    static func helloSuffixLength(for parsedPrefix: (token: Data, flags: UInt8, deviceIdLength: Int)) -> Int {
+        let sessionLength = (parsedPrefix.flags & flagHasSessionId) != 0 ? RemoteSessionCredentials.sessionIdLength : 0
+        return parsedPrefix.deviceIdLength + 4 + sessionLength
+    }
+
     static func parseHello(prefix: Data, suffix: Data) throws -> InputChannelHello {
         let parsed = try parseHelloPrefix(prefix)
         let bytes = [UInt8](suffix)
-        let expectedLength = parsed.deviceIdLength + 4 + ((parsed.flags & flagHasSessionId) != 0 ? RemoteSessionCredentials.sessionIdLength : 0)
+        let expectedLength = helloSuffixLength(for: parsed)
         guard bytes.count == expectedLength else {
             throw RemoteInputProtocolError.invalidHello
         }

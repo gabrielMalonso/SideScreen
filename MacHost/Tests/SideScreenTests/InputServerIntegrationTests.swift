@@ -49,15 +49,61 @@ final class InputServerIntegrationTests: XCTestCase {
         wait(for: [accepted, receivedEvent], timeout: 3)
     }
 
-    private static func hello(token: Data, deviceId: String) -> Data {
+    func testAcceptsWirelessHelloWithSessionId() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let sessionId = Data((64..<80).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, receivedSessionId in
+                receivedToken == token &&
+                    deviceId == "tablet" &&
+                    receivedSessionId == sessionId
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        let accepted = expectation(description: "server accepted session-authenticated input channel")
+        let connection = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(integerLiteral: port),
+            using: .tcp
+        )
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                connection.send(
+                    content: Self.hello(token: token, deviceId: "tablet", sessionId: sessionId),
+                    completion: .contentProcessed { _ in }
+                )
+                connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
+                    XCTAssertEqual(data, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
+                    accepted.fulfill()
+                }
+            }
+        }
+        connection.start(queue: .global(qos: .userInitiated))
+        defer { connection.cancel() }
+
+        wait(for: [accepted], timeout: 3)
+    }
+
+    private static func hello(token: Data, deviceId: String, sessionId: Data? = nil) -> Data {
         let device = Array(deviceId.utf8)
         var data = Data(RemoteInputCodec.helloMagic)
         data.append(1)
-        data.append(0)
+        data.append(sessionId == nil ? 0 : 1)
         data.append(token)
         data.append(UInt8(device.count))
         data.append(contentsOf: device)
         data.append(contentsOf: [0x80, 0x00, 0x00, 0x00])
+        if let sessionId {
+            data.append(sessionId)
+        }
         return data
     }
 
