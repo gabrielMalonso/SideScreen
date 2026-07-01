@@ -13,6 +13,7 @@ object DiagLog {
     private const val TAG = "DiagLog"
     private const val LOG_FILE = "diag.log"
     private const val MAX_LOG_SIZE = 1_048_576L // 1MB
+    private val ERROR_MARKERS = listOf("error", "failed", "rejected", "timeout", "unreachable")
 
     @Volatile
     private var logFile: File? = null
@@ -47,5 +48,38 @@ object DiagLog {
             } catch (_: Exception) {
             }
         }
+    }
+
+    fun recentErrorSummary(maxLines: Int = 3): String {
+        val f = logFile ?: return "Recent errors: log unavailable"
+        return try {
+            if (!f.exists()) return "Recent errors: none"
+            summarizeRecentErrors(f.readLines(), maxLines)
+        } catch (_: Exception) {
+            "Recent errors: unavailable"
+        }
+    }
+
+    fun summarizeRecentErrors(
+        lines: List<String>,
+        maxLines: Int = 3,
+    ): String {
+        val matches =
+            lines
+                .asReversed()
+                .filter(::isErrorLine)
+                .take(maxLines)
+                .asReversed()
+                .map { it.substringAfter(": ").take(140) }
+        return if (matches.isEmpty()) {
+            "Recent errors: none"
+        } else {
+            "Recent errors: " + matches.joinToString(" · ")
+        }
+    }
+
+    private fun isErrorLine(line: String): Boolean {
+        val lower = line.lowercase()
+        return ERROR_MARKERS.any { marker -> lower.contains(marker) }
     }
 }

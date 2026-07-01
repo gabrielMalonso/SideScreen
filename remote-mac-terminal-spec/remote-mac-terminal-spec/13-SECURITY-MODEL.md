@@ -59,6 +59,7 @@ MVP pode reaproveitar token atual de 32 bytes, com cuidados:
 - QR deve poder ser resetado;
 - conexões non-loopback sem token devem ser rejeitadas;
 - input channel deve exigir token/sessão, não aceitar input anônimo.
+- Android não deve incluir pairing token/device secret em backup automático do sistema.
 
 ## Alpha
 
@@ -188,4 +189,3 @@ Isso é requisito de segurança, não apenas UX.
 - modo read-only video sem input;
 - prompt no Mac para aceitar novo device;
 - rate limit de tentativas de auth.
-

@@ -7,7 +7,7 @@
     android:background="#000000">
 
     <!-- Video Surface -->
-    <SurfaceView
+    <com.sidescreen.app.RemoteSurfaceView
         android:id="@+id/surfaceView"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -848,6 +848,24 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Input: waiting"
+                        android:textColor="#BBBBBB"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessInputKeysText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Keys: captured 0 / unsupported 0 · assist 0 · dup 0 · last none"
+                        android:textColor="#BBBBBB"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/wirelessRecentErrorsText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Recent errors: none"
                         android:textColor="#BBBBBB"
                         android:textSize="12sp"
                         android:layout_marginBottom="6dp" />

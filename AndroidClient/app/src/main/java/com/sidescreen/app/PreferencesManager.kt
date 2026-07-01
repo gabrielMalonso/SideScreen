@@ -44,6 +44,30 @@ class PreferencesManager(
         get() = ConnectionMode.fromName(prefs.getString("connection_mode", null))
         set(value) = prefs.edit().putString("connection_mode", value.name).apply()
 
+    var metaKeyMapping: MetaKeyMapping
+        get() = MetaKeyMapping.fromName(prefs.getString("meta_key_mapping", null))
+        set(value) = prefs.edit().putString("meta_key_mapping", value.name).apply()
+
+    var mouseSensitivity: Float
+        get() = prefs.getFloat("mouse_sensitivity", PointerTuning.DEFAULT_MOUSE_SENSITIVITY)
+        set(value) = prefs.edit().putFloat("mouse_sensitivity", value.coerceIn(PointerTuning.MIN_SENSITIVITY, PointerTuning.MAX_SENSITIVITY)).apply()
+
+    var scrollSensitivity: Float
+        get() = prefs.getFloat("scroll_sensitivity", PointerTuning.DEFAULT_SCROLL_SENSITIVITY)
+        set(value) = prefs.edit().putFloat("scroll_sensitivity", value.coerceIn(PointerTuning.MIN_SENSITIVITY, PointerTuning.MAX_SENSITIVITY)).apply()
+
+    var naturalScroll: Boolean
+        get() = prefs.getBoolean("natural_scroll", false)
+        set(value) = prefs.edit().putBoolean("natural_scroll", value).apply()
+
+    val pointerTuning: PointerTuning
+        get() =
+            PointerTuning.normalized(
+                mouseSensitivity = mouseSensitivity,
+                scrollSensitivity = scrollSensitivity,
+                naturalScroll = naturalScroll,
+            )
+
     val remoteInputDeviceId: String
         get() {
             prefs.getString("remote_input_device_id", null)?.let { return it }

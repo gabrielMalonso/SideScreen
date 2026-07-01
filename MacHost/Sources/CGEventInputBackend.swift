@@ -17,6 +17,7 @@ extension InputBackend {
 
 final class CGEventInputBackend: InputBackend {
     private let eventSource = CGEventSource(stateID: .hidSystemState)
+    private let textInjector = UnicodeTextInjector()
     private var pressedKeys = Set<UInt32>()
     private var pressedButtons = Set<UInt8>()
 
@@ -24,14 +25,16 @@ final class CGEventInputBackend: InputBackend {
         switch event {
         case .keyboard(let key):
             handleKeyboard(key)
+        case .textCommit(let text):
+            textInjector.post(text.text)
         case .pointerRelative(let pointer):
             handlePointerRelative(pointer)
         case .pointerButton(let button):
             handlePointerButton(button)
         case .pointerWheel(let wheel):
             handlePointerWheel(wheel)
-        case .allInputsUp:
-            releaseAll(reason: "client all-inputs-up")
+        case .allInputsUp(let event):
+            releaseAll(reason: "client all-inputs-up: \(event.diagnosticReason)")
         case .ping, .pong:
             break
         }
@@ -167,4 +170,32 @@ final class CGEventInputBackend: InputBackend {
         0xE0: 59, 0xE1: 56, 0xE2: 58, 0xE3: 55,
         0xE4: 62, 0xE5: 60, 0xE6: 61, 0xE7: 54
     ]
+}
+
+final class UnicodeTextInjector {
+    private let eventSource = CGEventSource(stateID: .hidSystemState)
+
+    func post(_ text: String) {
+        let units = Array(text.utf16)
+        guard !units.isEmpty else { return }
+
+        var index = 0
+        while index < units.count {
+            let end = min(index + 20, units.count)
+            var chunk = Array(units[index..<end])
+            postChunk(&chunk, keyDown: true)
+            postChunk(&chunk, keyDown: false)
+            index = end
+        }
+    }
+
+    private func postChunk(_ chunk: inout [UniChar], keyDown: Bool) {
+        guard let event = CGEvent(keyboardEventSource: eventSource, virtualKey: 0, keyDown: keyDown) else {
+            return
+        }
+        chunk.withUnsafeBufferPointer { pointer in
+            event.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: pointer.baseAddress)
+        }
+        event.post(tap: .cghidEventTap)
+    }
 }

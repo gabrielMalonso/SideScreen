@@ -9,7 +9,7 @@ val computedVersionCode = versionParts[0].toInt() * 10000 + versionParts[1].toIn
 
 android {
     namespace = "com.sidescreen.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.sidescreen.app"
@@ -48,11 +48,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
     // Wireless mode (0.8.0)
-    implementation("androidx.camera:camera-core:1.3.1")
-    implementation("androidx.camera:camera-camera2:1.3.1")
-    implementation("androidx.camera:camera-lifecycle:1.3.1")
-    implementation("androidx.camera:camera-view:1.3.1")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation("androidx.camera:camera-core:1.6.1")
+    implementation("androidx.camera:camera-camera2:1.6.1")
+    implementation("androidx.camera:camera-lifecycle:1.6.1")
+    implementation("androidx.camera:camera-view:1.6.1")
+    implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
 
     testImplementation("junit:junit:4.13.2")
 }

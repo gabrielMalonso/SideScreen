@@ -100,12 +100,20 @@ Todos os eventos devem carregar metadados comuns:
 
 ```text
 RemoteInputEnvelope
-  eventType
-  sequence
-  androidTimestampNanos
-  deviceId
-  payloadLength
+  eventType: UInt8
+  sequence: UInt64
+  androidTimestampNanos: UInt64
+  payloadLength: UInt16
   payload
+```
+
+O header binário tem 19 bytes:
+
+```text
+1 eventType
+8 sequence
+8 androidTimestampNanos
+2 payloadLength
 ```
 
 ### eventType
@@ -338,6 +346,11 @@ AllInputsUp
 - Deve resetar modificadores.
 - Deve registrar métrica.
 
+Implementação sem-root atual:
+
+- Android envia `reason` em lifecycle pause, perda de pointer capture, ação explícita e disconnect.
+- Mac aceita payload legado vazio como `explicitUserAction`, mas registra motivo quando recebido.
+
 ## Ping/Pong de input
 
 Separado do ping de vídeo/sessão.
@@ -362,7 +375,8 @@ Implementação sem-root atual:
 
 - Android envia `InputPing` a cada 2s enquanto o canal de input está aceito.
 - Mac trata `InputPing` como sinal de vida e rearma o watchdog.
-- `InputPong` fica reservado para métrica fina de latência de input.
+- Mac responde `InputPong` com timestamp do cliente e timestamp do servidor.
+- Android calcula e mostra RTT específico do canal de input com último valor, média e p95.
 
 ## Compatibilidade com MVP
 

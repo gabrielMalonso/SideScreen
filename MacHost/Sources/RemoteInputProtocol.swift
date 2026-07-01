@@ -11,6 +11,7 @@ enum RemoteInputProtocolError: Error, Equatable {
 
 enum RemoteInputEventType: UInt8 {
     case keyboardKey = 0x01
+    case textCommit = 0x02
     case pointerRelative = 0x10
     case pointerButton = 0x11
     case pointerWheel = 0x12
@@ -32,7 +33,7 @@ struct InputChannelHello {
 }
 
 struct RemoteInputEnvelope {
-    static let headerLength = 21
+    static let headerLength = 19
 
     let eventType: RemoteInputEventType
     let sequence: UInt64
@@ -47,7 +48,7 @@ struct RemoteInputEnvelope {
         }
         let sequence = bytes.readUInt64LE(at: 1)
         let timestamp = bytes.readUInt64LE(at: 9)
-        let payloadLength = Int(bytes.readUInt16LE(at: 19))
+        let payloadLength = Int(bytes.readUInt16LE(at: 17))
         guard payloadLength <= 4096 else { throw RemoteInputProtocolError.invalidFrame }
         return (eventType, sequence, timestamp, payloadLength)
     }
@@ -55,20 +56,22 @@ struct RemoteInputEnvelope {
 
 enum RemoteInputEvent {
     case keyboard(KeyboardKeyEvent)
+    case textCommit(TextCommitEvent)
     case pointerRelative(PointerRelativeEvent)
     case pointerButton(PointerButtonEvent)
     case pointerWheel(PointerWheelEvent)
-    case allInputsUp(sequence: UInt64)
+    case allInputsUp(AllInputsUpEvent)
     case ping(sequence: UInt64, value: UInt64)
     case pong(InputPongEvent)
 
     var sequence: UInt64 {
         switch self {
         case .keyboard(let event): return event.sequence
+        case .textCommit(let event): return event.sequence
         case .pointerRelative(let event): return event.sequence
         case .pointerButton(let event): return event.sequence
         case .pointerWheel(let event): return event.sequence
-        case .allInputsUp(let sequence): return sequence
+        case .allInputsUp(let event): return event.sequence
         case .ping(let sequence, _): return sequence
         case .pong(let event): return event.sequence
         }
@@ -92,6 +95,19 @@ enum RemoteInputEvent {
                 repeatCount: bytes.readUInt16LE(at: 14),
                 modifiersSnapshot: bytes.readUInt32LE(at: 16),
                 flags: bytes.readUInt32LE(at: 20),
+                sequence: sequence,
+                androidTimestampNanos: timestamp
+            ))
+        case .textCommit:
+            guard bytes.count >= 3 else { throw RemoteInputProtocolError.invalidFrame }
+            let textLength = Int(bytes.readUInt16LE(at: 0))
+            guard textLength > 0,
+                  bytes.count == 2 + textLength,
+                  let text = String(bytes: bytes[2..<bytes.count], encoding: .utf8) else {
+                throw RemoteInputProtocolError.invalidFrame
+            }
+            return .textCommit(TextCommitEvent(
+                text: text,
                 sequence: sequence,
                 androidTimestampNanos: timestamp
             ))
@@ -125,8 +141,11 @@ enum RemoteInputEvent {
                 sequence: sequence
             ))
         case .allInputsUp:
-            guard bytes.isEmpty else { throw RemoteInputProtocolError.invalidFrame }
-            return .allInputsUp(sequence: sequence)
+            guard bytes.count <= 1 else { throw RemoteInputProtocolError.invalidFrame }
+            return .allInputsUp(AllInputsUpEvent(
+                reason: bytes.first ?? 0,
+                sequence: sequence
+            ))
         case .inputPing:
             guard bytes.count == 8 else { throw RemoteInputProtocolError.invalidFrame }
             return .ping(sequence: sequence, value: bytes.readUInt64LE(at: 0))
@@ -155,6 +174,12 @@ struct KeyboardKeyEvent {
     let androidTimestampNanos: UInt64
 }
 
+struct TextCommitEvent {
+    let text: String
+    let sequence: UInt64
+    let androidTimestampNanos: UInt64
+}
+
 struct PointerRelativeEvent {
     let dx: Float
     let dy: Float
@@ -176,6 +201,23 @@ struct PointerWheelEvent {
     let unit: UInt8
     let flags: UInt32
     let sequence: UInt64
+}
+
+struct AllInputsUpEvent {
+    let reason: UInt8
+    let sequence: UInt64
+
+    var diagnosticReason: String {
+        switch reason {
+        case 0: return "explicit user action"
+        case 1: return "android lifecycle pause"
+        case 2: return "pointer capture lost"
+        case 3: return "input backend switch"
+        case 4: return "network disconnect"
+        case 5: return "protocol error"
+        default: return "unknown reason \(reason)"
+        }
+    }
 }
 
 struct InputPongEvent {

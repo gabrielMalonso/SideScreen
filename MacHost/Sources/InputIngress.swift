@@ -65,6 +65,10 @@ final class InputIngress: InputBackend {
         case .pointerRelative(let move):
             enqueuePointerRelativeLocked(move)
             lock.unlock()
+        case .textCommit:
+            flushPendingPointerRelativeLocked()
+            lock.unlock()
+            downstream.handle(event)
         case .keyboard(let key):
             flushPendingPointerRelativeLocked()
             updateKeyboardStateLocked(key)

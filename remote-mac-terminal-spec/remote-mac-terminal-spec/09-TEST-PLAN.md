@@ -153,11 +153,14 @@ Testar:
 - Control + C em Terminal;
 - Option + tecla, quando possível;
 - Meta/Super como Command, quando Android entregar.
+- Meta/Super com mapeamento Command, Option, Control e Off.
 
 Aceite:
 
 - Modificadores pressionam e soltam corretamente.
-- Se Meta não chegar, app registra limitação em diagnóstico.
+- Meta/Super segue o mapeamento escolhido no Android Settings.
+- Se Meta chegar mas não for mapeado, o contador `unsupported` aumenta.
+- Se Meta não chegar ao app, a UI mantém a limitação sem root visível em diagnóstico.
 
 ### KEY-003 — Stuck key fail-safe
 
@@ -184,7 +187,8 @@ Testar:
 Aceite:
 
 - App não promete sucesso.
-- Diagnóstico registra quais eventos chegaram ou não.
+- Diagnóstico registra eventos que chegaram como `captured` ou `unsupported`.
+- Teclas que o Android não entrega continuam tratadas como limitação sem root, não como falha do protocolo.
 - Falha não quebra sessão.
 
 ## Testes de mouse
@@ -202,6 +206,7 @@ Aceite:
 - Mouse move o cursor do Mac de forma relativa.
 - Cursor não fica limitado à borda do tablet.
 - Há mecanismo de escape do capture.
+- Sensibilidade de pointer no Android Settings altera o movimento enviado.
 
 ### MOU-002 — Botões
 
@@ -236,12 +241,14 @@ Testar:
 
 - scroll vertical;
 - scroll horizontal se mouse suportar;
-- direção natural configurável no futuro.
+- sensibilidade de scroll;
+- direção natural configurável.
 
 Aceite:
 
 - Scroll funciona em navegador/Finder.
 - Eventos não geram backlog.
+- Natural scroll inverte vertical e horizontal de forma consistente.
 
 ## Testes de input sob carga
 
@@ -266,7 +273,55 @@ Aceite:
 - Android timestampa evento.
 - Mac registra chegada.
 - Mac registra dispatch ao backend.
-- UI/log exibe percentis ou médias básicas.
+- UI/log exibe último RTT, média e p95 do canal de input.
+
+### LAT-003 — AllInputsUp com motivo
+
+Passos:
+
+1. Conectar input.
+2. Perder pointer capture.
+3. Sair do app.
+4. Desconectar a sessão.
+
+Aceite:
+
+- Android envia `AllInputsUp` com motivo específico.
+- Mac aceita payload legado vazio, mas registra o motivo quando presente.
+
+## Testes de perfis e diagnóstico
+
+### PROF-001 — Perfis de streaming no Mac
+
+Passos:
+
+1. Abrir Settings no Mac.
+2. Selecionar Productivity, Low latency e Low bandwidth.
+3. Observar resolução, FPS, bitrate e qualidade aplicados.
+4. Alterar manualmente bitrate, qualidade, resolução, HiDPI ou FPS.
+
+Aceite:
+
+- Productivity aplica valores estáveis para texto e uso geral.
+- Low latency aplica FPS alto e qualidade ultralow.
+- Low bandwidth reduz resolução/FPS/bitrate para Tailnet ruim ou relay.
+- Qualquer ajuste manual muda o perfil para Manual.
+- Se o servidor estiver rodando, mudanças de resolução/FPS/HiDPI reiniciam o pipeline uma vez, de forma coalescida.
+
+### DIAG-001 — Diagnóstico Android mostra últimos erros
+
+Passos:
+
+1. Gerar uma falha de conexão, token rejeitado ou timeout.
+2. Abrir a aba Wireless.
+3. Ler o card Connection Diagnostics.
+
+Aceite:
+
+- Card mostra endpoint, rota, estado do input e últimos erros relevantes.
+- Em Tailnet, rota mostra transporte ativo e avisa se VPN/Tailscale não está ativo para o app.
+- Erros comuns como failed, rejected, timeout e unreachable aparecem resumidos.
+- Sem erro recente, a UI mostra `Recent errors: none`.
 
 ## Testes de lifecycle Android
 
@@ -343,4 +398,3 @@ Aceite Alpha:
 
 - Fallback para CGEvent.
 - UI mostra backend ativo.
-

@@ -143,6 +143,14 @@ final class InputServer {
     }
 
     private func reject(_ conn: NWConnection, reason: UInt8) {
+        let reasonText: String
+        switch reason {
+        case 1: reasonText = "invalid hello"
+        case 2: reasonText = "invalid token"
+        case 3: reasonText = "device revoked"
+        default: reasonText = "unknown \(reason)"
+        }
+        debugLog("InputServer rejecting connection: \(reasonText)")
         conn.send(content: RemoteInputCodec.rejectResponse(reason: reason), completion: .contentProcessed { _ in
             conn.cancel()
         })

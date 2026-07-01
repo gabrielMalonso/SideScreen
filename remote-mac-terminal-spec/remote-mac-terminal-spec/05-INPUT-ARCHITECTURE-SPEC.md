@@ -68,6 +68,11 @@ Limitações:
 - pode perder alguns eventos com Meta/Super;
 - depende da Activity estar focada.
 
+Estado implementado:
+
+- `RemoteKeyboardCapture` concentra a captura de `KeyEvent`, filtragem de duplicatas do Accessibility Assist, diagnóstico e envio para `InputClient`;
+- `MainActivity` só delega `dispatchKeyEvent`.
+
 ### 2. PointerCaptureBackend
 
 Fase: MVP/Alpha.
@@ -93,6 +98,11 @@ Responsável por:
 - fallback se pointer capture falhar.
 
 Este backend é essencial para o app parecer terminal, não tablet touch.
+
+Estado implementado:
+
+- `RemoteMouseCapture` concentra movimento relativo, botões, wheel, pointer tuning, coalescing via `InputClient` e release-all em cancelamento;
+- `MainActivity` só delega eventos de pointer capture/generic motion.
 
 ### 3. TouchBackend
 
@@ -129,6 +139,19 @@ Implementação atual:
 - marca eventos com `FLAG_FROM_ACCESSIBILITY`;
 - consome eventos encaminhados para evitar efeito local;
 - a Activity ignora duplicatas recentes enviadas pelo serviço.
+
+## Diagnóstico de captura sem root
+
+O Android deve mostrar diagnóstico honesto sobre input:
+
+- `captured`: eventos entregues pelo Android que foram convertidos e enviados ao Mac;
+- `unsupported`: eventos entregues pelo Android, mas sem mapeamento HID/remote conhecido;
+- `assist`: eventos enviados pelo Accessibility Assist;
+- `dup`: eventos da Activity ignorados porque o Accessibility Assist já os encaminhou;
+- `last`: último evento observado com fonte, ação, keyCode, scanCode e repeat.
+- `TextCommit`: registrar apenas tamanho/metadata, nunca o texto digitado.
+
+Isso não mede teclas que o Android nunca entrega ao app, como Home/Power/Recents em muitos dispositivos. Essas continuam documentadas como limitação sem root.
 
 ### 5. RootEvdevBackend
 
@@ -184,6 +207,15 @@ KeyboardKey
 - Se o backend detectar cancelamento, enviar up/fail-safe.
 - Manter mapa de pressed keys no Android e no Mac.
 
+### Modifier mapping
+
+Estado implementado:
+
+- Android Settings permite configurar `Meta/Super` como Command, Option, Control ou Off.
+- O padrão é Command para preservar comportamento de Mac remoto.
+- A escolha altera o `usageId` HID antes do envio, sem mudar o protocolo.
+- `Off` transforma Meta/Super em unsupported quando o Android entrega a tecla ao app.
+
 ## TextCommit
 
 Nem todo texto é melhor representado como tecla física. IME, dead keys e composição podem exigir evento de texto.
@@ -203,6 +235,14 @@ Uso:
 
 Regra: atalhos precisam de `KeyboardKey`, não `TextCommit`.
 
+Estado implementado:
+
+- `RemoteSurfaceView` expõe `InputConnection.commitText()` para IME/dead keys;
+- `ACTION_MULTIPLE` também é convertido como fallback legado;
+- Android serializa texto UTF-8 com comprimento validado;
+- Mac valida o payload e injeta texto Unicode;
+- diagnóstico registra somente tamanho do texto, não conteúdo.
+
 ## PointerRelative
 
 Campos:
@@ -219,6 +259,13 @@ Regras:
 - usar movimento relativo quando origem for mouse;
 - coalescer apenas movimentos consecutivos sem botões/wheel entre eles;
 - não transformar mouse em touch absoluto.
+
+Estado implementado:
+
+- Android Settings expõe sensibilidade de pointer de `0.25x` a `3.0x`;
+- a sensibilidade é aplicada antes de serializar `PointerRelative`;
+- Android coalesce `PointerRelative` por uma janela curta e força flush antes de teclado, botões, wheel, ping e `AllInputsUp`;
+- valores persistidos fora da faixa são normalizados.
 
 ## PointerButton
 
@@ -250,7 +297,14 @@ PointerWheel
 Regras:
 
 - preservar horizontal scroll quando disponível;
-- considerar direção natural configurável.
+- direção natural deve ser configurável.
+
+Estado implementado:
+
+- Android Settings expõe sensibilidade de scroll de `0.25x` a `3.0x`;
+- Android Settings expõe toggle de natural scroll;
+- a configuração é aplicada antes de serializar `PointerWheel`;
+- horizontal e vertical scroll usam a mesma direção e sensibilidade.
 
 ## PointerAbsolute
 

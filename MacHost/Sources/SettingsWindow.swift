@@ -68,6 +68,50 @@ struct VisualEffectBlur: NSViewRepresentable {
     }
 }
 
+// MARK: - Streaming Profiles
+
+enum StreamingProfile: String, Codable, CaseIterable {
+    case custom
+    case productivity
+    case lowLatency
+    case lowBandwidth
+
+    var title: String {
+        switch self {
+        case .custom: return "Manual"
+        case .productivity: return "Productivity"
+        case .lowLatency: return "Low latency"
+        case .lowBandwidth: return "Low bandwidth"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .custom:
+            return "Use the controls below without a preset."
+        case .productivity:
+            return "Readable text and stable frame pacing for terminal, browser, and editor work."
+        case .lowLatency:
+            return "Prioritizes fast pointer and keyboard feel; video quality gives way first."
+        case .lowBandwidth:
+            return "Keeps the stream usable on relayed Tailnet or weak hotel/cafe Wi-Fi."
+        }
+    }
+
+    var settings: (resolution: String, refreshRate: Int, bitrate: Int, quality: String, hiDPI: Bool, gamingBoost: Bool)? {
+        switch self {
+        case .custom:
+            return nil
+        case .productivity:
+            return ("1920x1200", 60, 500, "medium", false, false)
+        case .lowLatency:
+            return ("1920x1080", 120, 300, "ultralow", false, false)
+        case .lowBandwidth:
+            return ("1280x800", 30, 60, "low", false, false)
+        }
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -563,6 +607,33 @@ struct SettingsView: View {
                                             pairedDeviceStore: (NSApp.delegate as? AppDelegate)?.pairedDeviceStore ?? PairedDeviceStore())
                         }
 
+                        // Remote profile presets
+                        FrostedGroupBox(title: "Remote Profile", icon: "slider.horizontal.3") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Picker("", selection: Binding(
+                                    get: { settings.streamingProfile },
+                                    set: { settings.applyStreamingProfile($0) }
+                                )) {
+                                    ForEach(StreamingProfile.allCases, id: \.self) { profile in
+                                        Text(profile.title).tag(profile)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+
+                                Text(settings.streamingProfile.summary)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                HStack(spacing: 8) {
+                                    ProfileMetric(label: "Resolution", value: settings.resolution)
+                                    ProfileMetric(label: "FPS", value: "\(settings.effectiveRefreshRate)")
+                                    ProfileMetric(label: "Bitrate", value: "\(settings.effectiveBitrate) Mbps")
+                                }
+                            }
+                        }
+
                         // Gaming Boost
                         FrostedGroupBox(title: "Gaming Boost", icon: settings.gamingBoost ? "bolt.fill" : "bolt") {
                             VStack(alignment: .leading, spacing: 16) {
@@ -585,7 +656,7 @@ struct SettingsView: View {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .foregroundColor(.green)
                                                 .font(.system(size: 10))
-                                            Text("High bitrate (1000 Mbps)")
+                                            Text("Low encoder delay (50 Mbps cap)")
                                                 .font(.system(size: 11))
                                         }
                                         HStack(spacing: 4) {
@@ -966,6 +1037,28 @@ struct SettingsView: View {
 
 // MARK: - Supporting Views
 
+struct ProfileMetric: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .background(Color.primary.opacity(0.045))
+        .cornerRadius(6)
+    }
+}
+
 struct StatusRow: View {
     let title: String
     let status: String
@@ -1124,24 +1217,48 @@ struct RotationButton: View {
 class DisplaySettings: ObservableObject {
     private let defaults = UserDefaults.standard
     private let keyPrefix = "SideScreen_"
+    private var applyingProfile = false
 
     @Published var resolution: String {
-        didSet { save("resolution", resolution) }
+        didSet {
+            save("resolution", resolution)
+            markCustomIfNeeded()
+        }
     }
     @Published var refreshRate: Int {
-        didSet { save("refreshRate", refreshRate) }
+        didSet {
+            save("refreshRate", refreshRate)
+            markCustomIfNeeded()
+        }
     }
     @Published var hiDPI: Bool {
-        didSet { save("hiDPI", hiDPI) }
+        didSet {
+            save("hiDPI", hiDPI)
+            markCustomIfNeeded()
+        }
     }
     @Published var bitrate: Int {
-        didSet { save("bitrate", bitrate) }
+        didSet {
+            save("bitrate", bitrate)
+            markCustomIfNeeded()
+        }
     }
     @Published var quality: String {
-        didSet { save("quality", quality) }
+        didSet {
+            save("quality", quality)
+            markCustomIfNeeded()
+        }
     }
     @Published var gamingBoost: Bool {
-        didSet { save("gamingBoost", gamingBoost) }
+        didSet {
+            save("gamingBoost", gamingBoost)
+            markCustomIfNeeded()
+        }
+    }
+    @Published var streamingProfile: StreamingProfile {
+        didSet {
+            save("streamingProfile", streamingProfile.rawValue)
+        }
     }
     @Published var port: UInt16 {
         didSet { save("port", Int(port)) }
@@ -1218,6 +1335,8 @@ class DisplaySettings: ObservableObject {
         self.bitrate = defaults.object(forKey: keyPrefix + "bitrate") as? Int ?? 1000  // Default: 1000 Mbps
         self.quality = defaults.string(forKey: keyPrefix + "quality") ?? "ultralow"  // Default: fastest encoding
         self.gamingBoost = defaults.bool(forKey: keyPrefix + "gamingBoost")
+        let streamingProfileRaw = defaults.string(forKey: keyPrefix + "streamingProfile") ?? StreamingProfile.custom.rawValue
+        self.streamingProfile = StreamingProfile(rawValue: streamingProfileRaw) ?? .custom
         // Default port 54321 (was 8888 in <=0.7.1; 8888 collides with jupyter/splunk/HP printers).
         // Existing users keep their saved value.
         self.port = UInt16(defaults.object(forKey: keyPrefix + "port") as? Int ?? 54321)
@@ -1278,7 +1397,7 @@ class DisplaySettings: ObservableObject {
     }
 
     var effectiveBitrate: Int {
-        return gamingBoost ? 1000 : bitrate
+        return gamingBoost ? 50 : bitrate
     }
 
     var effectiveQuality: String {
@@ -1289,12 +1408,34 @@ class DisplaySettings: ObservableObject {
         return gamingBoost ? 120 : refreshRate
     }
 
+    func applyStreamingProfile(_ profile: StreamingProfile) {
+        guard let preset = profile.settings else {
+            streamingProfile = .custom
+            return
+        }
+        applyingProfile = true
+        resolution = preset.resolution
+        refreshRate = preset.refreshRate
+        bitrate = preset.bitrate
+        quality = preset.quality
+        hiDPI = preset.hiDPI
+        gamingBoost = preset.gamingBoost
+        streamingProfile = profile
+        applyingProfile = false
+    }
+
+    private func markCustomIfNeeded() {
+        if !applyingProfile && streamingProfile != .custom {
+            streamingProfile = .custom
+        }
+    }
+
     func toggleServer() {
         onToggleServer?()
     }
 
     func resetToDefaults() {
-        let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality",
+        let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality", "streamingProfile",
                     "gamingBoost", "port", "rotation", "showAllResolutions",
                     "customWidth", "customHeight", "touchEnabled", "endpointMode", "tailnetHost",
                     "inputBackendMode"]
@@ -1308,6 +1449,7 @@ class DisplaySettings: ObservableObject {
         bitrate = 1000  // Default: 1000 Mbps
         quality = "ultralow"  // Default: fastest encoding
         gamingBoost = false
+        streamingProfile = .custom
         port = 54321
         rotation = 0
         showAllResolutions = false
@@ -1427,6 +1569,7 @@ struct WirelessSection: View {
     @State private var qrImage: NSImage?
     @State private var pairedDevices: [PairedDevice] = []
     @State private var showResetConfirm = false
+    @State private var tailnetDiagnostic: TailnetDiagnostic?
     /// Used to force the relative-time labels to recompute every tick even when
     /// the underlying lastConnected timestamp hasn't changed (e.g. while a
     /// device is disconnected and we still want "5 minutes ago" to count up).
@@ -1481,6 +1624,26 @@ struct WirelessSection: View {
                     Text(endpointStatusText())
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.secondary)
+                    if settings.endpointMode == .tailnet, let diagnostic = tailnetDiagnostic {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: tailnetDiagnosticIcon(diagnostic.severity))
+                                .foregroundColor(tailnetDiagnosticColor(diagnostic.severity))
+                                .font(.system(size: 10, weight: .semibold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(diagnostic.summary)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(tailnetDiagnosticColor(diagnostic.severity))
+                                Text(diagnostic.detail)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(8)
+                        .background(tailnetDiagnosticColor(diagnostic.severity).opacity(0.10))
+                        .cornerRadius(6)
+                    }
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -1553,6 +1716,7 @@ struct WirelessSection: View {
         }
         .onAppear {
             refreshQR()
+            refreshTailnetDiagnostic()
             refreshPaired()
             nowTick = Date()
         }
@@ -1560,8 +1724,14 @@ struct WirelessSection: View {
         // two-parameter form requires macOS 14 and would block Ventura.
         // Deprecation is a compile-time warning only on Xcode 15+ SDKs.
         .onChange(of: settings.port) { _ in refreshQR() }
-        .onChange(of: settings.endpointMode) { _ in refreshQR() }
-        .onChange(of: settings.tailnetHost) { _ in refreshQR() }
+        .onChange(of: settings.endpointMode) { _ in
+            refreshQR()
+            refreshTailnetDiagnostic()
+        }
+        .onChange(of: settings.tailnetHost) { _ in
+            refreshQR()
+            refreshTailnetDiagnostic()
+        }
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { now in
             nowTick = now
             refreshPaired()
@@ -1587,6 +1757,28 @@ struct WirelessSection: View {
         qrImage = QRRenderer.render(url: url, size: 180)
     }
 
+    private func refreshTailnetDiagnostic() {
+        guard settings.endpointMode == .tailnet else {
+            tailnetDiagnostic = nil
+            return
+        }
+
+        let host = settings.tailnetHost
+        tailnetDiagnostic = TailnetDiagnostic(
+            severity: .warning,
+            summary: "Checking Tailnet route",
+            detail: "Validating MagicDNS or Tailnet IP before the QR is scanned."
+        )
+
+        Task {
+            let diagnostic = await Task.detached(priority: .utility) {
+                TailnetDiagnostics.inspect(host: host)
+            }.value
+            guard settings.endpointMode == .tailnet, settings.tailnetHost == host else { return }
+            tailnetDiagnostic = diagnostic
+        }
+    }
+
     private func endpointStatusText() -> String {
         switch settings.endpointMode {
         case .lan:
@@ -1594,6 +1786,22 @@ struct WirelessSection: View {
         case .tailnet, .manual:
             let host = settings.tailnetHost.trimmingCharacters(in: .whitespacesAndNewlines)
             return host.isEmpty ? "Tailnet host required" : "Tailnet: \(host):\(settings.port)"
+        }
+    }
+
+    private func tailnetDiagnosticIcon(_ severity: TailnetDiagnostic.Severity) -> String {
+        switch severity {
+        case .ok: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    private func tailnetDiagnosticColor(_ severity: TailnetDiagnostic.Severity) -> Color {
+        switch severity {
+        case .ok: return .green
+        case .warning: return .orange
+        case .error: return .red
         }
     }
 

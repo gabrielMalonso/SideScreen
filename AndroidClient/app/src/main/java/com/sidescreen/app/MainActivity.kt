@@ -16,7 +16,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -57,7 +56,8 @@ class MainActivity : AppCompatActivity() {
     private var activeInputDeviceId: String = "Android"
     private var activeInputEndpointMode: EndpointMode = EndpointMode.LAN
     private var activeInputBackendName: String = "waiting"
-    private var lastMouseButtonMask = 0
+    private lateinit var remoteKeyboardCapture: RemoteKeyboardCapture
+    private lateinit var remoteMouseCapture: RemoteMouseCapture
     private var inputEventsThisSecond = 0
     private var inputRateRunnable: Runnable? = null
     private var currentSurfaceHolder: SurfaceHolder? = null
@@ -85,6 +85,18 @@ class MainActivity : AppCompatActivity() {
 
         DiagLog.init(applicationContext)
         prefs = PreferencesManager(this)
+        remoteKeyboardCapture =
+            RemoteKeyboardCapture(
+                inputClient = { inputClient },
+                recordInputEvent = { recordInputEvent() },
+                updateDiagnostics = { updateInputDiagnosticsUi() },
+            )
+        remoteMouseCapture =
+            RemoteMouseCapture(
+                inputClient = { inputClient },
+                pointerTuning = { prefs.pointerTuning },
+                recordInputEvent = { recordInputEvent() },
+            )
 
         // Allow rotation based on device sensor when not connected
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
@@ -181,6 +193,7 @@ class MainActivity : AppCompatActivity() {
                         endpointModeText = binding.wirelessEndpointModeText,
                         routeText = binding.wirelessRouteText,
                         inputRouteText = binding.wirelessInputRouteText,
+                        recentErrorsText = binding.wirelessRecentErrorsText,
                         limitationText = binding.wirelessLimitationText,
                     ),
                 storage = pairedHostStorage,
@@ -315,9 +328,18 @@ class MainActivity : AppCompatActivity() {
     private fun setupSurface() {
         binding.surfaceView.isFocusable = true
         binding.surfaceView.isFocusableInTouchMode = true
+        binding.surfaceView.onTextCommit = { text ->
+            val sent = inputClient?.sendTextCommit(text) == true
+            if (sent) {
+                RemoteInputDiagnostics.recordTextCommit(text)
+                updateInputDiagnosticsUi()
+                recordInputEvent()
+            }
+            sent
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             binding.surfaceView.setOnCapturedPointerListener { _, event ->
-                handleRemoteMouseEvent(event, fromPointerCapture = true)
+                remoteMouseCapture.handle(event, fromPointerCapture = true)
             }
         }
 
@@ -530,10 +552,19 @@ class MainActivity : AppCompatActivity() {
         val showStatsSwitch = view.findViewById<SwitchMaterial>(R.id.showStatsSwitch)
         val opacitySlider = view.findViewById<Slider>(R.id.opacitySlider)
         val opacityValue = view.findViewById<TextView>(R.id.opacityValue)
+        val mouseSensitivitySlider = view.findViewById<Slider>(R.id.mouseSensitivitySlider)
+        val mouseSensitivityValue = view.findViewById<TextView>(R.id.mouseSensitivityValue)
+        val scrollSensitivitySlider = view.findViewById<Slider>(R.id.scrollSensitivitySlider)
+        val scrollSensitivityValue = view.findViewById<TextView>(R.id.scrollSensitivityValue)
+        val naturalScrollSwitch = view.findViewById<SwitchMaterial>(R.id.naturalScrollSwitch)
         val resetButton = view.findViewById<View>(R.id.resetPositionButton)
         val resetSettingsBtn = view.findViewById<View>(R.id.resetSettingsButton)
         val disconnectButton = view.findViewById<View>(R.id.disconnectSettingsButton)
         val closeButton = view.findViewById<View>(R.id.closeButton)
+        val metaMapCommand = view.findViewById<MaterialButton>(R.id.metaMapCommand)
+        val metaMapOption = view.findViewById<MaterialButton>(R.id.metaMapOption)
+        val metaMapControl = view.findViewById<MaterialButton>(R.id.metaMapControl)
+        val metaMapOff = view.findViewById<MaterialButton>(R.id.metaMapOff)
 
         // Only show Disconnect when actually streaming. Otherwise the button is
         // a no-op and confuses users into clicking it twice.
@@ -553,6 +584,11 @@ class MainActivity : AppCompatActivity() {
         showStatsSwitch.isChecked = prefs.showStatsOverlay
         opacitySlider.value = prefs.overlayOpacity
         opacityValue.text = "${(prefs.overlayOpacity * 100).toInt()}%"
+        mouseSensitivitySlider.value = prefs.mouseSensitivity
+        mouseSensitivityValue.text = "Pointer ${"%.2f".format(prefs.mouseSensitivity)}x"
+        scrollSensitivitySlider.value = prefs.scrollSensitivity
+        scrollSensitivityValue.text = "Scroll ${"%.2f".format(prefs.scrollSensitivity)}x"
+        naturalScrollSwitch.isChecked = prefs.naturalScroll
 
         // Highlight current position selection (8 positions)
         // 0=BottomRight, 1=BottomLeft, 2=TopRight, 3=TopLeft
@@ -581,6 +617,25 @@ class MainActivity : AppCompatActivity() {
         }
         updatePositionSelection(prefs.settingsButtonCorner)
 
+        fun updateMetaMappingSelection(selected: MetaKeyMapping) {
+            val buttons =
+                listOf(
+                    MetaKeyMapping.COMMAND to metaMapCommand,
+                    MetaKeyMapping.OPTION to metaMapOption,
+                    MetaKeyMapping.CONTROL to metaMapControl,
+                    MetaKeyMapping.OFF to metaMapOff,
+                )
+            buttons.forEach { (mapping, button) ->
+                button.backgroundTintList =
+                    if (mapping == selected) {
+                        android.content.res.ColorStateList.valueOf(0x334CAF50)
+                    } else {
+                        null
+                    }
+            }
+        }
+        updateMetaMappingSelection(prefs.metaKeyMapping)
+
         // Setup listeners
         showStatsSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.showStatsOverlay = isChecked
@@ -592,6 +647,20 @@ class MainActivity : AppCompatActivity() {
             updateOverlayOpacity(value)
             updateSettingsButtonOpacity(value)
             opacityValue.text = "${(value * 100).toInt()}%"
+        }
+
+        mouseSensitivitySlider.addOnChangeListener { _, value, _ ->
+            prefs.mouseSensitivity = value
+            mouseSensitivityValue.text = "Pointer ${"%.2f".format(prefs.mouseSensitivity)}x"
+        }
+
+        scrollSensitivitySlider.addOnChangeListener { _, value, _ ->
+            prefs.scrollSensitivity = value
+            scrollSensitivityValue.text = "Scroll ${"%.2f".format(prefs.scrollSensitivity)}x"
+        }
+
+        naturalScrollSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.naturalScroll = isChecked
         }
 
         resetButton.setOnClickListener {
@@ -660,6 +729,18 @@ class MainActivity : AppCompatActivity() {
             prefs.settingsButtonCorner = 0
             updatePositionSelection(0)
             updateSettingsButtonPosition(0)
+        }
+
+        listOf(
+            MetaKeyMapping.COMMAND to metaMapCommand,
+            MetaKeyMapping.OPTION to metaMapOption,
+            MetaKeyMapping.CONTROL to metaMapControl,
+            MetaKeyMapping.OFF to metaMapOff,
+        ).forEach { (mapping, button) ->
+            button.setOnClickListener {
+                prefs.metaKeyMapping = mapping
+                updateMetaMappingSelection(mapping)
+            }
         }
 
         disconnectButton.setOnClickListener {
@@ -1204,6 +1285,8 @@ class MainActivity : AppCompatActivity() {
         val host = activeInputHost ?: return
         val token = activeInputToken ?: return
         disconnectInputChannel()
+        RemoteInputDiagnostics.reset()
+        updateInputDiagnosticsUi()
         inputClient =
             InputClient(
                 host = host,
@@ -1213,6 +1296,7 @@ class MainActivity : AppCompatActivity() {
                 sessionId = activeInputSessionId,
                 context = applicationContext,
                 endpointMode = activeInputEndpointMode,
+                metaKeyMapping = prefs.metaKeyMapping,
             ).also { client ->
                 client.onBackendAccepted = { backendName ->
                     runOnUiThread {
@@ -1223,9 +1307,9 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                 }
-                client.onInputLatencyMeasured = { rttMs ->
+                client.onInputLatencyMeasured = { stats ->
                     runOnUiThread {
-                        binding.inputLatencyText.text = String.format("input %.1f ms", rttMs)
+                        binding.inputLatencyText.text = stats.summary()
                     }
                 }
                 RemoteInputBridge.attach(client)
@@ -1240,7 +1324,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disconnectInputChannel() {
-        lastMouseButtonMask = 0
+        remoteMouseCapture.reset()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
         }
@@ -1253,13 +1337,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (RemoteInputBridge.wasRecentlyForwardedByAccessibility(event)) {
-            recordInputEvent()
-            return true
-        }
-        val handled = inputClient?.sendKey(event) == true
-        if (handled) recordInputEvent()
-        if (handled) return true
+        if (remoteKeyboardCapture.dispatch(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
@@ -1267,26 +1345,26 @@ class MainActivity : AppCompatActivity() {
         super.onPointerCaptureChanged(hasCapture)
         updatePointerCaptureUi(hasCapture)
         if (!hasCapture) {
-            inputClient?.sendAllInputsUp()
+            inputClient?.sendAllInputsUp(RemoteInputProtocol.ALL_INPUTS_UP_POINTER_CAPTURE_LOST)
             recordInputEvent()
-            lastMouseButtonMask = 0
+            remoteMouseCapture.reset()
         }
     }
 
     override fun onPause() {
-        inputClient?.sendAllInputsUp()
+        inputClient?.sendAllInputsUp(RemoteInputProtocol.ALL_INPUTS_UP_ANDROID_LIFECYCLE_PAUSE)
         recordInputEvent()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
         }
-        lastMouseButtonMask = 0
+        remoteMouseCapture.reset()
         super.onPause()
     }
 
     private fun releasePointerCaptureForLocalUse() {
-        inputClient?.sendAllInputsUp()
+        inputClient?.sendAllInputsUp(RemoteInputProtocol.ALL_INPUTS_UP_EXPLICIT_USER_ACTION)
         recordInputEvent()
-        lastMouseButtonMask = 0
+        remoteMouseCapture.reset()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
         } else {
@@ -1309,77 +1387,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (handleRemoteMouseEvent(event, fromPointerCapture = false)) return true
+        if (remoteMouseCapture.handle(event, fromPointerCapture = false)) return true
         return super.onGenericMotionEvent(event)
-    }
-
-    private fun handleRemoteMouseEvent(
-        event: MotionEvent,
-        fromPointerCapture: Boolean,
-    ): Boolean {
-        val source = event.source
-        val isMouse =
-            (source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE ||
-                (source and InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE
-        if (!isMouse || inputClient == null) return false
-
-        when (event.actionMasked) {
-            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_MOVE -> {
-                val dx =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        event.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
-                    } else {
-                        0f
-                    }
-                val dy =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
-                    } else {
-                        0f
-                    }
-                inputClient?.sendPointerRelative(dx, dy, fromPointerCapture)
-                recordInputEvent()
-                sendMouseButtonDiff(event.buttonState)
-                return true
-            }
-            MotionEvent.ACTION_SCROLL -> {
-                inputClient?.sendPointerWheel(
-                    deltaX = event.getAxisValue(MotionEvent.AXIS_HSCROLL) * 48f,
-                    deltaY = event.getAxisValue(MotionEvent.AXIS_VSCROLL) * 48f,
-                )
-                recordInputEvent()
-                return true
-            }
-            MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
-                sendMouseButtonDiff(event.buttonState)
-                return true
-            }
-            MotionEvent.ACTION_CANCEL -> {
-                inputClient?.sendAllInputsUp()
-                recordInputEvent()
-                lastMouseButtonMask = 0
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun sendMouseButtonDiff(newMask: Int) {
-        val changed = lastMouseButtonMask xor newMask
-        if (changed == 0) return
-        listOf(
-            MotionEvent.BUTTON_PRIMARY to 0,
-            MotionEvent.BUTTON_SECONDARY to 1,
-            MotionEvent.BUTTON_TERTIARY to 2,
-            MotionEvent.BUTTON_BACK to 3,
-            MotionEvent.BUTTON_FORWARD to 4,
-        ).forEach { (androidButton, remoteButton) ->
-            if ((changed and androidButton) != 0) {
-                inputClient?.sendPointerButton(remoteButton, (newMask and androidButton) != 0)
-                recordInputEvent()
-            }
-        }
-        lastMouseButtonMask = newMask
     }
 
     private fun recordInputEvent() {
@@ -1393,6 +1402,7 @@ class MainActivity : AppCompatActivity() {
             object : Runnable {
                 override fun run() {
                     binding.inputRateText.text = "$inputEventsThisSecond ev/s"
+                    updateInputDiagnosticsUi()
                     inputEventsThisSecond = 0
                     checklistHandler.postDelayed(this, 1000)
                 }
@@ -1405,6 +1415,10 @@ class MainActivity : AppCompatActivity() {
         inputRateRunnable = null
         inputEventsThisSecond = 0
         binding.inputRateText.text = "0 ev/s"
+    }
+
+    private fun updateInputDiagnosticsUi() {
+        binding.wirelessInputKeysText.text = RemoteInputDiagnostics.snapshot().keySummary()
     }
 
     /**

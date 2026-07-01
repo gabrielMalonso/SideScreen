@@ -52,6 +52,7 @@ class WirelessTabController(
         val endpointModeText: TextView,
         val routeText: TextView,
         val inputRouteText: TextView,
+        val recentErrorsText: TextView,
         val limitationText: TextView,
     )
 
@@ -264,13 +265,15 @@ class WirelessTabController(
             views.endpointModeText.text = "Endpoint: not paired"
             views.routeText.text = "Route: scan a QR from the Mac"
             views.inputRouteText.text = inputState
+            views.recentErrorsText.text = DiagLog.recentErrorSummary()
             views.limitationText.text =
                 "No-root mode captures Activity keyboard events and pointer capture. Android system keys may stay local."
             return
         }
         views.endpointModeText.text = "Endpoint: ${entry.endpointMode.displayName} · ${entry.host}:${entry.port}"
-        views.routeText.text = "Route: ${entry.endpointMode.routeDescription}"
+        views.routeText.text = "Route: ${NetworkRoute.describeCurrentRoute(activity, entry.endpointMode)}"
         views.inputRouteText.text = "$inputState · input port ${entry.port + 1}"
+        views.recentErrorsText.text = DiagLog.recentErrorSummary()
         views.limitationText.text =
             "No-root input handles normal keys, modifiers delivered by Android, mouse move, buttons, drag and wheel. Home, Power, Recents and some Meta shortcuts may stay on Android."
     }

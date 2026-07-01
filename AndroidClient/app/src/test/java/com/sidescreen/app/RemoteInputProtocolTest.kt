@@ -2,6 +2,7 @@ package com.sidescreen.app
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,6 +36,17 @@ class RemoteInputProtocolTest {
     }
 
     @Test
+    fun mapsMetaKeyUsingSelectedModifierMapping() {
+        assertEquals(0xE3, AndroidKeyToHid.usageIdForKeyCode(117))
+        assertEquals(0xE7, AndroidKeyToHid.usageIdForKeyCode(118))
+        assertEquals(0xE2, AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.OPTION))
+        assertEquals(0xE6, AndroidKeyToHid.usageIdForKeyCode(118, MetaKeyMapping.OPTION))
+        assertEquals(0xE0, AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.CONTROL))
+        assertEquals(0xE4, AndroidKeyToHid.usageIdForKeyCode(118, MetaKeyMapping.CONTROL))
+        assertNull(AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.OFF))
+    }
+
+    @Test
     fun envelopeCarriesLittleEndianSequenceAndLength() {
         val bytes = RemoteInputProtocol.envelope(0x20, 42, byteArrayOf(1, 2, 3))
         val header = RemoteInputProtocol.parseEnvelopeHeader(bytes.copyOfRange(0, RemoteInputProtocol.ENVELOPE_HEADER_LENGTH))
@@ -53,8 +65,25 @@ class RemoteInputProtocolTest {
     }
 
     @Test
+    fun textCommitPayloadPrefixesUtf8Length() {
+        val bytes = RemoteInputProtocol.textCommitPayload("ação")
+
+        assertEquals(6, bytes[0].toInt())
+        assertEquals(0, bytes[1].toInt())
+        assertEquals("ação", bytes.copyOfRange(2, bytes.size).toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun allInputsUpPayloadCarriesReason() {
+        val bytes = RemoteInputProtocol.allInputsUpPayload(RemoteInputProtocol.ALL_INPUTS_UP_POINTER_CAPTURE_LOST)
+
+        assertArrayEquals(byteArrayOf(2), bytes)
+    }
+
+    @Test
     fun exposesAccessibilityAssistCapabilityAndKeyboardFlag() {
         assertEquals(1 shl 4, RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST)
+        assertEquals(1 shl 6, RemoteInputProtocol.CAP_TEXT_COMMIT)
         assertEquals(2, RemoteInputProtocol.FLAG_FROM_ACCESSIBILITY)
     }
 

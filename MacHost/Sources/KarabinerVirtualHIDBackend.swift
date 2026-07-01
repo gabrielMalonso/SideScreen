@@ -481,6 +481,7 @@ final class SideScreenVirtualHIDHelperClient: VirtualHIDReportClient {
 
 final class KarabinerVirtualHIDBackend: InputBackend {
     private let client: VirtualHIDReportClient
+    private let textInjector = UnicodeTextInjector()
     private var pressedKeys = Set<UInt16>()
     private var pressedButtons = Set<UInt8>()
 
@@ -510,6 +511,8 @@ final class KarabinerVirtualHIDBackend: InputBackend {
                     pressedKeys.remove(key.usageId)
                 }
                 try postKeyboardState()
+            case .textCommit(let text):
+                textInjector.post(text.text)
             case .pointerRelative(let pointer):
                 try postPointerRelative(pointer)
             case .pointerButton(let button):
@@ -521,8 +524,8 @@ final class KarabinerVirtualHIDBackend: InputBackend {
                 try postPointingState()
             case .pointerWheel(let wheel):
                 try postPointerWheel(wheel)
-            case .allInputsUp:
-                releaseAll(reason: "client all-inputs-up")
+            case .allInputsUp(let event):
+                releaseAll(reason: "client all-inputs-up: \(event.diagnosticReason)")
             case .ping, .pong:
                 break
             }

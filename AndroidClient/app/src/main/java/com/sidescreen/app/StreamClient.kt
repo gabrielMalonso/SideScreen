@@ -1,8 +1,6 @@
 package com.sidescreen.app
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Process
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -180,24 +178,8 @@ class StreamClient(
             try {
                 val sock = Socket()
                 sock.tcpNoDelay = true
-                if (endpointMode.shouldBindWifi) {
-                    val wifiNetwork =
-                        context?.let { ctx ->
-                            val cm = ctx.getSystemService(ConnectivityManager::class.java)
-                            cm.allNetworks.firstOrNull { net ->
-                                val caps = cm.getNetworkCapabilities(net)
-                                caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
-                                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                            }
-                        }
-                    if (wifiNetwork != null) {
-                        Log.i(TAG, "connectWireless: LAN mode, binding socket to WiFi network $wifiNetwork")
-                        wifiNetwork.bindSocket(sock)
-                    } else {
-                        Log.w(TAG, "connectWireless: LAN mode, no WiFi network found, using default routing")
-                    }
-                } else {
-                    Log.i(TAG, "connectWireless: $endpointMode mode, using default route")
+                NetworkRoute.bindWifiIfNeeded(context, endpointMode, sock, "stream channel") { message ->
+                    Log.i(TAG, "connectWireless: $message")
                 }
                 sock.connect(java.net.InetSocketAddress(host, port), 5000)
                 sock

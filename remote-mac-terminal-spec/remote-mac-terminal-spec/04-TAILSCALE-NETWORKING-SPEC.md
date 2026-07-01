@@ -146,6 +146,16 @@ else if endpointMode == LAN and workaroundEnabled:
   pode bindar Wi-Fi opcionalmente
 ```
 
+Estado implementado:
+
+- `StreamClient` e `InputClient` compartilham `NetworkRoute`.
+- Tailnet/manual usam rota padrão do Android, permitindo VPN/Tailscale.
+- LAN tenta localizar uma rede Wi-Fi com `NetworkCallback` filtrado por `TRANSPORT_WIFI` e `NET_CAPABILITY_INTERNET`.
+- Se Wi-Fi não for encontrado, LAN cai para rota padrão e registra diagnóstico.
+- O código não depende mais de `ConnectivityManager.allNetworks`.
+- Android Wireless Diagnostics mostra transportes da rota ativa, validação de rede e aviso quando Tailnet está sem transporte VPN.
+- Mac Settings valida host Tailnet no card de QR: diferencia IP 100.64.0.0/10, MagicDNS `.ts.net`, host manual e URL/porta digitada por engano.
+
 ## Split tunneling no Android
 
 Tailscale Android suporta split tunneling por app. Se o usuário excluir o app cliente da Tailnet, MagicDNS/IP 100.x podem falhar.
@@ -246,4 +256,3 @@ Android:
 - LAN antiga continua funcionando.
 - USB antigo continua funcionando.
 - Falhas de Tailnet têm mensagens específicas, não genéricas.
-

@@ -68,11 +68,49 @@ final class RemoteInputProtocolTests: XCTestCase {
     func testAllInputsUpKeepsSequence() throws {
         let event = try RemoteInputEvent.parse(type: .allInputsUp, sequence: 42, timestamp: 99, payload: Data())
         XCTAssertEqual(event.sequence, 42)
-        guard case .allInputsUp(let sequence) = event else {
+        guard case .allInputsUp(let allUp) = event else {
             XCTFail("expected all-inputs-up")
             return
         }
-        XCTAssertEqual(sequence, 42)
+        XCTAssertEqual(allUp.sequence, 42)
+        XCTAssertEqual(allUp.reason, 0)
+    }
+
+    func testAllInputsUpParsesReason() throws {
+        let event = try RemoteInputEvent.parse(type: .allInputsUp, sequence: 42, timestamp: 99, payload: Data([2]))
+
+        guard case .allInputsUp(let allUp) = event else {
+            XCTFail("expected all-inputs-up")
+            return
+        }
+        XCTAssertEqual(allUp.sequence, 42)
+        XCTAssertEqual(allUp.reason, 2)
+        XCTAssertEqual(allUp.diagnosticReason, "pointer capture lost")
+    }
+
+    func testParsesTextCommit() throws {
+        let text = "ação"
+        let textBytes = Array(text.utf8)
+        var payload = Data()
+        payload.append(UInt8(textBytes.count & 0xff))
+        payload.append(UInt8((textBytes.count >> 8) & 0xff))
+        payload.append(contentsOf: textBytes)
+
+        let event = try RemoteInputEvent.parse(type: .textCommit, sequence: 41, timestamp: 99, payload: payload)
+
+        XCTAssertEqual(event.sequence, 41)
+        guard case .textCommit(let commit) = event else {
+            XCTFail("expected text commit")
+            return
+        }
+        XCTAssertEqual(commit.text, text)
+        XCTAssertEqual(commit.androidTimestampNanos, 99)
+    }
+
+    func testRejectsInvalidTextCommitLength() {
+        let payload = Data([0x03, 0x00, 0x61])
+
+        XCTAssertThrowsError(try RemoteInputEvent.parse(type: .textCommit, sequence: 41, timestamp: 99, payload: payload))
     }
 
     func testParsesInputPing() throws {

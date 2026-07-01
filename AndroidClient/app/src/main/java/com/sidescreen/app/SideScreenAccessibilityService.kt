@@ -26,6 +26,7 @@ class SideScreenAccessibilityService : AccessibilityService() {
         if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
 
         val handled = RemoteInputBridge.sendAccessibilityKey(event)
+        RemoteInputDiagnostics.recordKey(RemoteInputDiagnosticsState.Source.ACCESSIBILITY, handled, event)
         if (handled) {
             DiagLog.log("AS", "forwarded key action=${event.action} code=${event.keyCode}")
         }

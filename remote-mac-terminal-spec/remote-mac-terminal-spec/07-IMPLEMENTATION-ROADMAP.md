@@ -159,6 +159,18 @@ Tornar o sistema utilizável diariamente e preparar root.
 - Tela “por que algumas teclas não funcionam sem root”.
 - Perfis: Productivity, Low-latency, Low-bandwidth.
 
+Estado implementado sem root:
+
+- Mac Settings tem seletor de perfil Manual/Productivity/Low latency/Low bandwidth.
+- Os perfis aplicam resolução, FPS, bitrate, qualidade e HiDPI de forma conjunta.
+- Ajustes manuais voltam o perfil para Manual.
+- Mudanças de resolução/FPS/HiDPI com servidor rodando reiniciam o pipeline com debounce.
+- Android Wireless Diagnostics mostra endpoint, rota, input, limitação sem root e últimos erros relevantes do log local.
+- Android Wireless Diagnostics mostra contadores de teclas capturadas, unsupported, assistidas por Accessibility e duplicatas filtradas.
+- Android Wireless Diagnostics mostra transporte ativo da rota, validação e alerta quando Tailnet está sem VPN/Tailscale ativa para o app.
+- Mac Settings mostra diagnóstico de host Tailnet no card de QR.
+- Android Settings permite configurar Meta/Super como Command, Option, Control ou Off.
+
 ### Critérios de aceite
 
 - Usável por horas sem stuck keys.
@@ -189,6 +201,17 @@ Consolidar arquitetura, instalação e modos avançados.
 - Modo root Pro.
 - Escape seguro para root/grab.
 - Configurações avançadas de teclado/mouse.
+
+Estado implementado sem root:
+
+- Configuração de Meta/Super para Command, Option, Control ou Off.
+- Sensibilidade de pointer configurável.
+- Sensibilidade de scroll configurável.
+- Natural scroll configurável.
+- `TextCommit` para IME/dead keys via `InputConnection`, sem logar texto digitado.
+- `AllInputsUp` com motivo específico.
+- Latência de input com último RTT, média e p95.
+- Captura de teclado/mouse sem root separada em classes dedicadas no Android.
 
 #### Transporte
 
@@ -279,4 +302,3 @@ Consolidar arquitetura, instalação e modos avançados.
 3. Mostrar eventos crus em tela de diagnóstico.
 4. Comparar com Activity backend.
 5. Não substituir backend ainda.
-

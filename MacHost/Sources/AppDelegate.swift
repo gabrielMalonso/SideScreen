@@ -62,6 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var permissionCheckTimer: Timer?
     private var statusRefreshTimer: Timer?
+    private var pendingPipelineRestart: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("✅ App launched")
@@ -193,17 +194,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func setupSettingsObservers() {
-        // Observer cho gaming boost changes
+        // Observer cho gaming boost changes. It changes effective bitrate,
+        // quality, and FPS, so rebuild the display/capture pipeline when live.
         settings.$gamingBoost
             .dropFirst() // Skip initial value
             .sink { [weak self] gamingBoost in
                 guard let self = self, self.settings.isRunning else { return }
                 print("🎮 Gaming Boost \(gamingBoost ? "ENABLED" : "DISABLED")")
-                self.screenCapture?.updateEncoderSettings(
-                    bitrateMbps: self.settings.effectiveBitrate,
-                    quality: self.settings.effectiveQuality,
-                    gamingBoost: gamingBoost
-                )
+                self.schedulePipelineRestart(reason: "Gaming Boost changed")
             }
             .store(in: &cancellables)
 
@@ -276,14 +274,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .sink { [weak self] resolution in
                 guard let self = self else { return }
-                Task { @MainActor in
-                    guard self.settings.isRunning else { return }
-                    debugLog("Resolution changed to \(resolution) — restarting server to rebuild virtual display")
-                    self.stopServer()
-                    await self.startServer()
-                }
+                guard self.settings.isRunning else { return }
+                self.schedulePipelineRestart(reason: "Resolution changed to \(resolution)")
             }
             .store(in: &cancellables)
+
+        Publishers.CombineLatest(settings.$refreshRate, settings.$hiDPI)
+            .dropFirst()
+            .sink { [weak self] refreshRate, hiDPI in
+                guard let self = self, self.settings.isRunning else { return }
+                self.schedulePipelineRestart(reason: "Display timing changed to \(refreshRate)Hz, HiDPI=\(hiDPI)")
+            }
+            .store(in: &cancellables)
+    }
+
+    private func schedulePipelineRestart(reason: String) {
+        pendingPipelineRestart?.cancel()
+        pendingPipelineRestart = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, !Task.isCancelled, self.settings.isRunning else { return }
+            debugLog("\(reason) — restarting server to rebuild display pipeline")
+            self.stopServer()
+            await self.startServer()
+        }
     }
 
     func setupMenuBar() {
@@ -521,7 +534,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try virtualDisplayManager?.createDisplay(
                 width: size.width,
                 height: size.height,
-                refreshRate: settings.refreshRate,
+                refreshRate: settings.effectiveRefreshRate,
                 hiDPI: settings.hiDPI,
                 name: "SideScreen"
             )
@@ -590,7 +603,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             inputServer = InputServer(
                 port: inputPort,
                 validateAuthToken: settings.connectionMode == .wireless ? { [weak self] token, deviceId, sessionId in
-                    self?.remoteSessionStore.validateInputToken(token, deviceId: deviceId, sessionId: sessionId) == true
+                    let accepted = self?.remoteSessionStore.validateInputToken(token, deviceId: deviceId, sessionId: sessionId) == true
+                    debugLog(
+                        "Input auth \(accepted ? "OK" : "rejected") — device=...\(deviceId.suffix(4)), " +
+                        "session=\(sessionId?.shortHex ?? "none"), token=\(token.shortHex)"
+                    )
+                    return accepted
                 } : nil,
                 backend: inputSelection.backend,
                 activeBackend: inputSelection.activeBackend,
@@ -1141,5 +1159,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
+    }
+}
+
+private extension Data {
+    var shortHex: String {
+        prefix(4).map { String(format: "%02x", $0) }.joined()
     }
 }

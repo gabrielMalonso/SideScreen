@@ -9,19 +9,28 @@ object RemoteInputProtocol {
     const val CAP_POINTER_CAPTURE = 1 shl 1
     const val CAP_GENERIC_MOTION = 1 shl 2
     const val CAP_ACCESSIBILITY_ASSIST = 1 shl 4
+    const val CAP_TEXT_COMMIT = 1 shl 6
     const val CAP_HID_USAGE_MAPPING = 1 shl 7
 
     const val FLAG_FROM_ACTIVITY = 1
     const val FLAG_FROM_ACCESSIBILITY = 1 shl 1
 
     const val EVENT_KEYBOARD_KEY = 0x01
+    const val EVENT_TEXT_COMMIT = 0x02
     const val EVENT_POINTER_RELATIVE = 0x10
     const val EVENT_POINTER_BUTTON = 0x11
     const val EVENT_POINTER_WHEEL = 0x12
     const val EVENT_ALL_INPUTS_UP = 0x20
     const val EVENT_INPUT_PING = 0x30
     const val EVENT_INPUT_PONG = 0x31
-    const val ENVELOPE_HEADER_LENGTH = 21
+    const val ENVELOPE_HEADER_LENGTH = 19
+
+    const val ALL_INPUTS_UP_EXPLICIT_USER_ACTION = 0
+    const val ALL_INPUTS_UP_ANDROID_LIFECYCLE_PAUSE = 1
+    const val ALL_INPUTS_UP_POINTER_CAPTURE_LOST = 2
+    const val ALL_INPUTS_UP_INPUT_BACKEND_SWITCH = 3
+    const val ALL_INPUTS_UP_NETWORK_DISCONNECT = 4
+    const val ALL_INPUTS_UP_PROTOCOL_ERROR = 5
 
     data class EnvelopeHeader(
         val eventType: Int,
@@ -97,6 +106,17 @@ object RemoteInputProtocol {
             .putInt(sourceFlag)
             .array()
 
+    fun textCommitPayload(text: String): ByteArray {
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        require(bytes.isNotEmpty()) { "text commit must not be empty" }
+        require(bytes.size <= UShort.MAX_VALUE.toInt() - 2) { "text commit payload too large" }
+        return ByteBuffer.allocate(2 + bytes.size)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putShort(bytes.size.toShort())
+            .put(bytes)
+            .array()
+    }
+
     fun pointerRelativePayload(
         dx: Float,
         dy: Float,
@@ -139,6 +159,9 @@ object RemoteInputProtocol {
             .putLong(value)
             .array()
 
+    fun allInputsUpPayload(reason: Int): ByteArray =
+        byteArrayOf(reason.coerceIn(0, 255).toByte())
+
     fun parseEnvelopeHeader(bytes: ByteArray): EnvelopeHeader {
         require(bytes.size == ENVELOPE_HEADER_LENGTH) { "input envelope header must be 21 bytes" }
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -177,9 +200,23 @@ object RemoteInputProtocol {
 }
 
 object AndroidKeyToHid {
-    fun usageId(event: KeyEvent): Int? = usageIdForKeyCode(event.keyCode)
+    fun usageId(
+        event: KeyEvent,
+        metaKeyMapping: MetaKeyMapping = MetaKeyMapping.COMMAND,
+    ): Int? =
+        usageIdForKeyCode(event.keyCode, metaKeyMapping)
 
-    fun usageIdForKeyCode(keyCode: Int): Int? =
+    fun usageIdForKeyCode(
+        keyCode: Int,
+        metaKeyMapping: MetaKeyMapping = MetaKeyMapping.COMMAND,
+    ): Int? =
+        if (keyCode == KeyEvent.KEYCODE_META_LEFT || keyCode == KeyEvent.KEYCODE_META_RIGHT) {
+            metaKeyMapping.usageIdForKeyCode(keyCode)
+        } else {
+            baseUsageIdForKeyCode(keyCode)
+        }
+
+    private fun baseUsageIdForKeyCode(keyCode: Int): Int? =
         when {
             keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> 0x04 + (keyCode - KeyEvent.KEYCODE_A)
             keyCode in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9 -> 0x1E + (keyCode - KeyEvent.KEYCODE_1)

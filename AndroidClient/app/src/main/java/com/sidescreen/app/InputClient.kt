@@ -1,8 +1,6 @@
 package com.sidescreen.app
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.util.Log
 import android.view.KeyEvent
 import java.io.BufferedInputStream
@@ -24,6 +22,7 @@ class InputClient(
     private val sessionId: ByteArray?,
     private val context: Context?,
     private val endpointMode: EndpointMode,
+    private val metaKeyMapping: MetaKeyMapping,
 ) {
     private val executor =
         Executors.newSingleThreadExecutor { runnable ->
@@ -51,13 +50,16 @@ class InputClient(
     private var socket: Socket? = null
     private var output: BufferedOutputStream? = null
     private var heartbeatTask: ScheduledFuture<*>? = null
+    private var pointerFlushTask: ScheduledFuture<*>? = null
+    private var pendingPointerRelative: PendingPointerRelative? = null
+    private val latencyTracker = InputLatencyTracker()
 
     @Volatile
     var isConnected: Boolean = false
         private set
 
     var onBackendAccepted: ((String) -> Unit)? = null
-    var onInputLatencyMeasured: ((Double) -> Unit)? = null
+    var onInputLatencyMeasured: ((InputLatencyStats) -> Unit)? = null
 
     fun connect() {
         if (closed.get()) return
@@ -70,6 +72,10 @@ class InputClient(
                 sock.tcpNoDelay = true
                 bindIfNeeded(sock)
                 sock.connect(InetSocketAddress(host, port), 5000)
+                DiagLog.log(
+                    "IC",
+                    "Input hello to $host:$port session=${sessionId?.shortHex() ?: "none"} token=${token.shortHex()}",
+                )
                 val out = BufferedOutputStream(sock.getOutputStream(), 8192)
                 out.write(
                     RemoteInputProtocol.hello(
@@ -100,12 +106,14 @@ class InputClient(
                     output = out
                     isConnected = true
                 }
+                latencyTracker.reset()
                 startReader(input)
                 startHeartbeat()
                 DiagLog.log("IC", "Input channel connected to $host:$port mode=$endpointMode backend=$backendName")
                 onBackendAccepted?.invoke(backendName)
             } catch (e: Exception) {
                 Log.e(TAG, "Input channel connect failed", e)
+                DiagLog.log("IC", "Input channel connect failed: ${e.javaClass.simpleName}: ${e.message}")
                 closeSocketOnly()
             }
         }
@@ -114,7 +122,7 @@ class InputClient(
     fun disconnect() {
         if (closed.get()) return
         executor.execute {
-            sendAllInputsUpInternal()
+            sendAllInputsUpInternal(RemoteInputProtocol.ALL_INPUTS_UP_NETWORK_DISCONNECT)
             stopHeartbeat()
             closeSocketOnly()
         }
@@ -123,7 +131,7 @@ class InputClient(
     fun shutdown() {
         if (!closed.compareAndSet(false, true)) return
         executor.execute {
-            sendAllInputsUpInternal()
+            sendAllInputsUpInternal(RemoteInputProtocol.ALL_INPUTS_UP_NETWORK_DISCONNECT)
             stopHeartbeat()
             closeSocketOnly()
         }
@@ -140,12 +148,26 @@ class InputClient(
         event: KeyEvent,
         sourceFlag: Int,
     ): Boolean {
-        val usageId = AndroidKeyToHid.usageId(event) ?: return false
+        textCommitCharacters(event)?.let { return sendTextCommit(it) }
+        val usageId = AndroidKeyToHid.usageId(event, metaKeyMapping) ?: return false
         if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
         val down = event.action == KeyEvent.ACTION_DOWN
         send(
             RemoteInputProtocol.EVENT_KEYBOARD_KEY,
             RemoteInputProtocol.keyboardPayload(event, usageId, down, sourceFlag),
+        )
+        return true
+    }
+
+    @Suppress("DEPRECATION")
+    private fun textCommitCharacters(event: KeyEvent): String? =
+        if (event.action == KeyEvent.ACTION_MULTIPLE) event.characters else null
+
+    fun sendTextCommit(text: String): Boolean {
+        if (text.isEmpty()) return false
+        send(
+            RemoteInputProtocol.EVENT_TEXT_COMMIT,
+            RemoteInputProtocol.textCommitPayload(text),
         )
         return true
     }
@@ -156,10 +178,10 @@ class InputClient(
         fromPointerCapture: Boolean,
     ) {
         if (dx == 0f && dy == 0f) return
-        send(
-            RemoteInputProtocol.EVENT_POINTER_RELATIVE,
-            RemoteInputProtocol.pointerRelativePayload(dx, dy, fromPointerCapture),
-        )
+        if (closed.get()) return
+        executor.execute {
+            enqueuePointerRelative(dx, dy, fromPointerCapture)
+        }
     }
 
     fun sendPointerButton(
@@ -184,8 +206,12 @@ class InputClient(
     }
 
     fun sendAllInputsUp() {
+        sendAllInputsUp(RemoteInputProtocol.ALL_INPUTS_UP_EXPLICIT_USER_ACTION)
+    }
+
+    fun sendAllInputsUp(reason: Int) {
         if (closed.get()) return
-        executor.execute { sendAllInputsUpInternal() }
+        executor.execute { sendAllInputsUpInternal(reason) }
     }
 
     private fun send(
@@ -194,15 +220,71 @@ class InputClient(
     ) {
         if (closed.get()) return
         executor.execute {
+            flushPendingPointerRelative()
             writeFrame(RemoteInputProtocol.envelope(eventType, sequence.getAndIncrement(), payload))
         }
     }
 
-    private fun sendAllInputsUpInternal() {
-        writeFrame(RemoteInputProtocol.envelope(RemoteInputProtocol.EVENT_ALL_INPUTS_UP, sequence.getAndIncrement(), ByteArray(0)))
+    private fun enqueuePointerRelative(
+        dx: Float,
+        dy: Float,
+        fromPointerCapture: Boolean,
+    ) {
+        val pending = pendingPointerRelative
+        pendingPointerRelative =
+            if (pending == null) {
+                schedulePointerFlush()
+                PendingPointerRelative(dx, dy, fromPointerCapture)
+            } else {
+                PendingPointerRelative(
+                    dx = pending.dx + dx,
+                    dy = pending.dy + dy,
+                    fromPointerCapture = pending.fromPointerCapture || fromPointerCapture,
+                )
+            }
+    }
+
+    private fun schedulePointerFlush() {
+        pointerFlushTask?.cancel(false)
+        pointerFlushTask =
+            heartbeatExecutor.schedule(
+                { executor.execute { flushPendingPointerRelative() } },
+                POINTER_FLUSH_DELAY_MS,
+                TimeUnit.MILLISECONDS,
+            )
+    }
+
+    private fun flushPendingPointerRelative() {
+        val pending = pendingPointerRelative ?: return
+        pendingPointerRelative = null
+        pointerFlushTask?.cancel(false)
+        pointerFlushTask = null
+        writeFrame(
+            RemoteInputProtocol.envelope(
+                RemoteInputProtocol.EVENT_POINTER_RELATIVE,
+                sequence.getAndIncrement(),
+                RemoteInputProtocol.pointerRelativePayload(
+                    pending.dx,
+                    pending.dy,
+                    pending.fromPointerCapture,
+                ),
+            ),
+        )
+    }
+
+    private fun sendAllInputsUpInternal(reason: Int) {
+        flushPendingPointerRelative()
+        writeFrame(
+            RemoteInputProtocol.envelope(
+                RemoteInputProtocol.EVENT_ALL_INPUTS_UP,
+                sequence.getAndIncrement(),
+                RemoteInputProtocol.allInputsUpPayload(reason),
+            ),
+        )
     }
 
     private fun sendHeartbeat() {
+        flushPendingPointerRelative()
         writeFrame(
             RemoteInputProtocol.envelope(
                 RemoteInputProtocol.EVENT_INPUT_PING,
@@ -230,6 +312,8 @@ class InputClient(
     private fun stopHeartbeat() {
         heartbeatTask?.cancel(false)
         heartbeatTask = null
+        pointerFlushTask?.cancel(false)
+        pointerFlushTask = null
     }
 
     private fun startReader(input: BufferedInputStream) {
@@ -263,7 +347,7 @@ class InputClient(
             RemoteInputProtocol.EVENT_INPUT_PONG -> {
                 val pong = RemoteInputProtocol.parseInputPongPayload(payload)
                 val rttMs = ((System.nanoTime() - pong.clientTimestampNanos).coerceAtLeast(0L)) / 1_000_000.0
-                onInputLatencyMeasured?.invoke(rttMs)
+                onInputLatencyMeasured?.invoke(latencyTracker.add(rttMs))
             }
             else -> DiagLog.log("IC", "Ignoring server input event type=${header.eventType}")
         }
@@ -285,24 +369,8 @@ class InputClient(
     }
 
     private fun bindIfNeeded(sock: Socket) {
-        if (!endpointMode.shouldBindWifi) {
-            DiagLog.log("IC", "$endpointMode input channel using default route")
-            return
-        }
-        val wifiNetwork =
-            context?.let { ctx ->
-                val cm = ctx.getSystemService(ConnectivityManager::class.java)
-                cm.allNetworks.firstOrNull { net ->
-                    val caps = cm.getNetworkCapabilities(net)
-                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
-                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                }
-            }
-        if (wifiNetwork != null) {
-            DiagLog.log("IC", "LAN input channel binding socket to WiFi")
-            wifiNetwork.bindSocket(sock)
-        } else {
-            DiagLog.log("IC", "LAN input channel using default route")
+        NetworkRoute.bindWifiIfNeeded(context, endpointMode, sock, "input channel") { message ->
+            DiagLog.log("IC", message)
         }
     }
 
@@ -311,6 +379,7 @@ class InputClient(
             RemoteInputProtocol.CAP_KEYBOARD_ACTIVITY or
                 RemoteInputProtocol.CAP_POINTER_CAPTURE or
                 RemoteInputProtocol.CAP_GENERIC_MOTION or
+                RemoteInputProtocol.CAP_TEXT_COMMIT or
                 RemoteInputProtocol.CAP_HID_USAGE_MAPPING
         if (context?.let { SideScreenAccessibilityService.isEnabled(it) } == true) {
             capabilities = capabilities or RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST
@@ -350,6 +419,7 @@ class InputClient(
     companion object {
         private const val TAG = "InputClient"
         private const val INPUT_HEARTBEAT_SECONDS = 2L
+        private const val POINTER_FLUSH_DELAY_MS = 4L
         private const val MAX_SERVER_PAYLOAD_BYTES = 4096
 
         private fun backendName(id: Int): String =
@@ -358,5 +428,14 @@ class InputClient(
                 2 -> "Virtual HID"
                 else -> "None"
             }
+
+        private fun ByteArray.shortHex(): String =
+            take(4).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
+
+    private data class PendingPointerRelative(
+        val dx: Float,
+        val dy: Float,
+        val fromPointerCapture: Boolean,
+    )
 }
