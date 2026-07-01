@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano Técnico - Segurança, Revogação e Sessão Ativa</title>
+<style>
+:root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --line:#334155; --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:#0b1020; color:var(--text); line-height:1.5; }
+header { padding:32px 24px; background:linear-gradient(135deg,#0f172a,#1e293b); border-bottom:1px solid var(--line); }
+main { max-width:1180px; margin:0 auto; padding:24px; }
+h1 { margin:0 0 8px; font-size:32px; }
+h2 { margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+h3 { margin-top:24px; color:#bfdbfe; }
+.badges { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+.badge { border:1px solid var(--line); border-radius:999px; padding:6px 10px; color:#dbeafe; background:#111827; font-size:13px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:20px 0; }
+.card { background:rgba(17,24,39,.92); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+.metric { font-size:30px; font-weight:700; color:var(--accent); }
+.metric-label { color:var(--muted); font-size:13px; }
+.approval li { margin:8px 0; }
+table { width:100%; border-collapse:collapse; margin:16px 0; background:#0f172a; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+th,td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; }
+th { background:#1e293b; color:#dbeafe; text-align:left; }
+code { background:#020617; color:#bae6fd; padding:2px 5px; border-radius:5px; }
+pre { overflow:auto; background:#020617; border:1px solid var(--line); border-radius:12px; padding:14px; }
+blockquote { border-left:4px solid var(--accent); padding-left:14px; color:#cbd5e1; }
+ul.checklist { list-style:none; padding-left:0; }
+.box { display:inline-block; width:14px; height:14px; border:1px solid #64748b; border-radius:3px; margin-right:8px; vertical-align:-2px; }
+a { color:#7dd3fc; }
+.section-body { background:#0f172a; border:1px solid var(--line); border-radius:18px; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plano Técnico - Segurança, Revogação e Sessão Ativa</h1>
+  <div class="badges">
+    <span class="badge">Status: Aguardando aprovação</span>
+    <span class="badge">Data: 2026-07-01</span>
+    <span class="badge">Fonte: Markdown do plano</span>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card"><div class="metric">4</div><div class="metric-label">waves de execução</div></div>
+    <div class="card"><div class="metric">27</div><div class="metric-label">passos/checks acionáveis</div></div>
+    <div class="card"><div class="metric">P/P+1</div><div class="metric-label">vídeo + input separados</div></div>
+    <div class="card"><div class="metric">QA real</div><div class="metric-label">hardware e Tailnet como gates</div></div>
+  </div>
+  <div class="card approval">
+    <h2 style="margin-top:0">Critérios humanos de aprovação</h2>
+    <ul><li>Revogar tablet durante stream ativo derruba vídeo e input.</li><li>Reset token invalida sessão/token antigo conforme política definida.</li><li>Input channel sem sessão válida é rejeitado antes de processar evento.</li><li>Revogação durante tecla/botão pressionado dispara release-all.</li><li>Logs não contêm token, auth tag completo, texto digitado ou dados sensíveis.</li><li>Android mostra re-pair/motivo correto após revogação/reset.</li></ul>
+  </div>
+  <div class="section-body">
+    <h1>Plano Técnico - Segurança, Revogação e Sessão Ativa</h1>
+<p><strong>Status:</strong> Aguardando aprovação  </p>
+<p><strong>Data:</strong> 2026-07-01  </p>
+<p><strong>HTML visual:</strong> [<code>plano-seguranca-revogacao-sessao-ativa-2026-07-01.html</code>](./plano-seguranca-revogacao-sessao-ativa-2026-07-01.html)</p>
+<blockquote>Este Markdown é a fonte da verdade para execução. O HTML é apenas o painel visual de aprovação.</blockquote>
+<h2>1. Entendimento</h2>
+<p><strong>Tarefa:</strong> Validar que o controle remoto do Mac é seguro em sessão real: revogação, reset de token, rejeição de input sem sessão, logs sem segredo e fail-safe de todos os inputs pressionados.</p>
+<p><strong>Escopo:</strong> <code>WirelessAuth.swift</code>; <code>AuthHandshake.kt</code>; <code>RemoteSessionStore.swift</code>; <code>InputServer.swift</code>; <code>InputIngress.swift</code>; <code>AppDelegate</code>; UI de revogação/reset; logs Mac/Android; scripts de evidência.</p>
+<p><strong>Premissas:</strong></p>
+<ul><li>Tailscale reduz exposição de rede, mas não substitui autenticação da aplicação.</li><li>Revogação/reset já existem segundo o status, mas ainda precisam QA manual durante stream ativo.</li><li>Input sem sessão válida deve ser rejeitado antes de qualquer payload ser processado.</li><li>Stuck key é problema de segurança, não só UX.</li></ul>
+<h2>2. Exploração</h2>
+<p><strong>Arquivos analisados:</strong></p>
+<table><thead><tr><th>Arquivo</th><th>Por que importa</th></tr></thead><tbody><tr><td>`13-SECURITY-MODEL.md`</td><td>Define modelo de ameaça, tokens, revogação, logs seguros, permissões e fail-safe.</td></tr><tr><td>`12-SESSION-AND-TRANSPORT-SPEC.md`</td><td>Define sessão, channel authorization e erros de auth/canal.</td></tr><tr><td>`11-REMOTE-INPUT-PROTOCOL-V1.md`</td><td>Define rejeição de canal sem sessão e release-all em erro fatal.</td></tr><tr><td>`05-INPUT-ARCHITECTURE-SPEC.md`</td><td>Define estados pressionados e release-all em disconnect/session invalidada.</td></tr><tr><td>`09-TEST-PLAN.md`</td><td>Define SEC-001, SEC-002, SEC-003 e lifecycle/fail-safe.</td></tr><tr><td>`14-DOCUMENTATION-COVERAGE-AND-STATUS.md`</td><td>Indica que revogação/reset melhoraram, mas QA durante stream ativo ainda é lacuna.</td></tr></tbody></table>
+<p><strong>Stack identificada:</strong> token/pairing legacy; device registry; sessão temporária; input channel dedicado; <code>InputIngress</code>; <code>AllInputsUp</code>; logs com redaction; UI Mac de revoke/reset; Android re-pair.</p>
+<p><strong>Comandos de validação do projeto:</strong></p>
+<pre><code>swift test
+. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest
+./scripts/preflight.sh --full
+./scripts/collect-qa-evidence.sh --tap-connect
+./scripts/collect-qa-evidence.sh --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net --expect-stream --tap-connect</code></pre>
+<h2>3. Impacto Técnico</h2>
+<p><strong>Afeta contratos entre módulos?</strong> Sim. Segurança toca sessão, input channel, UI de pairing e logs.</p>
+<table><thead><tr><th>Área</th><th>Arquivo/módulo</th><th>Mudança necessária</th><th>Contrato afetado</th></tr></thead><tbody><tr><td>Pairing/token</td><td>`WirelessAuth.swift`, `AuthHandshake.kt`</td><td>Validar token inválido/reset; não logar segredo.</td><td>Sim</td></tr><tr><td>Device registry</td><td>`RemoteSessionStore.swift`</td><td>Confirmar revogação persistente e reset geral.</td><td>Sim</td></tr><tr><td>Sessão ativa</td><td>`AppDelegate`, `InputServer.swift`, `StreamingServer.swift`</td><td>Revogação deve derrubar stream/input ativos.</td><td>Sim</td></tr><tr><td>Input safety</td><td>`InputIngress.swift`, `CGEventInputBackend.swift`, `KarabinerVirtualHIDBackend.swift`</td><td>Release-all obrigatório em revogação, disconnect e erro.</td><td>Sim</td></tr><tr><td>Logs</td><td>`DiagLog.kt`, logs Mac</td><td>Remover token, texto digitado, auth tags completos.</td><td>Não</td></tr><tr><td>UI</td><td>Mac Settings/Android conexão</td><td>Mensagens de revogação e re-pair.</td><td>Não</td></tr></tbody></table>
+<p><strong>Ordem recomendada:</strong> testes automatizados de auth → smoke ativo → revogação durante stream → reset token → inspeção de logs → correções mínimas.</p>
+<h2>4. Testes</h2>
+<h3>Testes existentes relevantes</h3>
+<table><thead><tr><th>Arquivo</th><th>O que cobre</th><th>Relevância</th></tr></thead><tbody><tr><td>`09-TEST-PLAN.md`</td><td>SEC-001 token inválido, SEC-002 input sem sessão, SEC-003 revogação futura.</td><td>Matriz de segurança.</td></tr><tr><td>`MacHost/Tests/SideScreenTests/*Session*`</td><td>Sessão, registry, revogação, token, auth.</td><td>Protege autorização.</td></tr><tr><td>`MacHost/Tests/SideScreenTests/*InputIngress*`</td><td>Release-all, sequence, pressed state.</td><td>Protege stuck keys.</td></tr><tr><td>`AndroidClient/app/src/test/*Auth*`</td><td>Handshake/pairing Android.</td><td>Protege rejeição/re-pair.</td></tr><tr><td>`scripts/collect-qa-evidence.sh`</td><td>Smoke real e logs.</td><td>Precisa guardar evidência de revogação.</td></tr></tbody></table>
+<h3>Testes que devem ser ajustados</h3>
+<table><thead><tr><th>Arquivo</th><th>Motivo</th><th>Ação</th></tr></thead><tbody><tr><td>Testes de `RemoteSessionStore`</td><td>Revogação de device ativo precisa invalidar sessão ativa.</td><td>Adicionar caso se ausente.</td></tr><tr><td>Testes de `InputServer`</td><td>Canal de input de device revogado precisa ser rejeitado antes do payload.</td><td>Adicionar caso se ausente.</td></tr><tr><td>Scripts de evidência</td><td>Revogação ativa precisa aparecer no pacote.</td><td>Adicionar marcador/log de revoke/reset se ausente.</td></tr><tr><td>Diagnóstico Android</td><td>Re-pair precisa ser claro após revoke/reset.</td><td>Ajustar mensagem se opaca.</td></tr></tbody></table>
+<h3>Novos testes necessários</h3>
+<table><thead><tr><th>Módulo</th><th>Arquivo</th><th>O que testar</th><th>Tipo</th><th>Justificativa</th></tr></thead><tbody><tr><td>Sessão ativa</td><td>`qa-evidence/*`</td><td>Revogar tablet com stream e input ativos.</td><td>manual/e2e</td><td>Lacuna real explícita.</td></tr><tr><td>Sessão ativa</td><td>`qa-evidence/*`</td><td>Reset token durante sessão ativa.</td><td>manual/e2e</td><td>Deve derrubar acesso antigo.</td></tr><tr><td>Input auth</td><td>teste Mac/integração</td><td>Abrir input channel sem sessão/token.</td><td>integration</td><td>Não pode haver input anônimo.</td></tr><tr><td>Logs</td><td>`qa-evidence/*`</td><td>Inspecionar logs após auth/revoke/input.</td><td>manual/security</td><td>Não logar token/texto/auth tag.</td></tr><tr><td>Fail-safe</td><td>`qa-evidence/*`</td><td>Revogar segurando tecla/botão.</td><td>manual/e2e</td><td>Release-all precisa ser garantido.</td></tr></tbody></table>
+<h3>Edge cases</h3>
+<ul><li>Revogar tablet no meio de drag.</li><li>Resetar token enquanto Android tenta reconectar.</li><li>Input channel permanece conectado depois que vídeo cai.</li><li>Vídeo permanece por alguns segundos, mas input já deveria estar bloqueado.</li><li>Tablet revogado ainda tem QR/token antigo salvo.</li><li>Logs de erro mostram prefixo de token ou texto digitado.</li><li>Sessão cai sem close limpo; watchdog precisa soltar inputs.</li></ul>
+<h3>O que não precisa de teste novo</h3>
+<ul><li>Criptografia app-level adicional sobre Tailscale. Futuro de hardening, não gate atual.</li><li>Chaves assimétricas por device, se o fluxo atual ainda está em token/sessionToken legacy. Futuro Alpha avançado.</li><li>Root security. Só quando RootEvdevBackend existir.</li></ul>
+<h2>5. I18N</h2>
+<p><strong>Novas strings necessárias?</strong> Sim, se UI atual não orientar re-pair/revogação.</p>
+<table><thead><tr><th>Chave/área</th><th>Texto base</th><th>Módulo</th><th>Arquivo</th><th>Ação</th></tr></thead><tbody><tr><td>auth.device_revoked</td><td>“Este tablet foi revogado. Escaneie um novo QR para parear novamente.”</td><td>Android</td><td>UI conexão</td><td>Criar/ajustar</td></tr><tr><td>auth.token_reset</td><td>“O token de pareamento foi redefinido. Faça o pareamento novamente.”</td><td>Android/Mac</td><td>UI conexão/Settings</td><td>Criar/ajustar</td></tr><tr><td>auth.input_rejected</td><td>“Canal de input rejeitado: sessão inválida ou expirada.”</td><td>Android/Mac</td><td>Diagnóstico</td><td>Criar/ajustar</td></tr><tr><td>security.release_all</td><td>“Inputs soltos por segurança.”</td><td>Mac/Android</td><td>Diagnóstico input</td><td>Criar/ajustar</td></tr></tbody></table>
+<p><strong>Arquivos a atualizar:</strong></p>
+<ul><li>UI Mac de settings/revogação.</li><li>UI Android de conexão/diagnóstico.</li><li><code>AndroidClient/app/src/main/res/values/strings.xml</code>, se existir.</li></ul>
+<p><strong>Strings hardcoded a evitar:</strong></p>
+<ul><li>Token completo ou prefixo longo.</li><li>Auth tag.</li><li>Texto digitado.</li><li>Mensagens genéricas tipo “connection failed” quando o motivo é device revoked.</li></ul>
+<h2>6. Riscos e Mitigação</h2>
+<table><thead><tr><th>#</th><th>Risco</th><th>Probabilidade</th><th>Impacto</th><th>Mitigação</th></tr></thead><tbody><tr><td>1</td><td>Revogação rejeitar reconexão, mas não derrubar sessão ativa.</td><td>Média</td><td>Controle remoto continua ativo.</td><td>Teste manual durante stream + teste automatizado.</td></tr><tr><td>2</td><td>Input channel aceitar payload antes de auth.</td><td>Baixa/Média</td><td>Controle não autorizado.</td><td>Teste de canal sem sessão e validação antes de parsing.</td></tr><tr><td>3</td><td>Release-all falhar durante revogação segurando tecla.</td><td>Média</td><td>Ação destrutiva no Mac.</td><td>Caso específico segurando tecla/botão.</td></tr><tr><td>4</td><td>Logs vazarem segredo.</td><td>Média</td><td>Risco de segurança e reuso de token.</td><td>Inspeção de logs como gate.</td></tr><tr><td>5</td><td>Reset token quebrar pairing legítimo sem mensagem clara.</td><td>Média</td><td>UX ruim.</td><td>Mensagem re-pair e diagnóstico específico.</td></tr></tbody></table>
+<h2>7. Plano de Implementação</h2>
+<h3>Wave 1: Baseline de segurança automatizado</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 1.1: Rodar testes Mac de sessão/registry/auth -&gt; Verificação: revogação e token inválido verdes.</li><li><span class="box"></span>Passo 1.2: Rodar testes Android de auth/pairing -&gt; Verificação: token inválido/re-pair tratados.</li><li><span class="box"></span>Passo 1.3: Rodar testes de InputIngress -&gt; Verificação: release-all em disconnect/protocol error.</li><li><span class="box"></span>Passo 1.4: Inspecionar logs de teste -&gt; Verificação: nenhum token/texto digitado/auth tag completo.</li></ul>
+<h3>Wave 2: Revogação em sessão real</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 2.1: Conectar tablet via Tailnet com vídeo e input -&gt; Verificação: stream e input channel ativos.</li><li><span class="box"></span>Passo 2.2: Segurar modificador ou botão do mouse -&gt; Verificação: Mac registra pressed state ou evento equivalente.</li><li><span class="box"></span>Passo 2.3: Revogar tablet pelo Mac -&gt; Verificação: stream/input ativos caem.</li><li><span class="box"></span>Passo 2.4: Confirmar release-all -&gt; Verificação: nenhuma tecla/botão fica preso.</li><li><span class="box"></span>Passo 2.5: Tentar reconectar sem novo QR -&gt; Verificação: rejeição explícita.</li><li><span class="box"></span>Passo 2.6: Escanear novo QR e reconectar -&gt; Verificação: re-pair recupera uso legítimo.</li></ul>
+<h3>Wave 3: Reset token e canal inválido</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 3.1: Resetar token durante sessão ativa -&gt; Verificação: sessão antiga cai ou fica invalidada conforme política definida.</li><li><span class="box"></span>Passo 3.2: Tentar abrir input channel sem sessão válida -&gt; Verificação: Mac rejeita antes de payload.</li><li><span class="box"></span>Passo 3.3: Tentar token antigo salvo no Android -&gt; Verificação: Android mostra re-pair.</li><li><span class="box"></span>Passo 3.4: Validar logs Mac/Android -&gt; Verificação: segredos não aparecem.</li></ul>
+<h3>Wave 4: Correções e regressão</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 4.1: Corrigir apenas falhas <code>BLOCKER/HIGH</code> -&gt; Verificação: teste específico para cada falha.</li><li><span class="box"></span>Passo 4.2: Reexecutar smoke Tailnet -&gt; Verificação: segurança não quebrou conexão normal.</li><li><span class="box"></span>Passo 4.3: Reexecutar input QA mínimo -&gt; Verificação: fail-safe continua funcionando.</li></ul>
+<h2>8. Checklist de Validação</h2>
+<ul class="checklist"><li><span class="box"></span>Build dos módulos alterados: <code>swift test</code> e <code>. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest</code></li><li><span class="box"></span>Testes relevantes: <code>./scripts/preflight.sh --full</code> e smoke Tailnet.</li><li><span class="box"></span>Lint/typecheck relevantes: conforme ferramentas existentes.</li><li><span class="box"></span>Confirmar que testes novos passam.</li><li><span class="box"></span>Confirmar que testes afetados foram atualizados.</li><li><span class="box"></span>Confirmar que I18N foi atualizado, quando aplicável.</li><li><span class="box"></span>Confirmar critérios de aceite do HTML visual.</li><li><span class="box"></span>Confirmar que revogação derruba sessão ativa.</li><li><span class="box"></span>Confirmar que input sem sessão não injeta nada.</li><li><span class="box"></span>Confirmar que logs não vazam segredos.</li></ul>
+<h2>9. Revisão Crítica</h2>
+<p><strong>Resultado do advogado do diabo:</strong> gaps abaixo.</p>
+<table><thead><tr><th>Severidade</th><th>Gap encontrado</th><th>Evidência</th><th>Ajuste aplicado</th></tr></thead><tbody><tr><td>CRÍTICO</td><td>“Revogado” pode significar só “não reconecta”, não “derruba agora”.</td><td>Status diz que ainda precisa QA revogando durante stream.</td><td>Teste manual obrigatório com stream ativo.</td></tr><tr><td>CRÍTICO</td><td>Canal de input é mais sensível que vídeo.</td><td>App controla teclado/mouse do Mac.</td><td>Rejeitar input sem sessão antes de payload.</td></tr><tr><td>ALTO</td><td>Tecla presa após revoke pode executar ação destrutiva.</td><td>Fail-safe é requisito de segurança.</td><td>Testar revoke segurando tecla/botão.</td></tr><tr><td>MÉDIO</td><td>Logs podem vazar dados em caminhos de erro.</td><td>Security model proíbe tokens/texto/auth tags completos.</td><td>Inspeção de logs vira gate.</td></tr></tbody></table>
+<h2>10. Critérios de Aprovação Humana</h2>
+<p>Estes são os itens que devem aparecer resumidos no HTML:</p>
+<ul><li>Revogar tablet durante stream ativo derruba vídeo e input.</li><li>Reset token invalida sessão/token antigo conforme política definida.</li><li>Input channel sem sessão válida é rejeitado antes de processar evento.</li><li>Revogação durante tecla/botão pressionado dispara release-all.</li><li>Logs não contêm token, auth tag completo, texto digitado ou dados sensíveis.</li><li>Android mostra re-pair/motivo correto após revogação/reset.</li></ul>
+<h2>Status</h2>
+<p>Nada deve ser implementado até aprovação explícita.</p>
+  </div>
+</main>
+</body>
+</html>

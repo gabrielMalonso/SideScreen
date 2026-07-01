@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano Técnico - Release, Permissões e Distribuição</title>
+<style>
+:root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --line:#334155; --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:#0b1020; color:var(--text); line-height:1.5; }
+header { padding:32px 24px; background:linear-gradient(135deg,#0f172a,#1e293b); border-bottom:1px solid var(--line); }
+main { max-width:1180px; margin:0 auto; padding:24px; }
+h1 { margin:0 0 8px; font-size:32px; }
+h2 { margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+h3 { margin-top:24px; color:#bfdbfe; }
+.badges { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+.badge { border:1px solid var(--line); border-radius:999px; padding:6px 10px; color:#dbeafe; background:#111827; font-size:13px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:20px 0; }
+.card { background:rgba(17,24,39,.92); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+.metric { font-size:30px; font-weight:700; color:var(--accent); }
+.metric-label { color:var(--muted); font-size:13px; }
+.approval li { margin:8px 0; }
+table { width:100%; border-collapse:collapse; margin:16px 0; background:#0f172a; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+th,td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; }
+th { background:#1e293b; color:#dbeafe; text-align:left; }
+code { background:#020617; color:#bae6fd; padding:2px 5px; border-radius:5px; }
+pre { overflow:auto; background:#020617; border:1px solid var(--line); border-radius:12px; padding:14px; }
+blockquote { border-left:4px solid var(--accent); padding-left:14px; color:#cbd5e1; }
+ul.checklist { list-style:none; padding-left:0; }
+.box { display:inline-block; width:14px; height:14px; border:1px solid #64748b; border-radius:3px; margin-right:8px; vertical-align:-2px; }
+a { color:#7dd3fc; }
+.section-body { background:#0f172a; border:1px solid var(--line); border-radius:18px; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plano Técnico - Release, Permissões e Distribuição</h1>
+  <div class="badges">
+    <span class="badge">Status: Aguardando aprovação</span>
+    <span class="badge">Data: 2026-07-01</span>
+    <span class="badge">Fonte: Markdown do plano</span>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card"><div class="metric">4</div><div class="metric-label">waves de execução</div></div>
+    <div class="card"><div class="metric">29</div><div class="metric-label">passos/checks acionáveis</div></div>
+    <div class="card"><div class="metric">P/P+1</div><div class="metric-label">vídeo + input separados</div></div>
+    <div class="card"><div class="metric">QA real</div><div class="metric-label">hardware e Tailnet como gates</div></div>
+  </div>
+  <div class="card approval">
+    <h2 style="margin-top:0">Critérios humanos de aprovação</h2>
+    <ul><li>App Mac assinado abre e reconhece permissões necessárias.</li><li>TCC não fica resetando sem motivo após rebuild com mesma identidade.</li><li>VirtualHID/helper funciona no pacote assinado ou fallback CGEvent aparece claramente.</li><li>APK/AAB release assinado instala e conecta no tablet.</li><li>Build release passa smoke USB e Tailnet.</li><li>Notarização/staple está feita ou o release é explicitamente marcado como dev-only.</li><li>Guia curto de instalação cobre permissões Mac, Tailscale Android e re-pair.</li></ul>
+  </div>
+  <div class="section-body">
+    <h1>Plano Técnico - Release, Permissões e Distribuição</h1>
+<p><strong>Status:</strong> Aguardando aprovação  </p>
+<p><strong>Data:</strong> 2026-07-01  </p>
+<p><strong>HTML visual:</strong> [<code>plano-release-permissoes-distribuicao-2026-07-01.html</code>](./plano-release-permissoes-distribuicao-2026-07-01.html)</p>
+<blockquote>Este Markdown é a fonte da verdade para execução. O HTML é apenas o painel visual de aprovação.</blockquote>
+<h2>1. Entendimento</h2>
+<p><strong>Tarefa:</strong> Transformar builds locais funcionais em um caminho de release instalável e reproduzível, cobrindo assinatura Mac, permissões macOS, notarização, Android release signing, smoke pós-instalação e documentação de warnings aceitos.</p>
+<p><strong>Escopo:</strong> scripts de build; assinatura Mac; TCC/Screen Recording/Accessibility/Input Monitoring; VirtualHID/helper; notarização/staple; Android release signing/keystore; preflight; smoke USB/Tailnet; documentação de instalação.</p>
+<p><strong>Premissas:</strong></p>
+<ul><li>O preflight já passa com warnings esperados, mas warnings de notarização/credenciais/distribuição não podem virar “normal eterno”.</li><li>A identidade de assinatura Mac precisa estabilizar TCC; rebuilds não devem pedir permissões infinitamente.</li><li>Release Android debug-signed é útil para teste, não para distribuição.</li><li>Este plano não decide loja/app store. Decide pacote instalável controlado.</li></ul>
+<h2>2. Exploração</h2>
+<p><strong>Arquivos analisados:</strong></p>
+<table><thead><tr><th>Arquivo</th><th>Por que importa</th></tr></thead><tbody><tr><td>`14-DOCUMENTATION-COVERAGE-AND-STATUS.md`</td><td>Lista warnings atuais: Android release debug-signed, app/DMG sem notarização, credenciais Android ausentes.</td></tr><tr><td>`13-SECURITY-MODEL.md`</td><td>Lista permissões macOS sensíveis e logs seguros.</td></tr><tr><td>`09-TEST-PLAN.md`</td><td>Define PERM-001/002/003 e smokes de rede/input.</td></tr><tr><td>`05-INPUT-ARCHITECTURE-SPEC.md`</td><td>VirtualHID exige permissão/driver/system extension e fallback claro.</td></tr><tr><td>`04-TAILSCALE-NETWORKING-SPEC.md`</td><td>Release precisa preservar MagicDNS/IP 100.x e diagnóstico de split tunneling.</td></tr><tr><td>`07-IMPLEMENTATION-ROADMAP.md`</td><td>Coloca installer polido e produto consistente como fase final.</td></tr></tbody></table>
+<p><strong>Stack identificada:</strong> macOS signing Developer ID/Apple Development; TCC; notarização/staple; VirtualHID helper/system extension; Gradle Android; Android keystore; preflight shell; smoke scripts; Tailnet.</p>
+<p><strong>Comandos de validação do projeto:</strong></p>
+<pre><code>./scripts/preflight.sh --full
+./scripts/build_mac.sh
+swift test
+. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest
+. scripts/android-env.sh &amp;&amp; ./gradlew assembleRelease
+./scripts/collect-qa-evidence.sh --tap-connect
+./scripts/collect-qa-evidence.sh --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net --expect-stream --tap-connect</code></pre>
+<h2>3. Impacto Técnico</h2>
+<p><strong>Afeta contratos entre módulos?</strong> Não deveria afetar protocolo. Afeta empacotamento, permissões, instalação, scripts e UX de onboarding.</p>
+<table><thead><tr><th>Área</th><th>Arquivo/módulo</th><th>Mudança necessária</th><th>Contrato afetado</th></tr></thead><tbody><tr><td>Mac build</td><td>`scripts/build_mac.sh`</td><td>Garantir identidade estável e assinatura não ad-hoc quando possível.</td><td>Não</td></tr><tr><td>Mac release</td><td>app bundle/DMG</td><td>Notarizar/staple e documentar warnings.</td><td>Não</td></tr><tr><td>TCC</td><td>UI Mac/onboarding</td><td>Explicar Screen Recording, Accessibility, Input Monitoring e VirtualHID.</td><td>Não</td></tr><tr><td>VirtualHID</td><td>helper/installer</td><td>Validar instalação, permissão e fallback.</td><td>Não</td></tr><tr><td>Android release</td><td>Gradle signing config/keystore</td><td>Configurar release signing real.</td><td>Não</td></tr><tr><td>Preflight</td><td>`scripts/preflight.sh`</td><td>Separar warning aceitável de bloqueador de release.</td><td>Não</td></tr><tr><td>Smoke pós-release</td><td>`scripts/collect-qa-evidence.sh`</td><td>Rodar sobre build assinado, não só debug.</td><td>Não</td></tr></tbody></table>
+<p><strong>Ordem recomendada:</strong> inventário de identidades/credenciais → Mac e Android em paralelo → smoke pós-instalação → documento de release candidate.</p>
+<h2>4. Testes</h2>
+<h3>Testes existentes relevantes</h3>
+<table><thead><tr><th>Arquivo</th><th>O que cobre</th><th>Relevância</th></tr></thead><tbody><tr><td>`scripts/preflight.sh`</td><td>Build, assinatura, warnings, ambiente.</td><td>Gate principal de release.</td></tr><tr><td>`scripts/build_mac.sh`</td><td>Build/assinatura Mac.</td><td>Precisa estabilizar identidade/TCC.</td></tr><tr><td>`09-TEST-PLAN.md`</td><td>PERM-001/002/003 e smokes funcionais.</td><td>Define comportamento sem permissões.</td></tr><tr><td>`scripts/collect-qa-evidence.sh`</td><td>Smoke pós-instalação.</td><td>Prova release instalado, não só código compilado.</td></tr><tr><td>Gradle tests/release</td><td>`testDebugUnitTest`, `assembleRelease`</td><td>Garante Android build testável e empacotável.</td></tr></tbody></table>
+<h3>Testes que devem ser ajustados</h3>
+<table><thead><tr><th>Arquivo</th><th>Motivo</th><th>Ação</th></tr></thead><tbody><tr><td>`scripts/preflight.sh`</td><td>Warnings de release precisam ter severidade correta.</td><td>Classificar notarização/keystore como bloqueador quando alvo for release público.</td></tr><tr><td>`scripts/collect-qa-evidence.sh`</td><td>Precisa aceitar caminho/build release.</td><td>Adicionar flag se só instala debug hoje.</td></tr><tr><td>Documentação de instalação</td><td>Usuário precisa saber permissões Mac em ordem certa.</td><td>Criar/ajustar guia curto de onboarding.</td></tr><tr><td>Android Gradle config</td><td>Release debug-signed não serve para distribuição.</td><td>Configurar keystore real fora do repositório.</td></tr></tbody></table>
+<h3>Novos testes necessários</h3>
+<table><thead><tr><th>Módulo</th><th>Arquivo</th><th>O que testar</th><th>Tipo</th><th>Justificativa</th></tr></thead><tbody><tr><td>Mac release</td><td>`qa-evidence/*`</td><td>App assinado abre, pede permissões corretas e mantém TCC após rebuild com mesma identidade.</td><td>manual/release smoke</td><td>Permissão quebrada parece bug de input/vídeo.</td></tr><tr><td>Mac release</td><td>`qa-evidence/*`</td><td>DMG/app notarizado passa Gatekeeper.</td><td>release smoke</td><td>Sem isso, instalação externa vira dor.</td></tr><tr><td>VirtualHID</td><td>`qa-evidence/*`</td><td>Helper/driver instalável no pacote release.</td><td>manual/release smoke</td><td>Input profissional depende disso.</td></tr><tr><td>Android release</td><td>`qa-evidence/*`</td><td>APK/AAB release assinado instala e conecta.</td><td>release smoke</td><td>Debug build não é distribuição.</td></tr><tr><td>Tailnet pós-release</td><td>`qa-evidence/*`</td><td>MagicDNS/IP 100.x continuam funcionando no build release.</td><td>e2e</td><td>Release pode mudar permissões/manifest/network security.</td></tr><tr><td>Input pós-release</td><td>`qa-evidence/*`</td><td>Teclado/mouse funcionam no build release.</td><td>e2e</td><td>ProGuard/R8/permissões podem quebrar caminhos.</td></tr></tbody></table>
+<h3>Edge cases</h3>
+<ul><li>macOS pede TCC novamente porque a identidade mudou.</li><li>App assinado abre, mas helper VirtualHID não instala/ativa.</li><li>Notarização passa, mas staple/Gatekeeper falha offline.</li><li>Android release assina, mas não instala por <code>applicationId</code>/signature conflict.</li><li>Build release remove logs necessários para diagnóstico mínimo.</li><li>Build release conecta vídeo, mas input falha por permissão/serviço/manifest.</li></ul>
+<h3>O que não precisa de teste novo</h3>
+<ul><li>App Store/Play Store review. Fora deste plano.</li><li>Auto-update. Futuro.</li><li>Installer super polido. Aqui é instalável e seguro, não marketing.</li><li>DriverKit próprio. Fora do release atual.</li></ul>
+<h2>5. I18N</h2>
+<p><strong>Novas strings necessárias?</strong> Sim, para permissões/onboarding e release diagnostics, se ainda não existirem.</p>
+<table><thead><tr><th>Chave/área</th><th>Texto base</th><th>Módulo</th><th>Arquivo</th><th>Ação</th></tr></thead><tbody><tr><td>mac.permission.screen_recording</td><td>“Screen Recording é necessário para capturar o display virtual.”</td><td>Mac</td><td>Settings/onboarding</td><td>Criar/ajustar</td></tr><tr><td>mac.permission.accessibility</td><td>“Accessibility é necessário para o fallback CGEvent de teclado/mouse.”</td><td>Mac</td><td>Settings/onboarding</td><td>Criar/ajustar</td></tr><tr><td>mac.permission.input_monitoring</td><td>“Input Monitoring pode ser necessário para input remoto confiável.”</td><td>Mac</td><td>Settings/onboarding</td><td>Criar/ajustar</td></tr><tr><td>mac.virtualhid.permission</td><td>“Virtual HID exige aprovação do driver/helper no macOS.”</td><td>Mac</td><td>Settings/onboarding</td><td>Criar/ajustar</td></tr><tr><td>android.release.diagnostics</td><td>“Build release: diagnóstico reduzido, sem tokens ou texto digitado.”</td><td>Android</td><td>Diagnóstico</td><td>Criar se necessário</td></tr></tbody></table>
+<p><strong>Arquivos a atualizar:</strong></p>
+<ul><li>UI/Settings Mac.</li><li>Guia de instalação Mac.</li><li>Gradle/Android resources, se houver texto novo.</li><li>README de release.</li></ul>
+<p><strong>Strings hardcoded a evitar:</strong></p>
+<ul><li>Instruções de permissão duplicadas em código e documentação.</li><li>Mensagens genéricas de input quando falta permissão específica.</li><li>Logs de release com segredo.</li></ul>
+<h2>6. Riscos e Mitigação</h2>
+<table><thead><tr><th>#</th><th>Risco</th><th>Probabilidade</th><th>Impacto</th><th>Mitigação</th></tr></thead><tbody><tr><td>1</td><td>Notarização virar problema tarde demais.</td><td>Média</td><td>Release bloqueado.</td><td>Trilho de release começa em paralelo na Wave 1.</td></tr><tr><td>2</td><td>TCC resetar a cada rebuild.</td><td>Média</td><td>QA perde tempo e usuário perde confiança.</td><td>Identidade de assinatura estável; documentar reset esperado uma vez.</td></tr><tr><td>3</td><td>VirtualHID helper não entrar bem no pacote.</td><td>Média</td><td>Input profissional falha no release.</td><td>Smoke de helper no pacote release.</td></tr><tr><td>4</td><td>Android release assinado quebrar instalação/conexão.</td><td>Média</td><td>Build não distribuível.</td><td>Smoke pós-instalação com build release.</td></tr><tr><td>5</td><td>Preflight continuar aceitando warning que deveria bloquear release.</td><td>Alta</td><td>Release “meia-boca”.</td><td>Severidade depende do alvo: dev vs release.</td></tr><tr><td>6</td><td>Onboarding de permissão virar tutorial gigante.</td><td>Média</td><td>Usuário ignora e acha que bugou.</td><td>Mensagem curta + status objetivo + botão para abrir Settings quando possível.</td></tr></tbody></table>
+<h2>7. Plano de Implementação</h2>
+<h3>Wave 1: Inventário e classificação de release</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 1.1: Rodar <code>./scripts/preflight.sh --full</code> -&gt; Verificação: warnings classificados como dev-only ou release-blocker.</li><li><span class="box"></span>Passo 1.2: Identificar identidade Mac disponível: Developer ID / Apple Development / ad-hoc -&gt; Verificação: log de assinatura anexado.</li><li><span class="box"></span>Passo 1.3: Identificar estado da notarização/staple -&gt; Verificação: matriz “não configurado / configurado / aprovado”.</li><li><span class="box"></span>Passo 1.4: Identificar keystore Android release -&gt; Verificação: release signing real ou bloqueador explícito.</li></ul>
+<h3>Wave 2: Mac e Android em paralelo</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 2.M1: Rodar <code>./scripts/build_mac.sh</code> com identidade estável -&gt; Verificação: app assinado sem ad-hoc quando possível.</li><li><span class="box"></span>Passo 2.M2: Abrir app assinado e conceder permissões -&gt; Verificação: Screen Recording/Accessibility/Input Monitoring reconhecidas.</li><li><span class="box"></span>Passo 2.M3: Validar VirtualHID/helper no build assinado -&gt; Verificação: backend ativo ou fallback claro.</li><li><span class="box"></span>Passo 2.A1: Configurar Android release signing fora do repositório -&gt; Verificação: <code>assembleRelease</code> gera artefato assinado.</li><li><span class="box"></span>Passo 2.A2: Instalar build release no tablet -&gt; Verificação: instala/abre sem conflito de assinatura.</li><li><span class="box"></span>Passo 2.A3: Confirmar que diagnóstico release não vaza segredo -&gt; Verificação: logs inspecionados.</li></ul>
+<h3>Wave 3: Notarização e smoke pós-release</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 3.1: Notarizar/staple app/DMG Mac se credenciais estiverem disponíveis -&gt; Verificação: Gatekeeper aceita pacote.</li><li><span class="box"></span>Passo 3.2: Rodar smoke USB no build release -&gt; Verificação: vídeo + input funcionam.</li><li><span class="box"></span>Passo 3.3: Rodar smoke Tailnet no build release -&gt; Verificação: MagicDNS/IP 100.x e input <code>P/P+1</code> funcionam.</li><li><span class="box"></span>Passo 3.4: Rodar input QA mínimo no release -&gt; Verificação: teclado/mouse e backend ativo.</li></ul>
+<h3>Wave 4: Documentação de instalação e decisão de release</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 4.1: Criar/atualizar guia curto de instalação Mac -&gt; Verificação: permissões explicadas na ordem certa.</li><li><span class="box"></span>Passo 4.2: Criar/atualizar guia curto Android -&gt; Verificação: Tailscale, split tunneling e pairing explicados.</li><li><span class="box"></span>Passo 4.3: Atualizar preflight para falhar release quando faltar notarização/keystore -&gt; Verificação: modo dev continua permitindo warnings, modo release não.</li><li><span class="box"></span>Passo 4.4: Emitir decisão RC -&gt; Verificação: release aprovado, bloqueado ou dev-only assumido.</li></ul>
+<h2>8. Checklist de Validação</h2>
+<ul class="checklist"><li><span class="box"></span>Build dos módulos alterados: <code>./scripts/build_mac.sh</code>, <code>swift test</code>, <code>. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest</code>, <code>. scripts/android-env.sh &amp;&amp; ./gradlew assembleRelease</code>.</li><li><span class="box"></span>Testes relevantes: <code>./scripts/preflight.sh --full</code>, smoke USB e smoke Tailnet.</li><li><span class="box"></span>Lint/typecheck relevantes: conforme ferramentas existentes.</li><li><span class="box"></span>Confirmar que testes novos passam.</li><li><span class="box"></span>Confirmar que testes afetados foram atualizados.</li><li><span class="box"></span>Confirmar que I18N foi atualizado, quando aplicável.</li><li><span class="box"></span>Confirmar critérios de aceite do HTML visual.</li><li><span class="box"></span>Confirmar assinatura Mac estável.</li><li><span class="box"></span>Confirmar permissões macOS reconhecidas.</li><li><span class="box"></span>Confirmar Android release signing real ou bloqueador explícito.</li><li><span class="box"></span>Confirmar notarização/staple ou decisão dev-only documentada.</li></ul>
+<h2>9. Revisão Crítica</h2>
+<p><strong>Resultado do advogado do diabo:</strong> gaps abaixo.</p>
+<table><thead><tr><th>Severidade</th><th>Gap encontrado</th><th>Evidência</th><th>Ajuste aplicado</th></tr></thead><tbody><tr><td>ALTO</td><td>Build local funcional não significa release instalável.</td><td>Status cita warnings de notarização/credenciais.</td><td>Release vira trilho próprio.</td></tr><tr><td>ALTO</td><td>Permissões macOS podem quebrar input/vídeo sem bug no código.</td><td>Security model lista TCC e VirtualHID.</td><td>Smoke pós-assinatura e onboarding.</td></tr><tr><td>MÉDIO</td><td>Android debug-signed pode esconder problemas de release.</td><td>Status cita release debug-signed.</td><td>`assembleRelease` e instalação real viram gate.</td></tr><tr><td>MÉDIO</td><td>Preflight pode tratar bloqueador como warning.</td><td>Warnings aceitáveis dependem do alvo.</td><td>Separar modo dev e modo release.</td></tr></tbody></table>
+<h2>10. Critérios de Aprovação Humana</h2>
+<p>Estes são os itens que devem aparecer resumidos no HTML:</p>
+<ul><li>App Mac assinado abre e reconhece permissões necessárias.</li><li>TCC não fica resetando sem motivo após rebuild com mesma identidade.</li><li>VirtualHID/helper funciona no pacote assinado ou fallback CGEvent aparece claramente.</li><li>APK/AAB release assinado instala e conecta no tablet.</li><li>Build release passa smoke USB e Tailnet.</li><li>Notarização/staple está feita ou o release é explicitamente marcado como dev-only.</li><li>Guia curto de instalação cobre permissões Mac, Tailscale Android e re-pair.</li></ul>
+<h2>Status</h2>
+<p>Nada deve ser implementado até aprovação explícita.</p>
+  </div>
+</main>
+</body>
+</html>

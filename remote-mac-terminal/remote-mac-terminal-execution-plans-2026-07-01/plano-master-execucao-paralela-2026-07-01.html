@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano Técnico - Execução Paralela para Uso Diário</title>
+<style>
+:root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --line:#334155; --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:#0b1020; color:var(--text); line-height:1.5; }
+header { padding:32px 24px; background:linear-gradient(135deg,#0f172a,#1e293b); border-bottom:1px solid var(--line); }
+main { max-width:1180px; margin:0 auto; padding:24px; }
+h1 { margin:0 0 8px; font-size:32px; }
+h2 { margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+h3 { margin-top:24px; color:#bfdbfe; }
+.badges { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+.badge { border:1px solid var(--line); border-radius:999px; padding:6px 10px; color:#dbeafe; background:#111827; font-size:13px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:20px 0; }
+.card { background:rgba(17,24,39,.92); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+.metric { font-size:30px; font-weight:700; color:var(--accent); }
+.metric-label { color:var(--muted); font-size:13px; }
+.approval li { margin:8px 0; }
+table { width:100%; border-collapse:collapse; margin:16px 0; background:#0f172a; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+th,td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; }
+th { background:#1e293b; color:#dbeafe; text-align:left; }
+code { background:#020617; color:#bae6fd; padding:2px 5px; border-radius:5px; }
+pre { overflow:auto; background:#020617; border:1px solid var(--line); border-radius:12px; padding:14px; }
+blockquote { border-left:4px solid var(--accent); padding-left:14px; color:#cbd5e1; }
+ul.checklist { list-style:none; padding-left:0; }
+.box { display:inline-block; width:14px; height:14px; border:1px solid #64748b; border-radius:3px; margin-right:8px; vertical-align:-2px; }
+a { color:#7dd3fc; }
+.section-body { background:#0f172a; border:1px solid var(--line); border-radius:18px; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plano Técnico - Execução Paralela para Uso Diário</h1>
+  <div class="badges">
+    <span class="badge">Status: Aguardando aprovação</span>
+    <span class="badge">Data: 2026-07-01</span>
+    <span class="badge">Fonte: Markdown do plano</span>
+  </div>
+</header>
+<main>
+  <div class="grid">
+    <div class="card"><div class="metric">5</div><div class="metric-label">waves de execução</div></div>
+    <div class="card"><div class="metric">37</div><div class="metric-label">passos/checks acionáveis</div></div>
+    <div class="card"><div class="metric">P/P+1</div><div class="metric-label">vídeo + input separados</div></div>
+    <div class="card"><div class="metric">QA real</div><div class="metric-label">hardware e Tailnet como gates</div></div>
+  </div>
+  <div class="card approval">
+    <h2 style="margin-top:0">Critérios humanos de aprovação</h2>
+    <ul><li>O app roda por 30 min via Tailnet no tablet real, com vídeo e input dedicado funcionando.</li><li>O app roda por 30 min via USB sem regredir o caminho local.</li><li>Teclado e mouse Bluetooth passam na matriz manual essencial: digitação, modificadores, drag, scroll e desconexão sem tecla presa.</li><li>VirtualHID funciona em apps reais do macOS ou o fallback CGEvent fica claramente documentado como limitação temporária.</li><li>Revogar/resetar o tablet durante sessão ativa derruba input/stream e impede reconexão sem novo pareamento.</li><li>O pacote de evidências permite reproduzir o estado da aprovação sem “confia em mim”.</li><li>Release Mac/Android tem caminho claro: assinatura, permissões, notarização/keystore e warnings explicitamente aceitos ou resolvidos.</li></ul>
+  </div>
+  <div class="section-body">
+    <h1>Plano Técnico - Execução Paralela para Uso Diário</h1>
+<p><strong>Status:</strong> Aguardando aprovação  </p>
+<p><strong>Data:</strong> 2026-07-01  </p>
+<p><strong>HTML visual:</strong> [<code>plano-master-execucao-paralela-2026-07-01.html</code>](./plano-master-execucao-paralela-2026-07-01.html)</p>
+<blockquote>Este Markdown é a fonte da verdade para execução. O HTML é apenas o painel visual de aprovação.</blockquote>
+<h2>1. Entendimento</h2>
+<p><strong>Tarefa:</strong> Transformar a documentação de arquitetura/specs em um plano executável, priorizando paralelismo real, redução de risco e validação de uso diário do Remote Mac Terminal.</p>
+<p><strong>Escopo:</strong> Orquestração geral de execução; MacHost; AndroidClient; Tailnet; canal de input; Virtual HID; segurança de sessão; QA manual com hardware real; scripts de evidência; distribuição Mac/Android.</p>
+<p><strong>Premissas:</strong></p>
+<ul><li>A base local contém as implementações descritas em <code>14-DOCUMENTATION-COVERAGE-AND-STATUS.md</code>. Se houver divergência, a Wave 0 vira auditoria obrigatória antes de qualquer correção.</li><li>O backlog antigo não é fonte confiável de pendência. Ele serve como decomposição técnica, mas o status atual vence.</li><li>Root Android, QUIC e DriverKit próprio ficam fora do caminho crítico. Entram só por medição, não por ansiedade arquitetural.</li><li>O tablet de referência é <code>SM_X610</code>, e o host Tailnet citado nos specs é <code>mac-mini-de-gabriel.tailad333c.ts.net</code>; o plano deve continuar parametrizável para outro tablet/host.</li><li>O objetivo desta rodada não é “mais código”; é provar que o que existe aguenta uso real sem virar castelo de cartas.</li></ul>
+<h2>2. Exploração</h2>
+<p><strong>Arquivos analisados:</strong></p>
+<table><thead><tr><th>Arquivo</th><th>Por que importa</th></tr></thead><tbody><tr><td>`README.md`</td><td>Define a estratégia macro: SideScreen como motor de vídeo, novo session/transport layer e input remoto.</td></tr><tr><td>`00-CODEX-START-HERE.md`</td><td>Define ordem obrigatória: sem root primeiro, Tailnet + vídeo, input dedicado, CGEvent, Virtual HID depois.</td></tr><tr><td>`14-DOCUMENTATION-COVERAGE-AND-STATUS.md`</td><td>Fotografia atual. Marca o que já foi implementado e lista lacunas reais de uso diário.</td></tr><tr><td>`07-IMPLEMENTATION-ROADMAP.md`</td><td>Roadmap original MVP/Alpha/Beta/final; útil para classificar trabalho por maturidade.</td></tr><tr><td>`08-CODEX-TASK-BACKLOG.md`</td><td>Backlog técnico granular; usar como catálogo, não como lista cega de pendências.</td></tr><tr><td>`09-TEST-PLAN.md`</td><td>Matriz de validação de rede, vídeo, teclado, mouse, input sob carga, lifecycle, segurança e permissões.</td></tr><tr><td>`05-INPUT-ARCHITECTURE-SPEC.md`</td><td>Define InputIngress, backends, fail-safe, coalescing e responsabilidades do input profissional.</td></tr><tr><td>`11-REMOTE-INPUT-PROTOCOL-V1.md`</td><td>Define envelope, sequence, timestamp, eventos, `AllInputsUp`, ping/pong e regras de coalescing.</td></tr><tr><td>`12-SESSION-AND-TRANSPORT-SPEC.md`</td><td>Define canais separados, sessão, autorização de canais e prioridade `INPUT &gt; CONTROL &gt; VIDEO &gt; TELEMETRY`.</td></tr><tr><td>`13-SECURITY-MODEL.md`</td><td>Define token, device registry, revogação, logs seguros, permissões e fail-safe como segurança.</td></tr><tr><td>`04-TAILSCALE-NETWORKING-SPEC.md`</td><td>Define MagicDNS/IP 100.x, QR Tailnet, remoção de bind Wi-Fi e split tunneling.</td></tr><tr><td>`06-ANDROID-LIMITATIONS-AND-ROOT-PLAN.md`</td><td>Define limites sem root e o que não deve ser tratado como bug do produto.</td></tr></tbody></table>
+<p><strong>Stack identificada:</strong> macOS Swift/AppKit/CoreGraphics/ScreenCaptureKit/VideoToolbox; Android Kotlin/Gradle/MediaCodec; TCP multi-canal; Tailscale/MagicDNS/IP 100.x; Karabiner VirtualHID/helper; scripts shell de build, preflight, smoke e coleta de evidência.</p>
+<p><strong>Comandos de validação do projeto:</strong></p>
+<pre><code>swift test
+. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest
+./scripts/preflight.sh --full
+./scripts/collect-qa-evidence.sh --tap-connect
+./scripts/collect-qa-evidence.sh --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net --expect-stream --tap-connect
+./scripts/open-input-qa.sh
+adb devices -l
+tailscale status</code></pre>
+<h2>3. Impacto Técnico</h2>
+<p><strong>Afeta contratos entre módulos?</strong> Sim, principalmente contratos operacionais de validação, sessão, input e distribuição. A execução proposta evita alterar protocolo sem evidência.</p>
+<table><thead><tr><th>Área</th><th>Arquivo/módulo</th><th>Mudança necessária</th><th>Contrato afetado</th></tr></thead><tbody><tr><td>Orquestração</td><td>`14-DOCUMENTATION-COVERAGE-AND-STATUS.md` / planos novos</td><td>Converter lacunas reais em waves executáveis e paralelizáveis.</td><td>Não</td></tr><tr><td>QA real</td><td>`scripts/collect-qa-evidence.sh`, `qa-evidence/*`, `DAILY_USE_QA.md`</td><td>Rodar sessões longas USB/Tailnet e salvar evidências comparáveis.</td><td>Não</td></tr><tr><td>Input</td><td>`InputIngress.swift`, `InputClient.kt`, `RemoteInputProtocol.*`, `RemoteMouseCapture.kt`, `RemoteKeyboardCapture.kt`</td><td>Corrigir apenas bugs encontrados em hardware real; não redesenhar v1 sem métrica.</td><td>Sim, se alterar framing/eventos</td></tr><tr><td>Virtual HID</td><td>`KarabinerVirtualHIDBackend.swift`, `VirtualHIDHelperInstaller.swift`, `VirtualHIDHelperSources/main.swift`</td><td>Validar backend real, fallback CGEvent e mensagens de permissão.</td><td>Sim</td></tr><tr><td>Segurança</td><td>`RemoteSessionStore.swift`, `WirelessAuth.swift`, `AuthHandshake.kt`, `InputServer.swift`</td><td>Validar revogação/reset durante sessão ativa e input channel sem sessão.</td><td>Sim</td></tr><tr><td>Tailnet</td><td>`EndpointMode.*`, `EndpointAdvertiser.swift`, `NetworkRoute.kt`, `PairingURL.*`</td><td>Só ajustar se QA mostrar regressão em MagicDNS/IP 100.x/split tunneling.</td><td>Sim</td></tr><tr><td>Distribuição</td><td>`scripts/build_mac.sh`, notarização, keystore Android, release scripts</td><td>Sair de build local para release instalável e reproduzível.</td><td>Não, mas afeta instalação</td></tr></tbody></table>
+<p><strong>Ordem recomendada:</strong> Wave 0 obrigatória → quatro trilhos paralelos → consolidação única → release candidate. Não mexer em root/QUIC/DriverKit próprio antes de fechar QA real.</p>
+<pre><code>flowchart LR
+  W0[Wave 0: baseline e auditoria] --&gt; A[Trilho A: QA longa USB/Tailnet]
+  W0 --&gt; B[Trilho B: Input real + Virtual HID]
+  W0 --&gt; C[Trilho C: Segurança e revogação]
+  W0 --&gt; D[Trilho D: Release/permissões]
+  A --&gt; E[Consolidação de bugs]
+  B --&gt; E
+  C --&gt; E
+  D --&gt; E
+  E --&gt; F[Release candidate]
+  F --&gt; G[Decisões condicionais: root, QUIC, DriverKit próprio]</code></pre>
+<h2>4. Testes</h2>
+<h3>Testes existentes relevantes</h3>
+<table><thead><tr><th>Arquivo</th><th>O que cobre</th><th>Relevância</th></tr></thead><tbody><tr><td>`09-TEST-PLAN.md`</td><td>Rede, vídeo, teclado, mouse, input sob carga, lifecycle, segurança e permissões.</td><td>É a matriz principal da execução.</td></tr><tr><td>`MacHost/Tests/SideScreenTests/*`</td><td>Protocolo, sessão, input ingress, fail-safe, backend e utilitários Mac.</td><td>Garante que hardening não quebre estado crítico.</td></tr><tr><td>`AndroidClient/app/src/test/*`</td><td>Parser de QR, NetworkRoute, InputClient, RemoteInputProtocol e comportamento Android.</td><td>Protege Tailnet e protocolo.</td></tr><tr><td>`scripts/collect-qa-evidence.sh`</td><td>Coleta preflight, artefatos, Tailnet, assinatura, testes e smoke.</td><td>Vira fonte objetiva para aprovação.</td></tr><tr><td>`scripts/android-device-smoke.sh`</td><td>Instala/abre app, toca Connect/Reconnect e valida stream quando solicitado.</td><td>Reduz QA manual repetitivo.</td></tr><tr><td>`scripts/open-input-qa.sh`</td><td>Harness de QA manual de input.</td><td>Essencial para teclado/mouse Bluetooth e Virtual HID.</td></tr></tbody></table>
+<h3>Testes que devem ser ajustados</h3>
+<table><thead><tr><th>Arquivo</th><th>Motivo</th><th>Ação</th></tr></thead><tbody><tr><td>`DAILY_USE_QA.md`</td><td>Precisa refletir execução real de 30 min por modo.</td><td>Registrar matriz USB/Tailnet, hardware usado, duração, resultado e path de evidência.</td></tr><tr><td>`scripts/collect-qa-evidence.sh`</td><td>Pode precisar consolidar logs de input/hardware/revogação em um pacote só.</td><td>Adicionar flags ou seções apenas se a evidência atual não bastar.</td></tr><tr><td>`scripts/open-input-qa.sh`</td><td>Precisa gerar JSON comparável entre CGEvent e VirtualHID.</td><td>Garantir saída com backend ativo, teclado, mouse, layout, erros e notas humanas.</td></tr><tr><td>Testes de segurança existentes</td><td>Revogação durante sessão ativa é lacuna real.</td><td>Acrescentar teste automatizado se a base permitir simular sessão/input ativa sem hardware.</td></tr></tbody></table>
+<h3>Novos testes necessários</h3>
+<table><thead><tr><th>Módulo</th><th>Arquivo</th><th>O que testar</th><th>Tipo</th><th>Justificativa</th></tr></thead><tbody><tr><td>QA real</td><td>`DAILY_USE_QA.md` / `qa-evidence/*`</td><td>Tailnet 30 min com vídeo + input dedicado em `P/P+1`.</td><td>manual/e2e</td><td>O smoke curto provou conexão; uso diário exige duração.</td></tr><tr><td>QA real</td><td>`DAILY_USE_QA.md` / `qa-evidence/*`</td><td>USB 30 min com vídeo + input dedicado.</td><td>manual/e2e</td><td>USB é baseline e não pode regredir.</td></tr><tr><td>Input</td><td>`scripts/open-input-qa.sh` output</td><td>Teclado Bluetooth: letras, números, modificadores, acentos/dead keys, ABNT2 quando aplicável.</td><td>manual/hardware</td><td>Unit test não prova stack Bluetooth/OEM.</td></tr><tr><td>Input</td><td>`scripts/open-input-qa.sh` output</td><td>Mouse Bluetooth: relativo, botões, drag, scroll vertical/horizontal.</td><td>manual/hardware</td><td>É o coração da experiência “MacBook remoto”.</td></tr><tr><td>Virtual HID</td><td>`qa-evidence/*`</td><td>Terminal/Finder/navegador/editor com backend VirtualHID ativo e fallback CGEvent documentado.</td><td>manual/e2e</td><td>Código compilar não prova input como dispositivo real.</td></tr><tr><td>Segurança</td><td>`qa-evidence/*` / teste Mac</td><td>Revogar tablet durante stream e confirmar queda/rejeição do input.</td><td>manual + unit/integration</td><td>Controle remoto do Mac é sensível.</td></tr><tr><td>Release</td><td>`qa-evidence/*`</td><td>App assinado/notarizado e Android release assinado rodam os smokes principais.</td><td>release smoke</td><td>Build local não é produto distribuível.</td></tr></tbody></table>
+<h3>Edge cases</h3>
+<ul><li>Tailnet em DERP/relay com RTT alto.</li><li>MagicDNS falha, mas IP 100.x funciona.</li><li>App excluído do split tunneling no Tailscale Android.</li><li>Android perde foco segurando Shift/Command ou botão esquerdo.</li><li>Pointer capture perdido no meio de drag.</li><li>Revogação/reset token enquanto input channel está ativo.</li><li>VirtualHID indisponível ou sem permissão; fallback CGEvent precisa ser explícito.</li><li>Rebuild Mac troca identidade de assinatura e macOS pede TCC de novo.</li><li>Teclas Meta/Home/Power/Recents não chegam ao app sem root; diagnóstico deve tratar como limitação, não como bug.</li></ul>
+<h3>O que não precisa de teste novo</h3>
+<ul><li>Reescrita de vídeo ScreenCaptureKit/VideoToolbox/MediaCodec: fora do escopo; vídeo existente deve ser validado por smoke e sessão longa.</li><li>Root Android: futuro intencional; não entra como bloqueador.</li><li>QUIC/single-port: só merece experimento se TCP multi-channel falhar em métrica real.</li><li>DriverKit próprio: Karabiner VirtualHID/helper cobre o caminho prático atual.</li></ul>
+<h2>5. I18N</h2>
+<p><strong>Novas strings necessárias?</strong> Sim, apenas se os trilhos revelarem lacuna de UX/diagnóstico.</p>
+<table><thead><tr><th>Chave/área</th><th>Texto base</th><th>Módulo</th><th>Arquivo</th><th>Ação</th></tr></thead><tbody><tr><td>Diagnóstico Tailnet</td><td>“Tailscale/VPN não parece ativo para este app.”</td><td>Android</td><td>`DiagLog.kt` / UI Wireless</td><td>Criar/ajustar se ausente</td></tr><tr><td>Input backend</td><td>“Backend de input ativo: Virtual HID / CGEvent fallback.”</td><td>Mac/Android</td><td>Settings/diagnóstico</td><td>Criar/ajustar se ausente</td></tr><tr><td>Revogação</td><td>“Este tablet foi revogado. Escaneie um novo QR para parear novamente.”</td><td>Android</td><td>UI de conexão</td><td>Criar/ajustar se ausente</td></tr><tr><td>Permissões macOS</td><td>“Conceda Screen Recording, Accessibility e Input Monitoring para habilitar vídeo/input.”</td><td>Mac</td><td>Settings/onboarding</td><td>Criar/ajustar se ausente</td></tr><tr><td>VirtualHID indisponível</td><td>“Virtual HID indisponível; usando fallback CGEvent.”</td><td>Mac</td><td>Settings/diagnóstico</td><td>Criar/ajustar se ausente</td></tr></tbody></table>
+<p><strong>Arquivos a atualizar:</strong></p>
+<ul><li><code>AndroidClient/app/src/main/res/values/strings.xml</code>, se existir.</li><li>UI/Settings Android, se strings ainda estiverem hardcoded.</li><li>UI/Settings Mac, se strings ainda estiverem hardcoded.</li><li>Documentação de QA se mensagens forem alteradas.</li></ul>
+<p><strong>Strings hardcoded a evitar:</strong></p>
+<ul><li>Mensagens de erro Tailnet.</li><li>Mensagens de permissão macOS.</li><li>Status de backend de input.</li><li>Avisos de limitação sem root.</li><li>Mensagens de revogação/re-pair.</li></ul>
+<h2>6. Riscos e Mitigação</h2>
+<table><thead><tr><th>#</th><th>Risco</th><th>Probabilidade</th><th>Impacto</th><th>Mitigação</th></tr></thead><tbody><tr><td>1</td><td>O plano tratar specs como código real e ignorar divergência local.</td><td>Média</td><td>Retrabalho e falso progresso.</td><td>Wave 0 compara specs, testes e código antes de correção.</td></tr><tr><td>2</td><td>QA longa consumir tempo humano demais.</td><td>Alta</td><td>Gargalo no tablet/hardware.</td><td>Separar automações em paralelo e reservar tablet só para sessões que precisam dele.</td></tr><tr><td>3</td><td>VirtualHID falhar por permissão/driver.</td><td>Média</td><td>Produto volta a parecer remote desktop comum.</td><td>Fallback CGEvent documentado, checklist de permissões e smoke específico.</td></tr><tr><td>4</td><td>Input parecer bom em unit test e ruim com Bluetooth real.</td><td>Alta</td><td>Experiência diária ruim.</td><td>`open-input-qa.sh` + matriz hardware real vira gate.</td></tr><tr><td>5</td><td>Revogação funcionar no código, mas não derrubar sessão ativa real.</td><td>Média</td><td>Risco de segurança.</td><td>Teste manual durante stream + teste automatizado se possível.</td></tr><tr><td>6</td><td>Release assinado quebrar TCC/notarização.</td><td>Média</td><td>Usuário não consegue instalar/usar.</td><td>Tratar release/permissões como trilho próprio, não como última hora.</td></tr><tr><td>7</td><td>Root/QUIC virarem distração antes da estabilidade.</td><td>Alta</td><td>Complexidade desnecessária.</td><td>Bloquear por decisão condicional baseada em evidência.</td></tr></tbody></table>
+<h2>7. Plano de Implementação</h2>
+<h3>Wave 0: Baseline, auditoria e congelamento de premissas</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 0.1: Rodar <code>swift test</code> -&gt; Verificação: suíte Mac verde ou lista objetiva de falhas.</li><li><span class="box"></span>Passo 0.2: Rodar <code>. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest</code> -&gt; Verificação: suíte Android verde ou lista objetiva de falhas.</li><li><span class="box"></span>Passo 0.3: Rodar <code>./scripts/preflight.sh --full</code> -&gt; Verificação: passes/warnings/falhas arquivados.</li><li><span class="box"></span>Passo 0.4: Rodar smoke curto com <code>./scripts/collect-qa-evidence.sh --tap-connect</code> -&gt; Verificação: pacote em <code>qa-evidence/</code> criado.</li><li><span class="box"></span>Passo 0.5: Conferir se o código local contém os módulos citados em <code>14-DOCUMENTATION-COVERAGE-AND-STATUS.md</code> -&gt; Verificação: checklist “implementado / ausente / divergente”.</li><li><span class="box"></span>Passo 0.6: Congelar trilhos paralelos e dono de cada trilho -&gt; Verificação: cada trilho tem entrada, saída e bloqueadores claros.</li></ul>
+<h3>Wave 1: Execução paralela por trilhos</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 1.A: Trilho QA — Rodar Tailnet 30 min com <code>--no-reverse --tailnet-host ... --expect-stream --tap-connect</code> -&gt; Verificação: vídeo, input <code>P/P+1</code>, logs e latência arquivados.</li><li><span class="box"></span>Passo 1.B: Trilho QA — Rodar USB 30 min com ADB reverse para <code>P</code> e <code>P+1</code> -&gt; Verificação: baseline local sem regressão.</li><li><span class="box"></span>Passo 1.C: Trilho Input — Rodar <code>./scripts/open-input-qa.sh</code> com teclado/mouse Bluetooth -&gt; Verificação: JSON salvo com backend, layout, eventos, falhas e notas.</li><li><span class="box"></span>Passo 1.D: Trilho VirtualHID — Testar Terminal, Finder, navegador e editor com VirtualHID ativo -&gt; Verificação: backend ativo documentado; fallback CGEvent documentado se acionado.</li><li><span class="box"></span>Passo 1.E: Trilho Segurança — Revogar tablet durante stream ativo -&gt; Verificação: stream/input caem, reconexão é rejeitada e logs não expõem segredo.</li><li><span class="box"></span>Passo 1.F: Trilho Release — Validar assinatura Mac, TCC, notarização pendente/ativa e Android release signing -&gt; Verificação: matriz release preenchida.</li></ul>
+<h3>Wave 2: Consolidação cirúrgica de bugs</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 2.1: Classificar achados em <code>BLOCKER</code>, <code>HIGH</code>, <code>MEDIUM</code>, <code>LOW</code> -&gt; Verificação: cada achado tem reprodução, evidência e owner.</li><li><span class="box"></span>Passo 2.2: Corrigir apenas bugs que bloqueiam uso diário ou segurança -&gt; Verificação: diff pequeno e teste específico.</li><li><span class="box"></span>Passo 2.3: Reexecutar testes afetados, não a fazenda inteira a cada microcorreção -&gt; Verificação: tempo de feedback menor sem perder cobertura.</li><li><span class="box"></span>Passo 2.4: Atualizar docs/QA apenas quando comportamento real mudou -&gt; Verificação: specs continuam fonte confiável.</li></ul>
+<h3>Wave 3: Release candidate interno</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 3.1: Rodar <code>./scripts/preflight.sh --full</code> final -&gt; Verificação: 0 falhas; warnings aceitos explicitamente.</li><li><span class="box"></span>Passo 3.2: Rodar smoke Tailnet real final -&gt; Verificação: pacote de evidência com stream e input.</li><li><span class="box"></span>Passo 3.3: Rodar smoke USB final -&gt; Verificação: não regressão do caminho local.</li><li><span class="box"></span>Passo 3.4: Rodar QA input final com hardware -&gt; Verificação: teclado/mouse aprovado ou limitações documentadas.</li><li><span class="box"></span>Passo 3.5: Emitir decisão “pronto para uso diário / não pronto” -&gt; Verificação: critérios humanos da seção 10 preenchidos.</li></ul>
+<h3>Wave 4: Decisões condicionais pós-RC</h3>
+<ul class="checklist"><li><span class="box"></span>Passo 4.1: Avaliar se TCP multi-channel é gargalo real -&gt; Verificação: métricas de input/video latency justificam ou rejeitam QUIC.</li><li><span class="box"></span>Passo 4.2: Avaliar se VirtualHID/helper é suficiente -&gt; Verificação: só abrir DriverKit próprio se houver bloqueio comprovado.</li><li><span class="box"></span>Passo 4.3: Avaliar root discovery passivo -&gt; Verificação: só iniciar se limitações sem root bloquearem seu uso real.</li></ul>
+<h2>8. Checklist de Validação</h2>
+<ul class="checklist"><li><span class="box"></span>Build dos módulos alterados: <code>swift test</code> e <code>. scripts/android-env.sh &amp;&amp; ./gradlew testDebugUnitTest</code></li><li><span class="box"></span>Testes relevantes: <code>./scripts/preflight.sh --full</code></li><li><span class="box"></span>Lint/typecheck relevantes: usar o que já existir no projeto; se não existir, não inventar ferramenta nesta rodada.</li><li><span class="box"></span>Confirmar que testes novos passam.</li><li><span class="box"></span>Confirmar que testes afetados foram atualizados.</li><li><span class="box"></span>Confirmar que I18N foi atualizado, quando aplicável.</li><li><span class="box"></span>Confirmar critérios de aceite do HTML visual.</li><li><span class="box"></span>Confirmar pacote de evidência Tailnet 30 min.</li><li><span class="box"></span>Confirmar pacote de evidência USB 30 min.</li><li><span class="box"></span>Confirmar input QA com hardware Bluetooth real.</li><li><span class="box"></span>Confirmar VirtualHID real ou fallback CGEvent explicitamente documentado.</li><li><span class="box"></span>Confirmar revogação durante sessão ativa.</li><li><span class="box"></span>Confirmar que root/QUIC/DriverKit próprio continuam fora do caminho crítico, salvo evidência contrária.</li></ul>
+<h2>9. Revisão Crítica</h2>
+<p><strong>Resultado do advogado do diabo:</strong> gaps abaixo.</p>
+<table><thead><tr><th>Severidade</th><th>Gap encontrado</th><th>Evidência</th><th>Ajuste aplicado</th></tr></thead><tbody><tr><td>CRÍTICO</td><td>O plano poderia virar uma lista de tarefas antiga e ignorar que várias coisas já foram implementadas.</td><td>`14-DOCUMENTATION-COVERAGE-AND-STATUS.md` marca implementações e lacunas reais.</td><td>Wave 0 obriga comparação com status atual e código local.</td></tr><tr><td>ALTO</td><td>Há gargalo físico: o mesmo tablet/hardware não roda QA Tailnet, USB e input simultaneamente.</td><td>Lacunas de uso diário dependem do `SM_X610` e periféricos Bluetooth.</td><td>Paralelismo separado em automação vs. testes com recurso físico único.</td></tr><tr><td>ALTO</td><td>VirtualHID pode compilar, mas falhar na prática por permissão/system extension.</td><td>Specs indicam que helper/Karabiner precisam smoke real.</td><td>Plano dedicado de VirtualHID e fallback CGEvent.</td></tr><tr><td>MÉDIO</td><td>Release pode ser deixado para o fim e revelar problema de TCC/notarização tarde demais.</td><td>Preflight ainda tinha warnings de notarização/credenciais.</td><td>Release/permissões vira trilho paralelo desde Wave 1.</td></tr><tr><td>MÉDIO</td><td>Root e QUIC são tecnicamente interessantes e podem roubar foco.</td><td>Specs classificam ambos como futuro condicional.</td><td>Wave 4 só permite decisão por métrica.</td></tr></tbody></table>
+<h2>10. Critérios de Aprovação Humana</h2>
+<p>Estes são os itens que devem aparecer resumidos no HTML:</p>
+<ul><li>O app roda por 30 min via Tailnet no tablet real, com vídeo e input dedicado funcionando.</li><li>O app roda por 30 min via USB sem regredir o caminho local.</li><li>Teclado e mouse Bluetooth passam na matriz manual essencial: digitação, modificadores, drag, scroll e desconexão sem tecla presa.</li><li>VirtualHID funciona em apps reais do macOS ou o fallback CGEvent fica claramente documentado como limitação temporária.</li><li>Revogar/resetar o tablet durante sessão ativa derruba input/stream e impede reconexão sem novo pareamento.</li><li>O pacote de evidências permite reproduzir o estado da aprovação sem “confia em mim”.</li><li>Release Mac/Android tem caminho claro: assinatura, permissões, notarização/keystore e warnings explicitamente aceitos ou resolvidos.</li></ul>
+<h2>Status</h2>
+<p>Nada deve ser implementado até aprovação explícita.</p>
+  </div>
+</main>
+</body>
+</html>
