@@ -12,7 +12,7 @@ Checklist prático para provar uso diário real. Smoke curto é sinal de vida, n
 | Stream observado | `android-device-smoke.txt` e `qa-observation-summary.txt` mostram frame flow ou frames recebidos |
 | Input observado | `android-device-smoke.txt` mostra `Input channel observed on P+1` ou diagnóstico equivalente |
 | Backend ativo | `qa-observation-summary.txt`, diagnóstico Android ou `/tmp/sidescreen.log` mostram `CGEvent` ou `Virtual HID` quando disponível |
-| Tailnet | `tailscale-status.txt` e `tailnet-diagnostics.txt` registram host, rota e tablet online |
+| Tailnet | `tailscale-status.txt` e `tailnet-diagnostics.txt` registram host, rota e dispositivo Android online |
 | Input QA | `input-qa-checklist.*` e `sidescreen-input-qa-*.json` ficam dentro da mesma pasta de evidência |
 
 ## Ambiente
@@ -20,7 +20,7 @@ Checklist prático para provar uso diário real. Smoke curto é sinal de vida, n
 | Item | Como provar |
 |---|---|
 | Preflight completo | `./scripts/preflight.sh --full` termina sem falhas; warnings viram pendência explícita |
-| Mac app abre sem crash | `open SideScreen.app`, confirmar ícone/menu e janela de settings |
+| Mac app abre sem crash | `open RemoteMac.app`, confirmar ícone/menu e janela de settings |
 | Screen Recording | Status no Mac fica `Granted`; iniciar stream sem alerta bloqueante |
 | Accessibility ou Virtual HID | Status fica `Granted`, `Ready` ou `Ready via helper`; input remoto controla o Mac |
 | ADB USB | `adb devices -l` mostra `device` |
@@ -36,7 +36,7 @@ Checklist prático para provar uso diário real. Smoke curto é sinal de vida, n
 | Tailnet diário | 30 min | `./scripts/collect-qa-evidence.sh --duration 1800 --expect-stream --tap-connect --no-reverse --tailnet-host <host-tailnet-do-mac>` | MagicDNS/IP Tailnet conecta, stream flui, input chega em `P+1` e backend aparece quando disponível |
 | Tailnet fallback IP 100.x | 30 min se MagicDNS falhar | `./scripts/collect-qa-evidence.sh --duration 1800 --expect-stream --tap-connect --no-reverse --tailnet-host <ip-100.x-do-mac>` | Fallback funciona ou a falha fica diagnosticada |
 | USB baixa latência | 15 min | `./scripts/android-device-smoke.sh --duration 900 --expect-stream --tap-connect` | Mouse/teclado continuam responsivos sob uso leve |
-| Sleep/wake do tablet | 5 ciclos | Manual com logs anexados | Volta para Reconnect ou reconecta sem estado quebrado |
+| Sleep/wake do dispositivo Android | 5 ciclos | Manual com logs anexados | Volta para Reconnect ou reconecta sem estado quebrado |
 
 ## Input QA: CGEvent vs Virtual HID
 
@@ -78,11 +78,11 @@ Use `./scripts/open-input-qa.sh`, digite pelo Android nos campos da página e ba
 
 | Falha simulada | Esperado |
 |---|---|
-| Desligar Wi-Fi do tablet por 3s | UI mostra tentativa de reconexão e volta sozinha se a rede voltar |
+| Desligar Wi-Fi do dispositivo Android por 3s | UI mostra tentativa de reconexão e volta sozinha se a rede voltar |
 | Manter rede fora por mais de 20s | Para em estado Reconnect, sem loop infinito |
 | Clicar Disconnect | Nenhuma tentativa automática depois |
 | Reset Token no Mac | Android mostra re-pair, sem continuar tentando |
-| Revogar tablet durante stream | Stream/input caem e reconexão exige novo pareamento |
+| Revogar dispositivo Android durante stream | Stream/input caem e reconexão exige novo pareamento |
 | Mudar Tailnet/LAN/porta | Android pede novo QR |
 | Perder foco segurando tecla/botão | `AllInputsUp` aparece nos logs; nada fica preso |
 
@@ -91,7 +91,7 @@ Use `./scripts/open-input-qa.sh`, digite pelo Android nos campos da página e ba
 | Permissão | Obrigatória para | Prova prática |
 |---|---|---|
 | Screen Recording | Captura de vídeo | Iniciar stream sem alerta de permissão |
-| Accessibility | Toque/teclado via CGEvent | Tocar no tablet move/clica no Mac |
+| Accessibility | Toque/teclado via CGEvent | Tocar no dispositivo Android move/clica no Mac |
 | Virtual HID helper | Input sem depender de CGEvent | Status `Virtual HID` fica `Ready` ou `Ready via helper` |
 | Local Network | Wireless LAN | Tablet alcança o host:porta do QR |
 
@@ -99,9 +99,9 @@ Use `./scripts/open-input-qa.sh`, digite pelo Android nos campos da página e ba
 
 | Artefato | Verificação |
 |---|---|
-| Mac `.app` | `codesign --verify --deep --strict --verbose=2 SideScreen.app` |
+| Mac `.app` | `codesign --verify --deep --strict --verbose=2 RemoteMac.app` |
 | Mac `.dmg` | Montar DMG, arrastar para Applications, abrir |
-| Mac notarizado | `SIDESCREEN_CODESIGN_IDENTITY` + `SIDESCREEN_NOTARIZE=1 ./scripts/build_mac.sh`; `spctl -a -vv SideScreen.app` aprova |
+| Mac notarizado | `SIDESCREEN_CODESIGN_IDENTITY` + `SIDESCREEN_NOTARIZE=1 ./scripts/build_mac.sh`; `spctl -a -vv RemoteMac.app` aprova |
 | Gatekeeper Mac | `./scripts/verify-mac-distribution.sh` não pode reportar rejeição para distribuição |
 | Checksums | `./scripts/generate-checksums.sh` gera SHA256 para DMG, APK e AAB |
 | Android debug APK | `adb install -r app-debug.apk` |
@@ -111,8 +111,8 @@ Use `./scripts/open-input-qa.sh`, digite pelo Android nos campos da página e ba
 
 ## Pendências Que Não Dá Para Fingir
 
-- Teste de 30 min exige tablet real e Mac app rodando; não aprove isso por extrapolação.
-- Teste Tailnet só vale com tablet Android online no `tailscale status`.
+- Teste de 30 min exige dispositivo Android real e Mac app rodando; não aprove isso por extrapolação.
+- Teste Tailnet só vale com dispositivo Android online no `tailscale status`.
 - Teste de input só vale com teclado/mouse reais e relatório JSON anexado.
 - Virtual HID só conta como aprovado quando o diagnóstico mostra backend ativo em apps reais.
 - Notarização Apple exige Apple Developer ID, senha específica de app e Team ID.

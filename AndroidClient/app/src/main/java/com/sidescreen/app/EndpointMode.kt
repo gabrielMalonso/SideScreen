@@ -32,7 +32,7 @@ enum class EndpointMode {
         get() =
             when (this) {
                 LAN ->
-                    "Check that the Mac and tablet are on the same Wi-Fi, the Mac app is running, and the firewall allows the selected port."
+                    "Check that the Mac and Android device are on the same Wi-Fi, the Mac app is running, and the firewall allows the selected port."
                 TAILNET ->
                     "Check Tailscale on both devices, make sure Remote Mac is not excluded from split tunneling, and try switching between MagicDNS and the Mac's 100.x Tailnet IP."
                 MANUAL ->

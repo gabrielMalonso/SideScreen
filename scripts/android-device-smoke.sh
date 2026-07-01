@@ -161,7 +161,7 @@ if ! sidescreen_select_adb_device >/tmp/sidescreen-device-select.out 2>&1; then
     warn "No authorized Android device connected via ADB"
     sed 's/^/   /' /tmp/sidescreen-device-select.out
     echo ""
-    echo "Connect the tablet by USB, enable USB debugging, accept the prompt, then rerun this script."
+    echo "Connect the Android device by USB, enable USB debugging, accept the prompt, then rerun this script."
     exit 2
 fi
 

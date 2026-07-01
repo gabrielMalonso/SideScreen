@@ -64,7 +64,7 @@ TCC permissions are tied to the app identity. Changing from ad-hoc to Apple Deve
 
 ## Android Install Notes
 
-Use the APK for direct installation and the AAB for store-style publication. A debug-signed `app-release.apk` is useful for local smoke tests only. If the tablet already has a build signed by a different key, uninstall the old app before installing the real release.
+Use the APK for direct installation and the AAB for store-style publication. A debug-signed `app-release.apk` is useful for local smoke tests only. If the Android device already has a build signed by a different key, uninstall the old app before installing the real release.
 
 For USB mode:
 

@@ -55,12 +55,12 @@ pkill -x SideScreen 2>/dev/null || true
 sleep 0.3
 
 # Check if app bundle exists
-if [ -d "$ROOT_DIR/SideScreen.app" ]; then
-    echo "  Opening SideScreen.app..."
+if [ -d "$ROOT_DIR/RemoteMac.app" ]; then
+    echo "  Opening RemoteMac.app..."
     if [ "${#APP_ARGS[@]}" -gt 0 ]; then
-        open "$ROOT_DIR/SideScreen.app" --args "${APP_ARGS[@]}"
+        open "$ROOT_DIR/RemoteMac.app" --args "${APP_ARGS[@]}"
     else
-        open "$ROOT_DIR/SideScreen.app"
+        open "$ROOT_DIR/RemoteMac.app"
     fi
 elif [ -f "$ROOT_DIR/MacHost/.build/out/Products/Release/SideScreen" ]; then
     echo "  Running release binary..."
@@ -72,11 +72,11 @@ else
     echo "❌ No build found. Building now..."
     "$SCRIPT_DIR/build_mac.sh"
     echo ""
-    echo "  Opening SideScreen.app..."
+    echo "  Opening RemoteMac.app..."
     if [ "${#APP_ARGS[@]}" -gt 0 ]; then
-        open "$ROOT_DIR/SideScreen.app" --args "${APP_ARGS[@]}"
+        open "$ROOT_DIR/RemoteMac.app" --args "${APP_ARGS[@]}"
     else
-        open "$ROOT_DIR/SideScreen.app"
+        open "$ROOT_DIR/RemoteMac.app"
     fi
 fi
 

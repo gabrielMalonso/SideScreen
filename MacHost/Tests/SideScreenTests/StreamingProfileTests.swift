@@ -13,7 +13,7 @@ final class StreamingProfileTests: XCTestCase {
     }
 
     func testLowBandwidthProfileAppliesConcreteStreamingSettings() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         settings.applyStreamingProfile(.lowBandwidth)
 
@@ -25,7 +25,7 @@ final class StreamingProfileTests: XCTestCase {
     }
 
     func testQualityProfileAppliesSharpDailySettings() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         settings.applyStreamingProfile(.quality)
 
@@ -37,7 +37,7 @@ final class StreamingProfileTests: XCTestCase {
     }
 
     func testResetUsesBalancedDailyRefreshRate() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         settings.refreshRate = 120
         settings.resetToDefaults()
@@ -46,7 +46,7 @@ final class StreamingProfileTests: XCTestCase {
     }
 
     func testManualChangeMarksProfileAsCustom() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         settings.applyStreamingProfile(.productivity)
         settings.bitrate = 800
@@ -56,7 +56,7 @@ final class StreamingProfileTests: XCTestCase {
     }
 
     func testGamingBoostEffectiveBitrateMatchesEncoderCap() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         settings.gamingBoost = true
 

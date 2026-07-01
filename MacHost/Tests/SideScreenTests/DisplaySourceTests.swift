@@ -14,20 +14,20 @@ final class DisplaySourceTests: XCTestCase {
     }
 
     func testSettingsDefaultToNoPinnedRemoteDisplay() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
 
         XCTAssertNil(settings.selectedRemoteDisplayID)
     }
 
     func testSelectedRemoteDisplayPersistsAndResets() {
-        let settings = DisplaySettings()
+        let settings = RemoteSessionSettings()
         settings.selectedRemoteDisplayID = 77
 
-        XCTAssertEqual(DisplaySettings().selectedRemoteDisplayID, 77)
+        XCTAssertEqual(RemoteSessionSettings().selectedRemoteDisplayID, 77)
 
         settings.resetToDefaults()
 
-        XCTAssertNil(DisplaySettings().selectedRemoteDisplayID)
+        XCTAssertNil(RemoteSessionSettings().selectedRemoteDisplayID)
     }
 
     func testExistingDisplaySourceUsesPhysicalPixelsForStreamConfig() {

@@ -89,7 +89,7 @@ class VideoEncoder {
 
         // Short-GOP IPP: 1 keyframe per second, P-frames in between.
         // All-intra (every frame keyframe) was producing 3-5x more data than needed,
-        // saturating tablet decode/compose pipeline at high panel resolutions and
+        // saturating Android decode/compose pipelines at high panel resolutions and
         // starving Mac WindowServer with encoder load. Short-GOP IPP gives 99% of
         // the resilience (frame loss recovery within 1 second) at a fraction of
         // the per-frame cost. TCP over USB-C rarely drops, so 1s GOP is safe.

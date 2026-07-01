@@ -130,7 +130,7 @@ if [ ! -f "$APP_BINARY" ]; then
 fi
 
 # Create .app bundle
-APP_NAME="SideScreen"
+APP_NAME="RemoteMac"
 APP_DIR="$ROOT_DIR/$APP_NAME.app"
 
 echo "Creating app bundle..."
@@ -183,7 +183,7 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>NSScreenCaptureUsageDescription</key>
     <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so Android devices can reach this Mac over LAN. USB and Tailnet sessions may still work without LAN discovery.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -214,7 +214,7 @@ echo "Creating DMG..."
 DMG_DIR=$(mktemp -d)
 cp -R "$APP_DIR" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-arm64.dmg"
+DMG_PATH="$ROOT_DIR/RemoteMac-${VERSION}-mac-arm64.dmg"
 hdiutil create -volname "Remote Mac" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
 rm -rf "$DMG_DIR"
 

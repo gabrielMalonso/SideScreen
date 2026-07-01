@@ -4,8 +4,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-APP="$ROOT_DIR/SideScreen.app"
-DMG="$ROOT_DIR/SideScreen-$VERSION-mac-arm64.dmg"
+APP="$ROOT_DIR/RemoteMac.app"
+DMG="$ROOT_DIR/RemoteMac-$VERSION-mac-arm64.dmg"
 WARN=0
 FAIL=0
 DISTRIBUTION=0
@@ -51,7 +51,7 @@ issue() {
 }
 
 if [ ! -d "$APP" ]; then
-    echo "ERROR: SideScreen.app missing: $APP"
+    echo "ERROR: RemoteMac.app missing: $APP"
     exit 1
 fi
 
@@ -91,10 +91,10 @@ echo ""
 echo "## App Gatekeeper assessment"
 if spctl -a -vv "$APP" >/tmp/sidescreen-spctl-app.out 2>&1; then
     cat /tmp/sidescreen-spctl-app.out
-    echo "OK: Gatekeeper accepts SideScreen.app"
+    echo "OK: Gatekeeper accepts RemoteMac.app"
 else
     cat /tmp/sidescreen-spctl-app.out
-    issue "Gatekeeper rejects SideScreen.app. Use Developer ID signing and notarization for distribution."
+    issue "Gatekeeper rejects RemoteMac.app. Use Developer ID signing and notarization for distribution."
 fi
 
 echo ""

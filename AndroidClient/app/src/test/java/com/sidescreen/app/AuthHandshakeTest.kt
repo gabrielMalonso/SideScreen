@@ -8,18 +8,22 @@ import org.junit.Test
 class AuthHandshakeTest {
     @Test
     fun encodesGoldenBytes() {
+        val deviceName = "Pixel 9"
+        val deviceNameBytes = deviceName.toByteArray()
+        val deviceId = "device-1"
+        val deviceIdBytes = deviceId.toByteArray()
         val token = ByteArray(32) { it.toByte() }
         val secret = ByteArray(32) { (it + 64).toByte() }
         val nonce = ByteArray(16) { (it + 112).toByte() }
-        val tag = AuthHandshake.authenticationTag(secret, "device-1", "iPad Air", nonce)
-        val bytes = AuthHandshake.encodeRequest(token, "iPad Air", "device-1", secret, nonce)
+        val tag = AuthHandshake.authenticationTag(secret, deviceId, deviceName, nonce)
+        val bytes = AuthHandshake.encodeRequest(token, deviceName, deviceId, secret, nonce)
         val expected =
             byteArrayOf(0x53, 0x53, 0x57, 0x43) +
                 ByteArray(32) { it.toByte() } +
-                byteArrayOf(8) +
-                "iPad Air".toByteArray() +
-                byteArrayOf(8) +
-                "device-1".toByteArray() +
+                byteArrayOf(deviceNameBytes.size.toByte()) +
+                deviceNameBytes +
+                byteArrayOf(deviceIdBytes.size.toByte()) +
+                deviceIdBytes +
                 secret +
                 nonce +
                 tag
@@ -30,18 +34,18 @@ class AuthHandshakeTest {
     fun authenticationTagMatchesKnownVector() {
         val secret = ByteArray(32) { (it + 64).toByte() }
         val nonce = ByteArray(16) { (it + 112).toByte() }
-        val tag = AuthHandshake.authenticationTag(secret, "device-1", "iPad Air", nonce)
+        val tag = AuthHandshake.authenticationTag(secret, "device-1", "Pixel 9", nonce)
         assertArrayEquals(
             byteArrayOf(
-                223.toByte(), 220.toByte(), 62, 5, 37, 190.toByte(), 249.toByte(), 175.toByte(),
-                214.toByte(), 53, 114, 248.toByte(), 124, 48, 127, 24,
-                118, 131.toByte(), 59, 86, 102, 33, 141.toByte(), 224.toByte(),
-                108, 120, 103, 16, 0, 225.toByte(), 115, 91,
+                180.toByte(), 46, 183.toByte(), 187.toByte(), 131.toByte(), 246.toByte(), 175.toByte(), 68,
+                32, 113, 61, 165.toByte(), 66, 121, 42, 33,
+                75, 124, 70, 165.toByte(), 219.toByte(), 25, 187.toByte(), 149.toByte(),
+                238.toByte(), 172.toByte(), 245.toByte(), 146.toByte(), 190.toByte(), 148.toByte(), 44, 177.toByte(),
             ),
             tag,
         )
-        assertEquals(true, AuthHandshake.validateAuthenticationTag(tag, secret, "device-1", "iPad Air", nonce))
-        assertEquals(false, AuthHandshake.validateAuthenticationTag(ByteArray(32), secret, "device-1", "iPad Air", nonce))
+        assertEquals(true, AuthHandshake.validateAuthenticationTag(tag, secret, "device-1", "Pixel 9", nonce))
+        assertEquals(false, AuthHandshake.validateAuthenticationTag(ByteArray(32), secret, "device-1", "Pixel 9", nonce))
     }
 
     @Test

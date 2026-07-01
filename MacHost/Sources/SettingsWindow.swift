@@ -148,7 +148,7 @@ struct StreamingProfileSettings {
 // MARK: - Settings View
 
 struct SettingsView: View {
-    @ObservedObject var settings: DisplaySettings
+    @ObservedObject var settings: RemoteSessionSettings
     @State private var showPermissionAlert = false
     @State private var showResetConfirmation = false
     @State private var headerHovered = false
@@ -262,7 +262,7 @@ struct SettingsView: View {
                                     title: "Mode",
                                     status: "Remote Desktop",
                                     color: .green,
-                                    hint: "Captures an existing Mac display. It does not create an extra monitor."
+                                    hint: "Captures the selected Mac display for the remote desktop session."
                                 )
                             }
                         }
@@ -307,7 +307,7 @@ struct SettingsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Enable Touch Input")
                                             .font(.system(size: 12, weight: .medium))
-                                        Text("Control Mac from tablet touch")
+                                        Text("Control Mac from Android touch")
                                             .font(.system(size: 10))
                                             .foregroundColor(.secondary)
                                     }
@@ -434,12 +434,12 @@ struct SettingsView: View {
                                     Text("Stop server to change port")
                                         .font(.system(size: 10))
                                         .foregroundColor(.orange)
-                                } else if settings.port == DisplaySettings.maxVideoPort {
+                                } else if settings.port == RemoteSessionSettings.maxVideoPort {
                                     Text("Port 65535 is reserved for input, so video is capped at 65534.")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 } else if settings.connectionMode == .wireless {
-                                    Text("Changing the port invalidates existing pairings — re-scan the QR on each tablet.")
+                                    Text("Changing the port invalidates existing pairings — re-scan the QR on each Android device.")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 } else if settings.port != 54321 {
@@ -687,7 +687,7 @@ struct SettingsView: View {
                                     StatusRow(title: "ADB reverse",
                                               status: settings.adbReverseConfigured ? "OK" : "Pending",
                                               color: settings.adbReverseConfigured ? .green : .orange,
-                                              hint: "Whether `adb reverse tcp:\(settings.port) tcp:\(settings.port)` is currently configured. The Mac app sets this up automatically when you click Start. Goes green within ~2 seconds after the tablet is plugged in and authorized.")
+                                              hint: "Whether `adb reverse tcp:\(settings.port) tcp:\(settings.port)` is currently configured. The Mac app sets this up automatically when you click Start. Goes green within ~2 seconds after the Android device is plugged in and authorized.")
                                     StatusRow(title: "USB device",
                                               status: settings.usbDeviceConnected ? "Detected" : "Not detected",
                                               color: settings.usbDeviceConnected ? .green : .red,
@@ -696,11 +696,11 @@ struct SettingsView: View {
                                     StatusRow(title: "WiFi",
                                               status: settings.wifiConnected ? "Connected" : "Disconnected",
                                               color: settings.wifiConnected ? .green : .red,
-                                              hint: "Whether the Mac currently has a working internet route. Wireless mode requires the Mac to be on a WiFi (or Ethernet) network — the same network the tablet is on.")
+                                              hint: "Whether the Mac currently has a working internet route. Wireless mode requires the Mac to be on a WiFi (or Ethernet) network — the same network the Android device is on.")
                                     StatusRow(title: "Listening on",
                                               status: settings.listeningAddress.map { "\($0):\(settings.port)" } ?? "—",
                                               color: settings.listeningAddress != nil ? .green : .secondary,
-                                              hint: "The LAN address the tablet must reach. The QR code embeds this exact host:port — if it changes (e.g. you switch WiFi), re-scan the new QR on the tablet.")
+                                              hint: "The LAN address the Android device must reach. The QR code embeds this exact host:port — if it changes (e.g. you switch WiFi), re-scan the new QR on the Android device.")
                                 }
 
                                 if !settings.hasScreenRecordingPermission {
@@ -740,7 +740,7 @@ struct SettingsView: View {
                                             Text("Accessibility Needed for Remote Input")
                                                 .font(.system(size: 12, weight: .medium))
                                         }
-                                        Text("Grant this if you want tablet touch, mouse, or keyboard input to control the Mac. Video streaming still works without it.")
+                                        Text("Grant this if you want Android touch, mouse, or keyboard input to control the Mac. Video streaming still works without it.")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
                                         Button(action: {
@@ -1016,9 +1016,9 @@ struct BitrateButton: View {
     }
 }
 
-// MARK: - Display Settings
+// MARK: - Remote Session Settings
 
-class DisplaySettings: ObservableObject {
+class RemoteSessionSettings: ObservableObject {
     private let defaults = UserDefaults.standard
     private let keyPrefix = "SideScreen_"
     private var applyingProfile = false
@@ -1088,7 +1088,6 @@ class DisplaySettings: ObservableObject {
     }
 
     // Runtime state (not persisted)
-    @Published var displayCreated = false
     @Published var activeDisplaySourceName: String = "None"
     @Published var activeDisplaySourceKind: String = "none"
     @Published var clientConnected = false
@@ -1133,7 +1132,7 @@ class DisplaySettings: ObservableObject {
     var onResetWirelessPairing: (() -> Void)?
 
     init() {
-        self.refreshRate = defaults.object(forKey: keyPrefix + "refreshRate") as? Int ?? 60  // Default: 60 — balanced for most tablets. 120 may saturate high-res panel pipelines.
+        self.refreshRate = defaults.object(forKey: keyPrefix + "refreshRate") as? Int ?? 60  // Default: 60 — balanced for most Android devices. 120 may saturate high-res panel pipelines.
         self.bitrate = defaults.object(forKey: keyPrefix + "bitrate") as? Int ?? 1000  // Default: 1000 Mbps
         self.quality = defaults.string(forKey: keyPrefix + "quality") ?? "ultralow"  // Default: fastest encoding
         self.gamingBoost = defaults.bool(forKey: keyPrefix + "gamingBoost")
@@ -1233,7 +1232,7 @@ class DisplaySettings: ObservableObject {
 // MARK: - Window Controller
 
 class SettingsWindowController: NSWindowController, NSWindowDelegate {
-    convenience init(settings: DisplaySettings) {
+    convenience init(settings: RemoteSessionSettings) {
         let window = ConstrainedWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 780),
             styleMask: [.titled, .closable, .miniaturizable],
@@ -1310,7 +1309,7 @@ class ConstrainedWindow: NSWindow {
 // MARK: - Wireless Section
 
 struct WirelessSection: View {
-    @ObservedObject var settings: DisplaySettings
+    @ObservedObject var settings: RemoteSessionSettings
     let pairedDeviceStore: PairedDeviceStore
     @State private var qrImage: NSImage?
     @State private var qrUnavailableReason: String?

@@ -45,9 +45,9 @@ final class PairingURLTests: XCTestCase {
     }
 
     func testVideoPortIsCappedBeforeInputPortCollision() {
-        XCTAssertEqual(DisplaySettings.clampedVideoPort(54321), 54321)
-        XCTAssertEqual(DisplaySettings.clampedVideoPort(65534), 65534)
-        XCTAssertEqual(DisplaySettings.clampedVideoPort(65535), 65534)
-        XCTAssertEqual(DisplaySettings.clampedVideoPort(0), 1)
+        XCTAssertEqual(RemoteSessionSettings.clampedVideoPort(54321), 54321)
+        XCTAssertEqual(RemoteSessionSettings.clampedVideoPort(65534), 65534)
+        XCTAssertEqual(RemoteSessionSettings.clampedVideoPort(65535), 65534)
+        XCTAssertEqual(RemoteSessionSettings.clampedVideoPort(0), 1)
     }
 }

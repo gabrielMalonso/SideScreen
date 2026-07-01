@@ -35,7 +35,7 @@ done
 
 if [ "${#FILES[@]}" -eq 0 ]; then
     FILES=(
-        "$ROOT_DIR/SideScreen-$VERSION-mac-arm64.dmg"
+        "$ROOT_DIR/RemoteMac-$VERSION-mac-arm64.dmg"
         "$ROOT_DIR/AndroidClient/app/build/outputs/apk/release/app-release.apk"
         "$ROOT_DIR/AndroidClient/app/build/outputs/bundle/release/app-release.aab"
     )

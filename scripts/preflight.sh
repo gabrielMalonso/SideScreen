@@ -156,13 +156,13 @@ fi
 section "Artifacts"
 run_check "Input QA harness" "$SCRIPT_DIR/validate-input-qa.sh"
 
-if [ -d "$ROOT_DIR/SideScreen.app" ]; then
-    run_check "SideScreen.app code signature" codesign --verify --deep --strict --verbose=2 "$ROOT_DIR/SideScreen.app"
-    run_check "SideScreen.app privacy plist keys" bash -lc "\
-        /usr/libexec/PlistBuddy -c 'Print :NSScreenCaptureUsageDescription' '$ROOT_DIR/SideScreen.app/Contents/Info.plist' >/dev/null && \
-        /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' '$ROOT_DIR/SideScreen.app/Contents/Info.plist' >/dev/null && \
-        /usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' '$ROOT_DIR/SideScreen.app/Contents/Info.plist' >/dev/null"
-    if [ -x "$ROOT_DIR/SideScreen.app/Contents/MacOS/SideScreenVirtualHIDHelper" ]; then
+if [ -d "$ROOT_DIR/RemoteMac.app" ]; then
+    run_check "RemoteMac.app code signature" codesign --verify --deep --strict --verbose=2 "$ROOT_DIR/RemoteMac.app"
+    run_check "RemoteMac.app privacy plist keys" bash -lc "\
+        /usr/libexec/PlistBuddy -c 'Print :NSScreenCaptureUsageDescription' '$ROOT_DIR/RemoteMac.app/Contents/Info.plist' >/dev/null && \
+        /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' '$ROOT_DIR/RemoteMac.app/Contents/Info.plist' >/dev/null && \
+        /usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' '$ROOT_DIR/RemoteMac.app/Contents/Info.plist' >/dev/null"
+    if [ -x "$ROOT_DIR/RemoteMac.app/Contents/MacOS/SideScreenVirtualHIDHelper" ]; then
         pass "Virtual HID helper bundled"
     else
         warn "Virtual HID helper missing from app bundle; remote input will fall back to CGEvent"
@@ -194,10 +194,10 @@ PY
         warn "Virtual HID helper socket not present; install/restart helper before Virtual HID QA"
     fi
 else
-    distribution_issue "SideScreen.app missing; run ./scripts/build_mac.sh --release for distribution"
+    distribution_issue "RemoteMac.app missing; run ./scripts/build_mac.sh --release for distribution"
 fi
 
-if [ -f "$ROOT_DIR/SideScreen-$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')-mac-arm64.dmg" ]; then
+if [ -f "$ROOT_DIR/RemoteMac-$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')-mac-arm64.dmg" ]; then
     pass "Mac DMG exists"
 else
     distribution_issue "Mac DMG missing; run ./scripts/build_mac.sh --release for distribution"

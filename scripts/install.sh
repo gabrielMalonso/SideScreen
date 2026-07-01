@@ -88,7 +88,7 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
 
     # Create macOS .app bundle
     echo "📦 Creating macOS .app bundle..."
-    APP_NAME="SideScreen.app"
+    APP_NAME="RemoteMac.app"
     APP_DIR="$ROOT_DIR/$APP_NAME"
     CONTENTS_DIR="$APP_DIR/Contents"
     rm -rf "$APP_DIR"
@@ -138,7 +138,7 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
     <key>NSScreenCaptureUsageDescription</key>
     <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so Android devices can reach this Mac over LAN. USB and Tailnet sessions may still work without LAN discovery.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -218,7 +218,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "To start streaming:"
 if [ "$INSTALL_MAC" -eq 1 ]; then
-    echo "  1. Start Mac app: open SideScreen.app"
+    echo "  1. Start Mac app: open RemoteMac.app"
     echo "     (or run: MacHost/.build/out/Products/Release/SideScreen)"
 else
     echo "  1. Start the Mac app on the Mac"

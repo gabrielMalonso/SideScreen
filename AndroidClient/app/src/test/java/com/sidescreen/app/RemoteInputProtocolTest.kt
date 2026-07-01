@@ -105,7 +105,7 @@ class RemoteInputProtocolTest {
                 host = "127.0.0.1",
                 port = 9,
                 token = ByteArray(32) { it.toByte() },
-                deviceId = "tablet",
+                deviceId = "android-device",
                 sessionId = null,
                 context = null,
                 endpointMode = EndpointMode.MANUAL,

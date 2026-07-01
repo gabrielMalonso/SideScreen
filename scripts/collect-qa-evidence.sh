@@ -383,20 +383,20 @@ else
     echo "tailscale unavailable" > "$OUT_DIR/tailscale-status.txt"
 fi
 
-capture_shell "Artifacts" "artifacts.txt" "cd '$ROOT_DIR' && ls -lh SideScreen.app SideScreen-'$VERSION'-mac-arm64.dmg AndroidClient/app/build/outputs/apk/debug/app-debug.apk AndroidClient/app/build/outputs/apk/release/app-release.apk AndroidClient/app/build/outputs/bundle/release/app-release.aab 2>&1"
+capture_shell "Artifacts" "artifacts.txt" "cd '$ROOT_DIR' && ls -lh RemoteMac.app RemoteMac-'$VERSION'-mac-arm64.dmg AndroidClient/app/build/outputs/apk/debug/app-debug.apk AndroidClient/app/build/outputs/apk/release/app-release.apk AndroidClient/app/build/outputs/bundle/release/app-release.aab 2>&1"
 write_selected_apk_evidence
 capture "Release checksums" "checksums.txt" "$SCRIPT_DIR/generate-checksums.sh" --stdout
 capture "Android release signing" "android-release-signing.txt" "$SCRIPT_DIR/verify-android-signing.sh"
 capture_shell "Input QA harness" "input-qa-harness.txt" "cd '$ROOT_DIR' && ls -lh qa/input-text-harness.html scripts/open-input-qa.sh && shasum -a 256 qa/input-text-harness.html scripts/open-input-qa.sh"
 capture "Input QA validation" "input-qa-validation.txt" "$SCRIPT_DIR/validate-input-qa.sh"
 
-if [ -d "$ROOT_DIR/SideScreen.app" ]; then
-    capture "Mac app codesign" "mac-codesign.txt" codesign --verify --deep --strict --verbose=2 "$ROOT_DIR/SideScreen.app"
-    capture "Mac app Gatekeeper assessment" "mac-spctl-app.txt" spctl -a -vv "$ROOT_DIR/SideScreen.app"
+if [ -d "$ROOT_DIR/RemoteMac.app" ]; then
+    capture "Mac app codesign" "mac-codesign.txt" codesign --verify --deep --strict --verbose=2 "$ROOT_DIR/RemoteMac.app"
+    capture "Mac app Gatekeeper assessment" "mac-spctl-app.txt" spctl -a -vv "$ROOT_DIR/RemoteMac.app"
     capture "Mac distribution readiness" "mac-distribution.txt" "$SCRIPT_DIR/verify-mac-distribution.sh"
 fi
 
-DMG="$ROOT_DIR/SideScreen-$VERSION-mac-arm64.dmg"
+DMG="$ROOT_DIR/RemoteMac-$VERSION-mac-arm64.dmg"
 if [ -f "$DMG" ]; then
     capture "Mac DMG Gatekeeper assessment" "mac-spctl-dmg.txt" spctl -a -vv -t open "$DMG"
 fi

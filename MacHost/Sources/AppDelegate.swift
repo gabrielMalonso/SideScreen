@@ -50,7 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var inputServer: InputServer?
     var screenCapture: ScreenCapture?
     private var activeDisplaySource: DisplaySource?
-    var settings = DisplaySettings()
+    var settings = RemoteSessionSettings()
     var settingsWindow: SettingsWindowController?
     var statusItem: NSStatusItem?
     let pairedDeviceStore = PairedDeviceStore()
@@ -746,7 +746,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try await capture.switchDisplay(to: source, refreshRate: settings.effectiveRefreshRate)
             activeDisplaySource = source
-            settings.displayCreated = false
             settings.activeDisplaySourceName = source.title
             settings.activeDisplaySourceKind = source.diagnosticKind
 
@@ -782,7 +781,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let displaySource = try makeDisplaySourceForCurrentSettings()
             activeDisplaySource = displaySource
             await MainActor.run {
-                settings.displayCreated = false
                 settings.activeDisplaySourceName = displaySource.title
                 settings.activeDisplaySourceKind = displaySource.diagnosticKind
             }
@@ -969,7 +967,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             activeDisplaySource = nil
             await MainActor.run {
                 settings.isRunning = false
-                settings.displayCreated = false
                 settings.activeDisplaySourceName = "None"
                 settings.activeDisplaySourceKind = "none"
 
@@ -992,7 +989,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         inputServer = nil
 
         settings.isRunning = false
-        settings.displayCreated = false
         settings.activeDisplaySourceName = "None"
         settings.activeDisplaySourceKind = "none"
         settings.clientConnected = false

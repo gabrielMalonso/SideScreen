@@ -19,7 +19,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent
@@ -35,7 +35,7 @@ final class InputServerIntegrationTests: XCTestCase {
         )
         connection.stateUpdateHandler = { state in
             if case .ready = state {
-                connection.send(content: Self.hello(token: token, deviceId: "tablet"), completion: .contentProcessed { _ in })
+                connection.send(content: Self.hello(token: token, deviceId: "android-device"), completion: .contentProcessed { _ in })
                 connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
                     XCTAssertEqual(data, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
                     accepted.fulfill()
@@ -59,7 +59,7 @@ final class InputServerIntegrationTests: XCTestCase {
             port: port,
             validateAuthToken: { receivedToken, deviceId, receivedSessionId in
                 receivedToken == token &&
-                    deviceId == "tablet" &&
+                    deviceId == "android-device" &&
                     receivedSessionId == sessionId
             },
             backend: backend,
@@ -77,7 +77,7 @@ final class InputServerIntegrationTests: XCTestCase {
         connection.stateUpdateHandler = { state in
             if case .ready = state {
                 connection.send(
-                    content: Self.hello(token: token, deviceId: "tablet", sessionId: sessionId),
+                    content: Self.hello(token: token, deviceId: "android-device", sessionId: sessionId),
                     completion: .contentProcessed { _ in }
                 )
                 connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
@@ -100,7 +100,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent,
@@ -120,7 +120,7 @@ final class InputServerIntegrationTests: XCTestCase {
                 connection.send(
                     content: Self.hello(
                         token: token,
-                        deviceId: "tablet",
+                        deviceId: "android-device",
                         capabilities: RemoteInputCodec.capabilityBackendStatus
                     ),
                     completion: .contentProcessed { _ in }
@@ -152,7 +152,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent
@@ -172,7 +172,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent
@@ -197,7 +197,7 @@ final class InputServerIntegrationTests: XCTestCase {
         wait(for: [staleCancel], timeout: 0.5)
         backend.onEnd = nil
 
-        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet", "tablet"])
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["android-device", "android-device"])
         XCTAssertEqual(backend.endReasonsSnapshot.filter { $0 == "new input connection" }.count, 1)
         XCTAssertFalse(backend.endReasonsSnapshot.contains("input connection cancelled"))
     }
@@ -210,7 +210,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent
@@ -236,13 +236,13 @@ final class InputServerIntegrationTests: XCTestCase {
         })
 
         wait(for: [receivedEvent], timeout: 3)
-        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet"])
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["android-device"])
         XCTAssertFalse(backend.endReasonsSnapshot.contains("new input connection"))
     }
 
     func testInputChannelWithoutValidSessionIsRejectedWithoutDroppingActiveSession() throws {
         let store = RemoteSessionStore(ttl: 60)
-        let credentials = try store.create(deviceId: "tablet", now: Date(timeIntervalSince1970: 100))
+        let credentials = try store.create(deviceId: "android-device", now: Date(timeIntervalSince1970: 100))
         let backend = SocketRecordingInputBackend()
         let port = try Self.freePort()
         let server = InputServer(
@@ -283,7 +283,7 @@ final class InputServerIntegrationTests: XCTestCase {
         })
 
         wait(for: [receivedEvent], timeout: 3)
-        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet"])
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["android-device"])
         XCTAssertFalse(backend.endReasonsSnapshot.contains("new input connection"))
     }
 
@@ -294,7 +294,7 @@ final class InputServerIntegrationTests: XCTestCase {
         let server = InputServer(
             port: port,
             validateAuthToken: { receivedToken, deviceId, _ in
-                receivedToken == token && deviceId == "tablet"
+                receivedToken == token && deviceId == "android-device"
             },
             backend: backend,
             activeBackend: .cgevent
@@ -411,7 +411,7 @@ final class InputServerIntegrationTests: XCTestCase {
         )
         connection.stateUpdateHandler = { state in
             if case .ready = state {
-                connection.send(content: hello(token: token, deviceId: "tablet", sessionId: sessionId), completion: .contentProcessed { _ in })
+                connection.send(content: hello(token: token, deviceId: "android-device", sessionId: sessionId), completion: .contentProcessed { _ in })
                 connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
                     XCTAssertEqual(data, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
                     accepted.fulfill()
@@ -434,7 +434,7 @@ final class InputServerIntegrationTests: XCTestCase {
         )
         connection.stateUpdateHandler = { state in
             if case .ready = state {
-                connection.send(content: hello(token: token, deviceId: "tablet"), completion: .contentProcessed { _ in })
+                connection.send(content: hello(token: token, deviceId: "android-device"), completion: .contentProcessed { _ in })
                 connection.receive(minimumIncompleteLength: 5, maximumLength: 5) { data, _, _, _ in
                     XCTAssertEqual(data, RemoteInputCodec.rejectResponse(reason: reason))
                     rejected.fulfill()

@@ -10,13 +10,13 @@ setbuf(stderr, nil)
 // ============================================
 // Tests:
 //  1. Generate animated color bar test pattern
-//  2. Encode with H.265 (VideoToolbox) - same config as SideScreen
+//  2. Encode with H.265 (VideoToolbox) - same encoder shape as Remote Mac
 //  3. Save raw bitstream to /tmp/streamtest.h265 (verify with ffplay)
-//  4. Stream via TCP to Android tablet (same protocol as SideScreen)
+//  4. Stream via TCP to an Android client (same stream protocol as Remote Mac)
 //
 // Usage:
 //   StreamTest              → encode + save H.265 file (no streaming)
-//   StreamTest --stream     → encode + stream to tablet on port 5555
+//   StreamTest --stream     → encode + stream to Android on port 5555
 //   StreamTest --stream 6000 → stream on custom port
 
 let args = CommandLine.arguments
@@ -120,7 +120,7 @@ encoder.onEncodedFrame = { data, isKeyframe in
     // Always write to file
     h265File.write(data)
 
-    // Send to tablet if streaming
+    // Send to the Android client if streaming
     server?.sendFrame(data, isKeyframe: isKeyframe)
 
     // Progress log

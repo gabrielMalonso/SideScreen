@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
-APP_DIR="$ROOT_DIR/SideScreen.app"
+APP_DIR="$ROOT_DIR/RemoteMac.app"
 PORT="${SIDESCREEN_PORT:-54321}"
 if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; then
     echo "SIDESCREEN_PORT must be 1..65534 because remote input uses port + 1." >&2
@@ -67,7 +67,7 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>NSScreenCaptureUsageDescription</key>
     <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so Android devices can reach this Mac over LAN. USB and Tailnet sessions may still work without LAN discovery.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -114,7 +114,7 @@ echo ""
 echo "======================================="
 echo "  Ready to test!"
 echo "  App: $APP_DIR"
-echo "  Open Remote Mac on your tablet"
+echo "  Open Remote Mac on your Android device"
 echo "======================================="
 echo ""
 read -p "Test result? [y=OK / n=failed]: " RESULT

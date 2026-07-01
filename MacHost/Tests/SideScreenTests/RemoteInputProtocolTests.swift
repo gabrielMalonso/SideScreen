@@ -197,7 +197,7 @@ final class InputIngressTests: XCTestCase {
     func testDropsStaleKeyboardEvents() {
         let backend = RecordingInputBackend()
         let ingress = InputIngress(downstream: backend)
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 2, action: .down)))
         ingress.handle(.keyboard(key(sequence: 1, action: .up)))
@@ -225,7 +225,7 @@ final class InputIngressTests: XCTestCase {
     private func assertFlushesCoalescedPointerBefore(_ boundaryEvent: RemoteInputEvent) {
         let backend = RecordingInputBackend()
         let ingress = InputIngress(downstream: backend)
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 1, dy: 2, unit: 0, flags: 0, sequence: 1)))
         ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 3, dy: 4, unit: 0, flags: 0, sequence: 2)))
@@ -245,7 +245,7 @@ final class InputIngressTests: XCTestCase {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []
         let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.releaseAll(reason: "test release")
@@ -259,7 +259,7 @@ final class InputIngressTests: XCTestCase {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []
         let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.handle(.allInputsUp(AllInputsUpEvent(reason: 2, sequence: 2)))
@@ -274,7 +274,7 @@ final class InputIngressTests: XCTestCase {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []
         let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.handle(.keyboard(key(sequence: 3, action: .up)))
@@ -290,7 +290,7 @@ final class InputIngressTests: XCTestCase {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []
         let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.handle(.ping(sequence: 2, value: 123))
@@ -304,11 +304,11 @@ final class InputIngressTests: XCTestCase {
     func testEndSessionPropagatesToDownstreamBackend() {
         let backend = LifecycleRecordingInputBackend()
         let ingress = InputIngress(downstream: backend)
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.endSession(reason: "stream disconnected")
 
-        XCTAssertEqual(backend.beginDeviceIds, ["tablet"])
+        XCTAssertEqual(backend.beginDeviceIds, ["android-device"])
         XCTAssertEqual(backend.endReasons, ["stream disconnected"])
     }
 
@@ -316,7 +316,7 @@ final class InputIngressTests: XCTestCase {
         let backend = RecordingInputBackend()
         var snapshots: [InputIngressDiagnostics] = []
         let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
 
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.endSession(reason: "device revoked")
@@ -343,7 +343,7 @@ final class InputIngressTests: XCTestCase {
             ingress.releaseAll(reason: "reentrant downstream")
         }
 
-        ingress.beginSession(deviceId: "tablet")
+        ingress.beginSession(deviceId: "android-device")
         ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 1, dy: 1, unit: 0, flags: 0, sequence: 1)))
         ingress.handle(.keyboard(key(sequence: 2, action: .down)))
         ingress.endSession(reason: "test")
