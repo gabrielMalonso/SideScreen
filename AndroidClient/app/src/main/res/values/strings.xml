@@ -14,6 +14,9 @@
     <string name="settings_sidebar_display_main">Main</string>
     <string name="settings_sidebar_display_selected">Selected</string>
     <string name="settings_sidebar_display_switch_failed">Could not switch display</string>
+    <string name="settings_sidebar_display_scale">Video scale</string>
+    <string name="settings_sidebar_display_scale_fit">Fit</string>
+    <string name="settings_sidebar_display_scale_fill">Fill</string>
     <string name="settings_sidebar_overlays">Overlays</string>
     <string name="settings_sidebar_input">Input</string>
     <string name="settings_sidebar_side">Sidebar side</string>

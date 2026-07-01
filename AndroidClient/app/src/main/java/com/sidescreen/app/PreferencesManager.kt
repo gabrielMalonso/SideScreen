@@ -48,6 +48,10 @@ class PreferencesManager(
         get() = prefs.getInt("settings_sidebar_side", 1)
         set(value) = prefs.edit().putInt("settings_sidebar_side", value.coerceIn(0, 1)).apply()
 
+    var displayScaleMode: Int
+        get() = prefs.getInt("display_scale_mode", DISPLAY_SCALE_FIT)
+        set(value) = prefs.edit().putInt("display_scale_mode", value.coerceIn(DISPLAY_SCALE_FIT, DISPLAY_SCALE_FILL)).apply()
+
     var connectionMode: ConnectionMode
         get() = ConnectionMode.fromName(prefs.getString("connection_mode", null))
         set(value) = prefs.edit().putString("connection_mode", value.name).apply()
@@ -100,4 +104,9 @@ class PreferencesManager(
                 .apply()
             return generated
         }
+
+    companion object {
+        const val DISPLAY_SCALE_FIT = 0
+        const val DISPLAY_SCALE_FILL = 1
+    }
 }

@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.net.Socket
+import kotlin.math.roundToInt
 
 private fun mainDiag(msg: String) = DiagLog.log("MA", msg)
 
@@ -145,6 +146,7 @@ class MainActivity : AppCompatActivity() {
         enablePerformanceMode()
 
         setupSurface()
+        setupVideoSurfaceLayoutObserver()
         setupUI()
         setupDraggableOverlay()
         setupSettingsSidebar()
@@ -528,6 +530,57 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    private fun setupVideoSurfaceLayoutObserver() {
+        binding.root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val widthChanged = right - left != oldRight - oldLeft
+            val heightChanged = bottom - top != oldBottom - oldTop
+            if (widthChanged || heightChanged) {
+                updateVideoSurfaceLayout()
+            }
+        }
+        updateVideoSurfaceLayout()
+    }
+
+    private fun updateVideoSurfaceLayout() {
+        binding.root.post {
+            val parent = binding.root
+            val parentWidth = parent.width
+            val parentHeight = parent.height
+            if (parentWidth <= 0 || parentHeight <= 0) return@post
+
+            var horizontalMargin = 0
+            var verticalMargin = 0
+            val shouldFit =
+                prefs.displayScaleMode == PreferencesManager.DISPLAY_SCALE_FIT &&
+                    displayWidth > 0 &&
+                    displayHeight > 0
+
+            if (shouldFit) {
+                val videoAspect = displayWidth.toDouble() / displayHeight.toDouble()
+                val parentAspect = parentWidth.toDouble() / parentHeight.toDouble()
+                if (parentAspect > videoAspect) {
+                    val fittedWidth = (parentHeight * videoAspect).roundToInt().coerceAtMost(parentWidth)
+                    horizontalMargin = ((parentWidth - fittedWidth) / 2f).roundToInt().coerceAtLeast(0)
+                } else {
+                    val fittedHeight = (parentWidth / videoAspect).roundToInt().coerceAtMost(parentHeight)
+                    verticalMargin = ((parentHeight - fittedHeight) / 2f).roundToInt().coerceAtLeast(0)
+                }
+            }
+
+            ConstraintSet().apply {
+                clone(parent)
+                val surfaceId = binding.surfaceView.id
+                constrainWidth(surfaceId, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(surfaceId, ConstraintSet.MATCH_CONSTRAINT)
+                connect(surfaceId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, horizontalMargin)
+                connect(surfaceId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END, horizontalMargin)
+                connect(surfaceId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, verticalMargin)
+                connect(surfaceId, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, verticalMargin)
+                applyTo(parent)
+            }
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
     private fun setupDraggableOverlay() {
         binding.statusBar.setOnTouchListener { view, event ->
@@ -903,6 +956,17 @@ class MainActivity : AppCompatActivity() {
             prefs.naturalScroll = isChecked
         }
 
+        binding.displayScaleFit.setOnClickListener {
+            prefs.displayScaleMode = PreferencesManager.DISPLAY_SCALE_FIT
+            updateDisplayScaleSelection(PreferencesManager.DISPLAY_SCALE_FIT)
+            updateVideoSurfaceLayout()
+        }
+        binding.displayScaleFill.setOnClickListener {
+            prefs.displayScaleMode = PreferencesManager.DISPLAY_SCALE_FILL
+            updateDisplayScaleSelection(PreferencesManager.DISPLAY_SCALE_FILL)
+            updateVideoSurfaceLayout()
+        }
+
         fun updateMetaMappingSelection(selected: MetaKeyMapping) {
             listOf(
                 MetaKeyMapping.COMMAND to binding.metaMapCommand,
@@ -941,6 +1005,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateSettingsSidebarSide(prefs.settingsSidebarSide)
+        updateDisplayScaleSelection(prefs.displayScaleMode)
         renderRemoteDisplays()
     }
 
@@ -1096,6 +1161,19 @@ class MainActivity : AppCompatActivity() {
             if (normalizedSide == 0) ColorStateList.valueOf(0x334CAF50) else null
         binding.sidebarSideRight.backgroundTintList =
             if (normalizedSide == 1) ColorStateList.valueOf(0x334CAF50) else null
+    }
+
+    private fun updateDisplayScaleSelection(mode: Int) {
+        val normalizedMode =
+            if (mode == PreferencesManager.DISPLAY_SCALE_FILL) {
+                PreferencesManager.DISPLAY_SCALE_FILL
+            } else {
+                PreferencesManager.DISPLAY_SCALE_FIT
+            }
+        binding.displayScaleFit.backgroundTintList =
+            if (normalizedMode == PreferencesManager.DISPLAY_SCALE_FIT) ColorStateList.valueOf(0x334CAF50) else null
+        binding.displayScaleFill.backgroundTintList =
+            if (normalizedMode == PreferencesManager.DISPLAY_SCALE_FILL) ColorStateList.valueOf(0x334CAF50) else null
     }
 
     private fun openSettingsSidebar() {
@@ -1377,6 +1455,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 binding.resolutionText.text = "${width}x$height"
                 applyRotation(rotation)
+                updateVideoSurfaceLayout()
             }
             log("Display: ${width}x$height @ $rotation°")
         }
