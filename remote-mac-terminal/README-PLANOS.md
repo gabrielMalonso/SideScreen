@@ -4,6 +4,8 @@ Data: 2026-07-01
 
 Este pacote contém planos técnicos gerados a partir dos specs enviados e organizados para execução eficiente, com paralelismo onde ele realmente reduz tempo sem criar retrabalho.
 
+Direção central: o produto deve substituir, para uso pessoal, Google Remote Desktop/Chrome Remote Desktop ou AnyDesk com uma experiência minimalista. Remote Desktop Mode, capturando telas reais existentes do Mac, vem antes de Extended Display Mode. O modo segundo monitor continua útil, mas não é o eixo do projeto.
+
 ## Arquivos principais
 
 | Arquivo | Uso |
@@ -27,6 +29,7 @@ Cada Markdown segue o template técnico anexado. Cada HTML é o painel visual de
 
 ```text
 Baseline obrigatório
+  ├─ Remote Desktop Mode em tela real
   ├─ QA longa USB/Tailnet
   ├─ Input real + VirtualHID
   ├─ Segurança/revogação
@@ -39,4 +42,4 @@ Release candidate interno
 Decisões condicionais: root, QUIC, DriverKit próprio
 ```
 
-A decisão forte do pacote: não gastar energia com root/QUIC/DriverKit próprio antes de fechar os gates de uso diário.
+A decisão forte do pacote: não gastar energia com root/QUIC/DriverKit próprio antes de fechar os gates de uso diário em tela real do Mac.

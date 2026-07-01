@@ -4,7 +4,9 @@ Use este prompt como mensagem inicial para o Codex na sua máquina, com o reposi
 
 ---
 
-Estou trabalhando em um fork/novo projeto baseado no SideScreen para transformar um tablet Android em um terminal remoto para um Mac mini via Tailscale.
+Estou trabalhando em um fork/novo projeto baseado no SideScreen para transformar um tablet Android em um Remote Desktop minimalista para um Mac mini via Tailscale.
+
+A ideia central é substituir, para uso pessoal, Google Remote Desktop/Chrome Remote Desktop ou AnyDesk: ver e controlar as telas reais que já existem no Mac. O modo segundo monitor/Virtual Display é secundário.
 
 Leia primeiro toda a documentação em `remote-mac-terminal-spec/`, começando por:
 
@@ -19,6 +21,7 @@ Leia primeiro toda a documentação em `remote-mac-terminal-spec/`, começando p
 Depois, inspecione o código atual do repositório. Não implemente nada antes de confirmar que entendeu:
 
 - como o SideScreen cria o Virtual Display;
+- como a captura poderia receber uma tela real existente como `DisplaySource`;
 - como captura/codifica vídeo;
 - como o Android decodifica vídeo;
 - como o pareamento wireless funciona;
@@ -31,6 +34,8 @@ Objetivo da primeira fase:
 
 - não usar root;
 - não reescrever vídeo;
+- tratar tela real existente como fonte principal de vídeo;
+- manter Virtual Display como modo secundário;
 - adaptar conexão para Tailscale/MagicDNS/IP 100.x;
 - remover bind forçado em Wi-Fi em modo Tailnet;
 - criar canal de input separado;

@@ -50,6 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var inputServer: InputServer?
     var screenCapture: ScreenCapture?
     var virtualDisplayManager: VirtualDisplayManager?
+    private var activeDisplaySource: DisplaySource?
     var settings = DisplaySettings()
     var settingsWindow: SettingsWindowController?
     var statusItem: NSStatusItem?
@@ -271,6 +272,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .sink { [weak self] rotation in
                 guard let self = self, self.settings.isRunning else { return }
+                guard self.activeDisplaySource?.isVirtual == true else { return }
                 print("🔄 Rotation changed to \(rotation)°")
                 self.streamingServer?.updateRotation(rotation)
             }
@@ -296,6 +298,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        settings.$displaySourceMode
+            .dropFirst()
+            .sink { [weak self] mode in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    guard self.settings.isRunning else { return }
+                    debugLog("Display source mode changed to \(mode.rawValue) — restarting server")
+                    self.stopServer()
+                    await self.startServer()
+                }
+            }
+            .store(in: &cancellables)
+
         settings.$inputBackendMode
             .dropFirst()
             .sink { [weak self] _ in
@@ -312,16 +327,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Observer cho resolution changes — the virtual display is created at
-        // server start, so a new resolution (list row or custom Apply) needs a
-        // stop/start cycle to take effect, same as a connection-mode change.
-        // Without this, changing resolution mid-run silently did nothing.
+        // Resolution/HiDPI rebuild only applies to Extended Display, where the
+        // virtual display is created at server start.
         settings.$resolution
             .dropFirst()
             .removeDuplicates()
             .sink { [weak self] resolution in
                 guard let self = self else { return }
                 guard self.settings.isRunning else { return }
+                guard self.activeDisplaySource?.isVirtual == true else { return }
                 self.schedulePipelineRestart(reason: "Resolution changed to \(resolution)")
             }
             .store(in: &cancellables)
@@ -330,6 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .sink { [weak self] refreshRate, hiDPI in
                 guard let self = self, self.settings.isRunning else { return }
+                guard self.activeDisplaySource?.isVirtual == true else { return }
                 self.schedulePipelineRestart(reason: "Display timing changed to \(refreshRate)Hz, HiDPI=\(hiDPI)")
             }
             .store(in: &cancellables)
@@ -350,7 +365,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "Virtual Display")
+            button.image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "Side Screen")
         }
 
         let menu = NSMenu()
@@ -480,6 +495,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
         Mode: \(settings.connectionMode.rawValue)
         Endpoint: \(settings.endpointMode.rawValue)
+        Display source mode: \(settings.displaySourceMode.rawValue)
+        Active display source: \(settings.activeDisplaySourceKind) / \(settings.activeDisplaySourceName)
         Port: \(settings.port)
         Running: \(settings.isRunning)
         Client connected: \(settings.clientConnected)
@@ -681,14 +698,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func startServer() async {
-        guard settings.hasScreenRecordingPermission else {
-            await showPermissionAlert()
-            return
-        }
-
-        do {
-            // Create virtual display and run ADB setup in parallel
+    private func makeDisplaySourceForCurrentSettings() throws -> DisplaySource {
+        switch settings.displaySourceMode {
+        case .remoteDesktop:
+            virtualDisplayManager = nil
+            return .existing(.main())
+        case .extendedDisplay:
             virtualDisplayManager = VirtualDisplayManager()
             let size = settings.resolutionSize
             try virtualDisplayManager?.createDisplay(
@@ -698,16 +713,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 hiDPI: settings.hiDPI,
                 name: "SideScreen"
             )
-
-            // Disable mirror mode (may fail if already in extend mode)
-            do {
-                try virtualDisplayManager?.disableMirrorMode()
-            } catch {
-                // Not critical - continue anyway
+            guard let displayID = virtualDisplayManager?.displayID else {
+                throw NSError(
+                    domain: "DisplaySource",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Virtual display was not created"]
+                )
             }
+            return .virtual(VirtualDisplaySource(
+                displayID: displayID,
+                requestedWidth: size.width,
+                requestedHeight: size.height,
+                hiDPI: settings.hiDPI,
+                refreshRate: settings.effectiveRefreshRate
+            ))
+        }
+    }
 
+    private func displayConfigSize(
+        for codec: StreamCodec,
+        source: DisplaySource,
+        capture: ScreenCapture?
+    ) -> (width: Int, height: Int) {
+        switch codec {
+        case .hevc:
+            return source.hevcDisplayConfigSize
+        case .h264:
+            if let capture {
+                return capture.encodeSize(for: .h264)
+            }
+            let physical = ScreenCapture.physicalSize(for: source.displayID)
+            return CodecLimits.clampForAvc(width: physical.width, height: physical.height)
+        }
+    }
+
+    private func displayConfigRotation(for source: DisplaySource) -> Int {
+        source.isVirtual ? settings.rotation : 0
+    }
+
+    func startServer() async {
+        guard settings.hasScreenRecordingPermission else {
+            await showPermissionAlert()
+            return
+        }
+
+        do {
+            let displaySource = try makeDisplaySourceForCurrentSettings()
+            activeDisplaySource = displaySource
             await MainActor.run {
-                settings.displayCreated = true
+                settings.displayCreated = displaySource.isVirtual
+                settings.activeDisplaySourceName = displaySource.title
+                settings.activeDisplaySourceKind = displaySource.diagnosticKind
+            }
+            debugLog("Display source selected: \(displaySource.diagnosticKind) \(displaySource.title) (ID: \(displaySource.displayID))")
+
+            if displaySource.isVirtual {
+                // Disable mirror mode (may fail if already in extend mode)
+                do {
+                    try virtualDisplayManager?.disableMirrorMode()
+                } catch {
+                    // Not critical - continue anyway
+                }
             }
 
             // Run ADB setup (USB only) and display init wait in parallel.
@@ -718,21 +784,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     debugLog("Wireless mode: skipping ADB setup")
                 }
-                group.addTask { try? await Task.sleep(nanoseconds: 500_000_000) }
+                if displaySource.isVirtual {
+                    group.addTask { try? await Task.sleep(nanoseconds: 500_000_000) }
+                }
             }
 
-            virtualDisplayManager?.restoreDisplayPosition()
+            if displaySource.isVirtual {
+                virtualDisplayManager?.restoreDisplayPosition()
 
-            // Verify display is registered in the system
-            if let vdm = virtualDisplayManager {
-                let registered = vdm.verifyDisplayRegistered()
-                if !registered {
-                    debugLog("WARNING: Virtual display not found in online display list — capture may fail")
+                // Verify display is registered in the system
+                if let vdm = virtualDisplayManager {
+                    let registered = vdm.verifyDisplayRegistered()
+                    if !registered {
+                        debugLog("WARNING: Virtual display not found in online display list — capture may fail")
+                    }
                 }
             }
 
             // Setup capture
-            guard let displayID = virtualDisplayManager?.displayID else { return }
             screenCapture = try await ScreenCapture()
             screenCapture?.onCaptureMethodChanged = { [weak self] method in
                 guard let self = self else { return }
@@ -741,7 +810,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.settings.captureMethod = method
                 }
             }
-            try await screenCapture?.setupForVirtualDisplay(displayID, refreshRate: settings.effectiveRefreshRate)
+            try await screenCapture?.setup(for: displaySource, refreshRate: settings.effectiveRefreshRate)
 
             // Setup server
             streamingServer = StreamingServer(port: settings.port)
@@ -800,13 +869,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
-            // Send the LOGICAL resolution that the user picked. The H.264 SPS in
-            // the stream still carries the true physical pixel dimensions, so the
-            // Android decoder/MediaCodec sets up correctly regardless. Sending the
-            // logical dimensions here makes the resolution overlay on Android
-            // match the Mac's resolution dropdown (e.g. "2560x1600" instead of
-            // the HiDPI-doubled "5120x3200").
-            streamingServer?.setDisplaySize(width: size.width, height: size.height, rotation: settings.rotation)
+            let initialConfigSize = displayConfigSize(for: .hevc, source: displaySource, capture: screenCapture)
+            streamingServer?.setDisplaySize(
+                width: initialConfigSize.width,
+                height: initialConfigSize.height,
+                rotation: displayConfigRotation(for: displaySource)
+            )
             streamingServer?.onClientConnected = { [weak self] in
                 guard let self = self else { return }
                 self.screenCapture?.requestKeyframeOrReplayCachedFrame(force: true)
@@ -820,17 +888,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.onCodecNegotiated = { [weak self] codec in
                 guard let self = self, let capture = self.screenCapture else { return }
                 capture.setCodec(codec)
-                switch codec {
-                case .hevc:
-                    // Logical user-picked resolution, exactly as at startup.
-                    self.streamingServer?.setDisplaySize(width: size.width, height: size.height, rotation: self.settings.rotation)
-                case .h264:
-                    // Clamped physical encode size: the client must configure
-                    // its (weak) AVC decoder within its supported range, and
-                    // this matches what the stream's SPS will carry.
-                    let enc = capture.encodeSize(for: .h264)
-                    self.streamingServer?.setDisplaySize(width: enc.width, height: enc.height, rotation: self.settings.rotation)
-                }
+                let configSize = self.displayConfigSize(for: codec, source: displaySource, capture: capture)
+                self.streamingServer?.setDisplaySize(
+                    width: configSize.width,
+                    height: configSize.height,
+                    rotation: self.displayConfigRotation(for: displaySource)
+                )
             }
             streamingServer?.onKeyframeRequested = { [weak self] force in
                 self?.screenCapture?.requestKeyframeOrReplayCachedFrame(force: force)
@@ -892,9 +955,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("✅ Server started on port \(settings.port), input port \(inputPort)")
         } catch {
             print("❌ Failed to start: \(error)")
+            if activeDisplaySource?.isVirtual == true {
+                virtualDisplayManager?.destroyDisplay()
+            }
+            activeDisplaySource = nil
+            virtualDisplayManager = nil
             await MainActor.run {
                 settings.isRunning = false
                 settings.displayCreated = false
+                settings.activeDisplaySourceName = "None"
+                settings.activeDisplaySourceKind = "none"
 
                 let alert = NSAlert()
                 alert.messageText = "Failed to Start Server"
@@ -907,18 +977,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func stopServer() {
         // Save display position before destroying
-        virtualDisplayManager?.saveDisplayPosition()
+        if activeDisplaySource?.isVirtual == true {
+            virtualDisplayManager?.saveDisplayPosition()
+        }
 
         releaseLegacyTouchState(reason: "server stopped")
         screenCapture?.stopStreaming()
         inputServer?.stop()
         streamingServer?.stop()
         remoteSessionStore.clear()
-        virtualDisplayManager?.destroyDisplay()
+        if activeDisplaySource?.isVirtual == true {
+            virtualDisplayManager?.destroyDisplay()
+        }
+        activeDisplaySource = nil
+        virtualDisplayManager = nil
         inputServer = nil
 
         settings.isRunning = false
         settings.displayCreated = false
+        settings.activeDisplaySourceName = "None"
+        settings.activeDisplaySourceKind = "none"
         settings.clientConnected = false
         settings.currentFPS = 0
         settings.currentBitrate = 0
@@ -974,7 +1052,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let displayID = virtualDisplayManager?.displayID else { return }
+        guard let displayID = activeDisplaySource?.displayID else { return }
         let bounds = CGDisplayBounds(displayID)
 
         let p1 = CGPoint(

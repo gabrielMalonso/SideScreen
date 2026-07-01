@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Definir como o projeto deve evoluir de conexão SideScreen legacy para sessões remotas com múltiplos canais.
+Definir como o projeto deve evoluir de conexão SideScreen legacy para sessões remotas com múltiplos canais, priorizando Remote Desktop Mode sobre segundo monitor.
 
 ## Estado atual do SideScreen
 
@@ -16,7 +16,7 @@ O SideScreen atual tem um `StreamingServer` TCP que carrega:
 - keyframe request;
 - codec negotiation.
 
-Isso é suficiente para segundo display em LAN/USB, mas não ideal para terminal remoto pela internet.
+Isso é suficiente para segundo display em LAN/USB, mas não ideal para acesso remoto minimalista pela internet.
 
 ## Objetivo final
 
@@ -282,4 +282,3 @@ Durante a migração:
 - disconnect do input não deixa teclas presas;
 - disconnect do vídeo não deixa input em estado indefinido;
 - logs identificam channel e session.
-

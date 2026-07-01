@@ -49,6 +49,7 @@ class StreamClient(
     private var framesReceived = 0L
     private var diagFrameCount = 0L
     private var lastStatsTime = System.currentTimeMillis()
+    private var lastDiagFrameHeartbeatTime = 0L
     private val keyframeRequestLock = Any()
     private var lastKeyframeRequestNs = 0L
     private var lastKeyframeReceivedNs = 0L
@@ -529,6 +530,11 @@ class StreamClient(
         if (diagFrameCount % 60L == 0L) {
             diagLog("Frames received: $diagFrameCount")
         }
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastDiagFrameHeartbeatTime >= DIAG_FRAME_HEARTBEAT_INTERVAL_MS) {
+            diagLog("Frame heartbeat: total=$diagFrameCount")
+            lastDiagFrameHeartbeatTime = nowMs
+        }
 
         val callback = onFrameReceived
         if (callback != null) {
@@ -599,6 +605,7 @@ class StreamClient(
         private const val MAX_FRAME_SIZE = 5 * 1024 * 1024 // 5MB
         private const val KEYFRAME_REQUEST_INTERVAL_NS = 500_000_000L
         private const val KEYFRAME_STALE_INTERVAL_NS = 1_500_000_000L
+        private const val DIAG_FRAME_HEARTBEAT_INTERVAL_MS = 15_000L
         private const val MESSAGE_VIDEO_FRAME = 0
         private const val MESSAGE_VIDEO_FRAME_WITH_METADATA = 6
         private const val MESSAGE_KEYFRAME_REQUEST = 7

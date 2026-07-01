@@ -2,18 +2,29 @@
 
 ## Riscos técnicos principais
 
-### 1. API privada de Virtual Display
+### 1. Produto escorregar de volta para "segundo monitor"
+
+A base SideScreen puxa o projeto naturalmente para Virtual Display. Isso não basta para substituir Google Remote Desktop/AnyDesk no uso pessoal.
+
+Mitigação:
+
+- ADR-0007 define Remote Desktop Mode como principal;
+- criar `DisplaySource`;
+- QA de uso diário só aprova o produto principal quando uma tela real existente é controlada;
+- manter Extended Display Mode como opção secundária explícita.
+
+### 2. API privada de Virtual Display
 
 O SideScreen usa `CGVirtualDisplay` via ponte privada. Isso pode quebrar em versões futuras do macOS.
 
 Mitigação:
 
-- encapsular em `VirtualDisplayService`;
+- encapsular em `VirtualDisplaySource`;
 - manter fallback/diagnóstico claro;
 - documentar macOS suportado;
 - evitar espalhar API privada pelo projeto.
 
-### 2. Input sem root não captura tudo
+### 3. Input sem root não captura tudo
 
 Sem root, algumas teclas nunca chegarão ao app.
 
@@ -25,7 +36,7 @@ Mitigação:
 - root backend posterior;
 - mapeamento configurável.
 
-### 3. Virtual HID no Mac tem atrito de instalação
+### 4. Virtual HID no Mac tem atrito de instalação
 
 Karabiner VirtualHID ou DriverKit exigem permissões/system extension.
 
@@ -36,7 +47,7 @@ Mitigação:
 - detectar estado do backend;
 - não bloquear MVP.
 
-### 4. Tailscale pode usar relay/DERP
+### 5. Tailscale pode usar relay/DERP
 
 Conexões relayed podem aumentar latência e reduzir throughput.
 
@@ -47,7 +58,7 @@ Mitigação:
 - reduzir resolução/FPS em rede ruim;
 - instruções de diagnóstico Tailnet.
 
-### 5. Android split tunneling pode excluir o app
+### 6. Android split tunneling pode excluir o app
 
 Se o app estiver excluído da Tailnet, MagicDNS/IP 100.x pode falhar.
 
@@ -58,7 +69,7 @@ Mitigação:
 - tentativa com IP 100.x;
 - documentação de setup.
 
-### 6. Input e vídeo competindo por CPU
+### 7. Input e vídeo competindo por CPU
 
 Decoder, SurfaceView e captura de input rodam no mesmo tablet.
 
@@ -69,7 +80,7 @@ Mitigação:
 - vídeo com backpressure;
 - input em canal e queue separados.
 
-### 7. Layout de teclado
+### 8. Layout de teclado
 
 Layouts físicos e Android key layouts podem divergir.
 
@@ -125,3 +136,4 @@ Decisão: somente se medições mostrarem que TCP multi-channel não é suficien
 7. CGEvent será fallback/MVP.
 8. Virtual HID será backend profissional posterior.
 9. Root será backend opcional futuro.
+10. Remote Desktop Mode com tela real é o produto principal; Virtual Display é modo secundário.

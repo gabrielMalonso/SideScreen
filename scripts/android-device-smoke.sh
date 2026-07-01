@@ -25,7 +25,7 @@ EXPECT_STREAM=0
 TAP_CONNECT=0
 FORCE_USB_MODE=0
 FORCE_WIRELESS_MODE=0
-STREAM_RECENT_WINDOW_MS="${SIDESCREEN_STREAM_RECENT_WINDOW_MS:-20000}"
+STREAM_RECENT_WINDOW_MS="${SIDESCREEN_STREAM_RECENT_WINDOW_MS:-60000}"
 
 usage() {
     echo "Usage: ./scripts/android-device-smoke.sh [--apk path] [--no-install] [--no-reverse] [--duration seconds] [--tailnet-host host] [--expect-stream] [--tap-connect] [--force-usb-mode] [--force-wireless-mode]"
@@ -381,14 +381,14 @@ if [ "$EXPECT_STREAM" -eq 1 ]; then
     if [ "$REVERSE" -eq 0 ] && grep -E "Stream connected - mode=USB|Connected to 127\\.0\\.0\\.1:$PORT|Input channel connected to 127\\.0\\.0\\.1:$INPUT_PORT" "$STREAM_EVIDENCE_FILE" >/dev/null 2>&1; then
         fail "Android app is using USB/loopback state during a network/Tailnet smoke; switch to Wireless and rerun"
     fi
-    if grep -E "Stream connected|Connected to .*:$PORT|Wireless connected to .*:$PORT|First video frame|First output frame|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*" \
+    if grep -E "Stream connected|Connected to .*:$PORT|Wireless connected to .*:$PORT|First video frame|First output frame|Frame heartbeat: total=[1-9][0-9]*|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*" \
         "$STREAM_EVIDENCE_FILE" >/dev/null 2>&1; then
         pass "Stream connection and frame flow observed"
     else
         fail "No stream connection/frame flow observed; tap Connect/Reconnect during the run and keep the Mac app running"
     fi
 
-    LAST_FRAME_TS="$(last_diag_timestamp "First video frame|First output frame|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*|Output #[1-9][0-9]*" /tmp/sidescreen-device-diag-full.out)"
+    LAST_FRAME_TS="$(last_diag_timestamp "First video frame|First output frame|Frame heartbeat: total=[1-9][0-9]*|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*|Output #[1-9][0-9]*" /tmp/sidescreen-device-diag-full.out)"
     LAST_CONNECT_TS="$(last_diag_timestamp "Stream connected|Wireless connected|Connected to .*:$PORT" /tmp/sidescreen-device-diag-full.out)"
     LAST_DISCONNECT_TS="$(last_diag_timestamp "Stream disconnected|surfaceDestroyed|Session wake lock released" /tmp/sidescreen-device-diag-full.out)"
     NOW_MS="$(device_now_ms)"

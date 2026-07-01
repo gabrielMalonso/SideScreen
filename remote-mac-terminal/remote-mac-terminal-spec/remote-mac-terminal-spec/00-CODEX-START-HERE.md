@@ -8,6 +8,10 @@ Antes de editar código, leia também `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`.
 
 Construir um app que transforme um tablet Android em um terminal remoto para um Mac mini em casa.
 
+A ideia central agora é substituir, para uso pessoal, Google Remote Desktop/Chrome Remote Desktop ou AnyDesk por algo mais simples: abrir o tablet, ver as telas reais que já existem no Mac e controlar esse Mac sem painel pesado, conta extra, pop-up ou recurso que atrapalhe o trabalho.
+
+O produto principal é **Remote Desktop Mode**. O modo de segundo monitor/Virtual Display continua útil, mas é uma capacidade herdada/opcional, não o destino do produto.
+
 O setup-alvo é:
 
 ```text
@@ -20,7 +24,7 @@ Tablet Android fora de casa
 
 A experiência desejada não é apenas "remote desktop". A meta é usar o tablet como se fosse um MacBook remoto:
 
-- vídeo vindo de um Virtual Display real do macOS;
+- vídeo vindo de uma tela real existente do Mac, com opção secundária de Virtual Display;
 - teclado funcionando como teclado de Mac;
 - mouse funcionando como mouse de Mac;
 - baixa latência;
@@ -48,7 +52,8 @@ A ordem correta é:
 
 Não reescrever o motor de vídeo agora. Reaproveitar o que o SideScreen já faz bem:
 
-- `CGVirtualDisplay` / Virtual Display;
+- captura de displays do macOS via ScreenCaptureKit/CGDisplayStream;
+- `CGVirtualDisplay` / Virtual Display como fonte opcional;
 - ScreenCaptureKit;
 - fallback CGDisplayStream;
 - VideoToolbox;
@@ -60,6 +65,7 @@ Não reescrever o motor de vídeo agora. Reaproveitar o que o SideScreen já faz
 
 Criar arquitetura nova ao redor disso para:
 
+- seleção de fonte de tela (`DisplaySource`);
 - sessão;
 - Tailscale endpoints;
 - canais separados;
@@ -86,8 +92,9 @@ MVP mínimo:
 
 ```text
 MacHost:
-  cria Virtual Display
-  captura/codifica vídeo como SideScreen
+  seleciona tela real existente como DisplaySource principal
+  opcionalmente cria Virtual Display quando o usuário pedir segundo monitor
+  captura/codifica vídeo reaproveitando o motor SideScreen
   aceita conexão via MagicDNS ou IP 100.x
   autentica tablet
   envia vídeo
@@ -104,16 +111,18 @@ AndroidClient:
 
 ## Invariantes arquiteturais
 
-1. Vídeo e input são subsistemas separados.
-2. O input não pode depender do pipeline de vídeo.
-3. O input deve ter prioridade maior que o vídeo.
-4. Teclas down/up nunca podem ser coalescidas.
-5. Mouse move pode ser coalescido, mas botões/wheel não.
-6. Ao desconectar, o Mac deve soltar todas as teclas e botões pressionados.
-7. O protocolo de input deve ser HID-like, não Android-like.
-8. Tailscale é underlay de rede, não substitui autenticação da aplicação.
-9. O app Android não deve forçar `TRANSPORT_WIFI` quando conectado a destino Tailnet.
-10. Root é backend opcional posterior, não dependência estrutural.
+1. Remote Desktop Mode é o modo principal; Extended Display é secundário.
+2. A fonte de vídeo deve ser uma abstração: tela real existente ou Virtual Display.
+3. Vídeo e input são subsistemas separados.
+4. O input não pode depender do pipeline de vídeo.
+5. O input deve ter prioridade maior que o vídeo.
+6. Teclas down/up nunca podem ser coalescidas.
+7. Mouse move pode ser coalescido, mas botões/wheel não.
+8. Ao desconectar, o Mac deve soltar todas as teclas e botões pressionados.
+9. O protocolo de input deve ser HID-like, não Android-like.
+10. Tailscale é underlay de rede, não substitui autenticação da aplicação.
+11. O app Android não deve forçar `TRANSPORT_WIFI` quando conectado a destino Tailnet.
+12. Root é backend opcional posterior, não dependência estrutural.
 
 ## Caminho de implementação sugerido para Codex
 

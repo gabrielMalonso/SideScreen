@@ -2,7 +2,9 @@
 
 Data: 2026-06-30  
 Base analisada: `SideScreen-source-macos-android-2026-06-30.zip`  
-Objetivo: transformar um tablet Android com teclado e mouse Bluetooth em um terminal remoto para um Mac mini via Tailscale, com experiência o mais próxima possível de um MacBook remoto.
+Objetivo: transformar um tablet Android com teclado e mouse Bluetooth em um acesso remoto minimalista para um Mac mini via Tailscale, com experiência o mais próxima possível de um MacBook remoto.
+
+Direção de produto: substituir, para uso pessoal, Google Remote Desktop/Chrome Remote Desktop ou AnyDesk por um fluxo mais simples. O modo principal deve mostrar e controlar as telas reais que já existem no Mac. O modo de segundo monitor/Virtual Display é herdado do SideScreen e continua útil, mas é secundário.
 
 ## Como usar esta documentação no Codex
 
@@ -32,12 +34,14 @@ A documentação foi estruturada para permitir evolução incremental: primeiro 
 
 ## Resumo executivo
 
-A conclusão principal é: não transformar o SideScreen inteiro no produto final. O SideScreen deve ser tratado como um motor de vídeo muito bom, mas o produto desejado é outro: um terminal remoto de Mac com input de alta fidelidade e sessão robusta via Tailnet.
+A conclusão principal é: não transformar o SideScreen inteiro no produto final. O SideScreen deve ser tratado como um motor de vídeo muito bom, mas o produto desejado é outro: um Remote Desktop minimalista para Mac, com input de alta fidelidade, sessão robusta via Tailnet e foco em telas reais existentes.
 
 A arquitetura recomendada é:
 
 ```text
 SideScreen video engine
++
+DisplaySource abstraction
 +
 novo session/transport layer
 +

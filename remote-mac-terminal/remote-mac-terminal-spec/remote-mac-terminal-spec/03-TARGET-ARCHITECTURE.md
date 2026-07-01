@@ -2,12 +2,15 @@
 
 ## Objetivo arquitetural
 
-Construir um terminal remoto de Mac para Android, não apenas um app de tela remota.
+Construir um Remote Desktop minimalista de Mac para Android, não apenas um app de tela remota ou segundo monitor.
+
+O modo principal deve capturar e controlar telas reais existentes do Mac. O modo Virtual Display continua como Extended Display Mode secundário.
 
 A arquitetura deve separar claramente:
 
 ```text
 Video subsystem
+Display source subsystem
 Input subsystem
 Session/auth subsystem
 Transport subsystem
@@ -46,7 +49,9 @@ Diagnostics subsystem
 │    ├─ SessionServer                           │
 │    ├─ EndpointAdvertiser                      │
 │    ├─ VideoService                            │
-│    │   ├─ VirtualDisplayService               │
+│    │   ├─ DisplaySourceService                │
+│    │   │   ├─ ExistingDisplaySource           │
+│    │   │   └─ VirtualDisplaySource            │
 │    │   ├─ CaptureService                      │
 │    │   ├─ EncodeService                       │
 │    │   └─ VideoTransport                      │
@@ -135,7 +140,9 @@ Responsabilidades:
 
 Responsabilidades:
 
-- criar/destruir Virtual Display;
+- selecionar fonte de vídeo;
+- capturar tela real existente no Remote Desktop Mode;
+- criar/destruir Virtual Display apenas no Extended Display Mode;
 - configurar resolução/HiDPI/FPS;
 - capturar frames;
 - codificar HEVC/H.264;
@@ -144,6 +151,36 @@ Responsabilidades:
 - expor telemetria de bitrate, FPS e frame age.
 
 Deve ser baseado no código atual do SideScreen.
+
+### DisplaySourceService
+
+Responsabilidades:
+
+- listar displays reais disponíveis no Mac;
+- identificar tela principal e monitores externos por `CGDirectDisplayID`;
+- criar Virtual Display somente quando o usuário escolher Extended Display Mode;
+- entregar ao `CaptureService` uma fonte uniforme de captura;
+- expor nome, resolução, escala e estado da fonte na UI/diagnóstico.
+
+Modelo:
+
+```text
+DisplaySource
+  ExistingDisplaySource
+    displayID
+    name
+    bounds
+    scale
+    isMain
+
+  VirtualDisplaySource
+    displayID
+    requestedResolution
+    hiDPI
+    refreshRate
+```
+
+Regra de produto: se o objetivo é substituir Google Remote Desktop/AnyDesk, `ExistingDisplaySource` é o caminho principal.
 
 ### InputIngress
 
@@ -337,6 +374,8 @@ O produto depende de rede real. Diagnóstico não é extra.
 
 Expor na UI:
 
+- fonte de tela selecionada: tela real / Virtual Display;
+- nome da tela selecionada;
 - endpoint conectado;
 - modo: USB/LAN/Tailnet;
 - host resolvido;
@@ -356,6 +395,7 @@ Expor na UI:
 ```text
 MacHostAgent
   SessionServer
+  DisplaySource   ← novo, Remote Desktop primeiro
   VideoService    ← SideScreen reaproveitado
   InputIngress    ← novo
   InputBackends   ← CGEvent primeiro, VirtualHID depois
@@ -371,4 +411,3 @@ AndroidTerminalClient
 Tailscale
   underlay de rede
 ```
-

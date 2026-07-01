@@ -8,17 +8,18 @@
 
 ## 1. Entendimento
 
-**Tarefa:** Transformar a documentação de arquitetura/specs em um plano executável, priorizando paralelismo real, redução de risco e validação de uso diário do Remote Mac Terminal.
+**Tarefa:** Transformar a documentação de arquitetura/specs em um plano executável, priorizando paralelismo real, redução de risco e validação de uso diário do Remote Mac Terminal como alternativa minimalista a Google Remote Desktop/AnyDesk.
 
-**Escopo:** Orquestração geral de execução; MacHost; AndroidClient; Tailnet; canal de input; Virtual HID; segurança de sessão; QA manual com hardware real; scripts de evidência; distribuição Mac/Android.
+**Escopo:** Orquestração geral de execução; Remote Desktop Mode em telas reais existentes; MacHost; AndroidClient; Tailnet; canal de input; Virtual HID; segurança de sessão; QA manual com hardware real; scripts de evidência; distribuição Mac/Android.
 
 **Premissas:**
 
 - A base local contém as implementações descritas em `14-DOCUMENTATION-COVERAGE-AND-STATUS.md`. Se houver divergência, a Wave 0 vira auditoria obrigatória antes de qualquer correção.
 - O backlog antigo não é fonte confiável de pendência. Ele serve como decomposição técnica, mas o status atual vence.
 - Root Android, QUIC e DriverKit próprio ficam fora do caminho crítico. Entram só por medição, não por ansiedade arquitetural.
+- Remote Desktop Mode é o produto principal. Extended Display Mode/Virtual Display é modo secundário, herdado do SideScreen.
 - O tablet de referência é `SM_X610`, e o host Tailnet citado nos specs é `mac-mini-de-gabriel.tailad333c.ts.net`; o plano deve continuar parametrizável para outro tablet/host.
-- O objetivo desta rodada não é “mais código”; é provar que o que existe aguenta uso real sem virar castelo de cartas.
+- O objetivo desta rodada não é “mais código”; é provar que o app permite acessar uma tela real do Mac com simplicidade e aguenta uso real sem virar castelo de cartas.
 
 ## 2. Exploração
 
@@ -26,12 +27,13 @@
 
 | Arquivo | Por que importa |
 |---------|-----------------|
-| `README.md` | Define a estratégia macro: SideScreen como motor de vídeo, novo session/transport layer e input remoto. |
+| `README.md` | Define a estratégia macro: SideScreen como motor de vídeo, Remote Desktop Mode primeiro, novo session/transport layer e input remoto. |
 | `00-CODEX-START-HERE.md` | Define ordem obrigatória: sem root primeiro, Tailnet + vídeo, input dedicado, CGEvent, Virtual HID depois. |
 | `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` | Fotografia atual. Marca o que já foi implementado e lista lacunas reais de uso diário. |
 | `07-IMPLEMENTATION-ROADMAP.md` | Roadmap original MVP/Alpha/Beta/final; útil para classificar trabalho por maturidade. |
 | `08-CODEX-TASK-BACKLOG.md` | Backlog técnico granular; usar como catálogo, não como lista cega de pendências. |
 | `09-TEST-PLAN.md` | Matriz de validação de rede, vídeo, teclado, mouse, input sob carga, lifecycle, segurança e permissões. |
+| `adr/ADR-0007-remote-desktop-first.md` | Define que tela real existente é o modo principal; Virtual Display é secundário. |
 | `05-INPUT-ARCHITECTURE-SPEC.md` | Define InputIngress, backends, fail-safe, coalescing e responsabilidades do input profissional. |
 | `11-REMOTE-INPUT-PROTOCOL-V1.md` | Define envelope, sequence, timestamp, eventos, `AllInputsUp`, ping/pong e regras de coalescing. |
 | `12-SESSION-AND-TRANSPORT-SPEC.md` | Define canais separados, sessão, autorização de canais e prioridade `INPUT > CONTROL > VIDEO > TELEMETRY`. |
@@ -61,6 +63,7 @@ tailscale status
 | Área | Arquivo/módulo | Mudança necessária | Contrato afetado |
 |------|----------------|-------------------|------------------|
 | Orquestração | `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` / planos novos | Converter lacunas reais em waves executáveis e paralelizáveis. | Não |
+| Remote Desktop Mode | `DisplaySource` futuro, `ScreenCapture.swift`, UI Mac/Android | Capturar tela real existente como fonte principal sem criar Virtual Display. | Sim |
 | QA real | `scripts/collect-qa-evidence.sh`, `qa-evidence/*`, `DAILY_USE_QA.md` | Rodar sessões longas USB/Tailnet e salvar evidências comparáveis. | Não |
 | Input | `InputIngress.swift`, `InputClient.kt`, `RemoteInputProtocol.*`, `RemoteMouseCapture.kt`, `RemoteKeyboardCapture.kt` | Corrigir apenas bugs encontrados em hardware real; não redesenhar v1 sem métrica. | Sim, se alterar framing/eventos |
 | Virtual HID | `KarabinerVirtualHIDBackend.swift`, `VirtualHIDHelperInstaller.swift`, `VirtualHIDHelperSources/main.swift` | Validar backend real, fallback CGEvent e mensagens de permissão. | Sim |
@@ -68,11 +71,12 @@ tailscale status
 | Tailnet | `EndpointMode.*`, `EndpointAdvertiser.swift`, `NetworkRoute.kt`, `PairingURL.*` | Só ajustar se QA mostrar regressão em MagicDNS/IP 100.x/split tunneling. | Sim |
 | Distribuição | `scripts/build_mac.sh`, notarização, keystore Android, release scripts | Sair de build local para release instalável e reproduzível. | Não, mas afeta instalação |
 
-**Ordem recomendada:** Wave 0 obrigatória → quatro trilhos paralelos → consolidação única → release candidate. Não mexer em root/QUIC/DriverKit próprio antes de fechar QA real.
+**Ordem recomendada:** Wave 0 obrigatória → Remote Desktop Mode em tela real → quatro trilhos paralelos → consolidação única → release candidate. Não mexer em root/QUIC/DriverKit próprio antes de fechar QA real.
 
 ```mermaid
 flowchart LR
-  W0[Wave 0: baseline e auditoria] --> A[Trilho A: QA longa USB/Tailnet]
+  W0[Wave 0: baseline e auditoria] --> R[Trilho R: Remote Desktop Mode]
+  R --> A[Trilho A: QA longa USB/Tailnet]
   W0 --> B[Trilho B: Input real + Virtual HID]
   W0 --> C[Trilho C: Segurança e revogação]
   W0 --> D[Trilho D: Release/permissões]
@@ -110,6 +114,8 @@ flowchart LR
 
 | Módulo | Arquivo | O que testar | Tipo | Justificativa |
 |--------|---------|--------------|------|---------------|
+| Remote Desktop | `qa-evidence/*` | Captura da tela principal real do Mac sem criar Virtual Display. | e2e/manual | Este é o produto principal, não o modo segundo monitor. |
+| Remote Desktop | `qa-evidence/*` | Selecionar monitor externo real e alternar fonte. | e2e/manual | Substituto de AnyDesk precisa ver telas existentes. |
 | QA real | `DAILY_USE_QA.md` / `qa-evidence/*` | Tailnet 30 min com vídeo + input dedicado em `P/P+1`. | manual/e2e | O smoke curto provou conexão; uso diário exige duração. |
 | QA real | `DAILY_USE_QA.md` / `qa-evidence/*` | USB 30 min com vídeo + input dedicado. | manual/e2e | USB é baseline e não pode regredir. |
 | Input | `scripts/open-input-qa.sh` output | Teclado Bluetooth: letras, números, modificadores, acentos/dead keys, ABNT2 quando aplicável. | manual/hardware | Unit test não prova stack Bluetooth/OEM. |
@@ -121,6 +127,8 @@ flowchart LR
 ### Edge cases
 
 - Tailnet em DERP/relay com RTT alto.
+- Remote Desktop Mode criando Virtual Display sem querer.
+- Troca de tela real durante stream.
 - MagicDNS falha, mas IP 100.x funciona.
 - App excluído do split tunneling no Tailscale Android.
 - Android perde foco segurando Shift/Command ou botão esquerdo.
@@ -133,6 +141,7 @@ flowchart LR
 ### O que não precisa de teste novo
 
 - Reescrita de vídeo ScreenCaptureKit/VideoToolbox/MediaCodec: fora do escopo; vídeo existente deve ser validado por smoke e sessão longa.
+- Transformar Extended Display Mode no fluxo principal: fora da direção de produto.
 - Root Android: futuro intencional; não entra como bloqueador.
 - QUIC/single-port: só merece experimento se TCP multi-channel falhar em métrica real.
 - DriverKit próprio: Karabiner VirtualHID/helper cobre o caminho prático atual.
@@ -175,6 +184,7 @@ flowchart LR
 | 5 | Revogação funcionar no código, mas não derrubar sessão ativa real. | Média | Risco de segurança. | Teste manual durante stream + teste automatizado se possível. |
 | 6 | Release assinado quebrar TCC/notarização. | Média | Usuário não consegue instalar/usar. | Tratar release/permissões como trilho próprio, não como última hora. |
 | 7 | Root/QUIC virarem distração antes da estabilidade. | Alta | Complexidade desnecessária. | Bloquear por decisão condicional baseada em evidência. |
+| 8 | A execução continuar validando só Virtual Display e chamar isso de Remote Desktop. | Média | Produto correto fica adiado. | Gate explícito de tela real existente antes de aprovação de uso diário. |
 
 ## 7. Plano de Implementação
 
@@ -189,6 +199,8 @@ flowchart LR
 
 ### Wave 1: Execução paralela por trilhos
 
+- [ ] Passo 1.R: Trilho Remote Desktop — Implementar/provar `DisplaySource` com tela principal real do Mac -> Verificação: Android mostra tela real, sem Virtual Display criado.
+- [ ] Passo 1.R2: Trilho Remote Desktop — Provar seleção/troca de monitor real quando disponível -> Verificação: diagnóstico mostra fonte, resolução e `displayID`.
 - [ ] Passo 1.A: Trilho QA — Rodar Tailnet 30 min com `--no-reverse --tailnet-host ... --expect-stream --tap-connect` -> Verificação: vídeo, input `P/P+1`, logs e latência arquivados.
 - [ ] Passo 1.B: Trilho QA — Rodar USB 30 min com ADB reverse para `P` e `P+1` -> Verificação: baseline local sem regressão.
 - [ ] Passo 1.C: Trilho Input — Rodar `./scripts/open-input-qa.sh` com teclado/mouse Bluetooth -> Verificação: JSON salvo com backend, layout, eventos, falhas e notas.
@@ -228,6 +240,7 @@ flowchart LR
 - [ ] Confirmar critérios de aceite do HTML visual.
 - [ ] Confirmar pacote de evidência Tailnet 30 min.
 - [ ] Confirmar pacote de evidência USB 30 min.
+- [ ] Confirmar captura de tela real existente em Remote Desktop Mode.
 - [ ] Confirmar input QA com hardware Bluetooth real.
 - [ ] Confirmar VirtualHID real ou fallback CGEvent explicitamente documentado.
 - [ ] Confirmar revogação durante sessão ativa.
@@ -249,6 +262,7 @@ flowchart LR
 
 Estes são os itens que devem aparecer resumidos no HTML:
 
+- O app mostra e controla uma tela real existente do Mac em Remote Desktop Mode.
 - O app roda por 30 min via Tailnet no tablet real, com vídeo e input dedicado funcionando.
 - O app roda por 30 min via USB sem regredir o caminho local.
 - Teclado e mouse Bluetooth passam na matriz manual essencial: digitação, modificadores, drag, scroll e desconexão sem tecla presa.

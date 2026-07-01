@@ -8,7 +8,7 @@ Não atacar root, DriverKit próprio ou QUIC primeiro. Validar o produto com o m
 
 ```text
 MVP:
-  Tailnet + vídeo existente + input separado simples
+  Remote Desktop Mode + Tailnet + vídeo existente + input separado simples
 
 Alpha:
   HID-like protocol + VirtualHID prático + sessão melhor
@@ -20,11 +20,11 @@ Final:
   produto robusto, installer, segurança, modo root opcional
 ```
 
-## MVP — Tailnet + input dedicado sem root
+## MVP — Remote Desktop Mode + Tailnet + input dedicado sem root
 
 ### Objetivo
 
-Provar que o tablet Android pode ser usado remotamente como terminal do Mac mini via Tailscale, sem root.
+Provar que o tablet Android pode ser usado remotamente para ver e controlar uma tela real do Mac mini via Tailscale, sem root.
 
 ### Escopo
 
@@ -40,7 +40,9 @@ Provar que o tablet Android pode ser usado remotamente como terminal do Mac mini
 
 - Reaproveitar pipeline atual do SideScreen.
 - Não trocar ScreenCapture/VideoToolbox/MediaCodec.
-- Apenas ajustar endpoints e reconexão se necessário.
+- Adicionar `DisplaySource` para capturar uma tela real existente do Mac.
+- Manter Virtual Display como modo secundário para Extended Display.
+- Apenas ajustar endpoints, seleção de fonte e reconexão se necessário.
 
 #### Input
 
@@ -61,6 +63,7 @@ Provar que o tablet Android pode ser usado remotamente como terminal do Mac mini
 ### Entregáveis
 
 - `EndpointMode` e parser de QR atualizado.
+- `DisplaySource` com tela real como fonte principal.
 - `InputClient` Android.
 - `InputServer` Mac.
 - `CGEventKeyboardMouseBackend` inicial.
@@ -70,6 +73,7 @@ Provar que o tablet Android pode ser usado remotamente como terminal do Mac mini
 ### Critérios de aceite
 
 - Conectar fora da LAN via Tailscale.
+- Ver a tela real selecionada do Mac no Android.
 - Teclado básico funciona.
 - Mouse relativo funciona.
 - Input continua responsivo com vídeo ativo.
@@ -155,6 +159,9 @@ Tornar o sistema utilizável diariamente e preparar root.
 
 #### UX
 
+- Remote Desktop Mode como primeira tela de produto.
+- Seletor simples de tela real do Mac.
+- Extended Display Mode como opção secundária.
 - Onboarding Tailnet.
 - Tela “por que algumas teclas não funcionam sem root”.
 - Perfis: Productivity, Low-latency, Low-bandwidth.
@@ -239,6 +246,9 @@ Estado implementado sem root:
 
 ### Sprint 1 — Tailnet MVP
 
+0. Introduzir `DisplaySource`: tela real existente vs Virtual Display.
+0.1. Fazer Remote Desktop Mode capturar a tela principal do Mac sem criar display virtual.
+0.2. Manter Extended Display Mode como caminho explícito para segundo monitor.
 1. Adicionar `EndpointMode` ao modelo de conexão.
 2. Atualizar `PairingURL` Mac e Android para aceitar `mode`.
 3. Adicionar campo de Tailnet host nas settings Mac.

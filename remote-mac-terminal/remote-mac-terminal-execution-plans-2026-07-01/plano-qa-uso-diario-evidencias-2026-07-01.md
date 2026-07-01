@@ -8,13 +8,14 @@
 
 ## 1. Entendimento
 
-**Tarefa:** Executar uma rodada objetiva de QA de uso diário, com evidências suficientes para provar estabilidade em USB e Tailnet, sem confundir smoke curto com produto usável.
+**Tarefa:** Executar uma rodada objetiva de QA de uso diário, com evidências suficientes para provar estabilidade em Remote Desktop Mode, USB e Tailnet, sem confundir smoke curto com produto usável.
 
-**Escopo:** Scripts de evidência; Tailnet; USB/ADB reverse; vídeo; canal de input dedicado; lifecycle Android; logs; matriz manual de teclado/mouse; documentação `DAILY_USE_QA.md` e `qa-evidence/*`.
+**Escopo:** Scripts de evidência; captura de tela real existente do Mac; Tailnet; USB/ADB reverse; vídeo; canal de input dedicado; lifecycle Android; logs; matriz manual de teclado/mouse; documentação `DAILY_USE_QA.md` e `qa-evidence/*`.
 
 **Premissas:**
 
 - Smoke curto já passou, mas não prova uso diário.
+- Segundo monitor não prova o produto principal. QA de uso diário precisa cobrir Remote Desktop Mode em tela real existente.
 - O tablet real e os periféricos Bluetooth são recursos compartilhados; portanto, o paralelismo precisa separar automação sem hardware de sessões manuais com hardware.
 - O alvo mínimo é 30 min por modo relevante: Tailnet e USB.
 - Toda falha precisa virar evidência reproduzível, não memória de teste manual.
@@ -27,6 +28,7 @@
 |---------|-----------------|
 | `14-DOCUMENTATION-COVERAGE-AND-STATUS.md` | Lista lacunas reais: sessão longa, input QA com hardware, VirtualHID real, revogação ativa, Tailnet longa, permissões e distribuição. |
 | `09-TEST-PLAN.md` | Define casos TN, VID, KEY, MOU, LAT, LIFE, SEC e PERM. |
+| `adr/ADR-0007-remote-desktop-first.md` | Define que tela real existente é o gate principal de produto. |
 | `04-TAILSCALE-NETWORKING-SPEC.md` | Define expectativas de MagicDNS/IP 100.x e não usar bind Wi-Fi em Tailnet. |
 | `05-INPUT-ARCHITECTURE-SPEC.md` | Define fail-safe, pointer capture, input priority e métricas. |
 | `11-REMOTE-INPUT-PROTOCOL-V1.md` | Define sequence/timestamp, `AllInputsUp`, ping/pong e coalescing seguro. |
@@ -52,6 +54,7 @@ tailscale status
 
 | Área | Arquivo/módulo | Mudança necessária | Contrato afetado |
 |------|----------------|-------------------|------------------|
+| Remote Desktop | `DisplaySource` futuro, `ScreenCapture.swift`, UI Mac/Android | Confirmar que a fonte capturada é uma tela real existente, não Virtual Display. | Sim |
 | Evidência | `scripts/collect-qa-evidence.sh` | Garantir que sessão longa salve logs de vídeo, input, rota e backend. | Não |
 | QA manual | `DAILY_USE_QA.md` | Registrar matriz real, tempo, periféricos, resultado e paths. | Não |
 | Tailnet | `NetworkRoute.kt`, `EndpointMode.*`, `PairingURL.*` | Corrigir apenas se MagicDNS/IP 100.x ou split tunneling falhar. | Sim, se alterar parser/rota |
@@ -84,6 +87,9 @@ tailscale status
 
 | Módulo | Arquivo | O que testar | Tipo | Justificativa |
 |--------|---------|--------------|------|---------------|
+| Remote Desktop | `qa-evidence/*` | Tela principal real do Mac aparece no Android sem criar Virtual Display. | e2e/manual | Substituir Google Remote Desktop/AnyDesk exige ver a tela existente. |
+| Remote Desktop | `qa-evidence/*` | Monitor externo real pode ser selecionado quando existir. | e2e/manual | O usuário quer acessar o computador como ele já está. |
+| Remote Desktop | `qa-evidence/*` | Alternar fonte de tela não deixa input preso. | e2e/manual | Troca de tela é fluxo natural de acesso remoto. |
 | Tailnet | `qa-evidence/*` | 30 min via MagicDNS com stream e input `P/P+1`. | e2e/manual | Smoke curto não valida uso diário. |
 | Tailnet | `qa-evidence/*` | 30 min via IP 100.x, se MagicDNS falhar ou como fallback. | e2e/manual | Fallback precisa ser real. |
 | USB | `qa-evidence/*` | 30 min com ADB reverse para vídeo e input. | e2e/manual | USB é baseline local. |
@@ -94,6 +100,8 @@ tailscale status
 ### Edge cases
 
 - Queda de Tailnet segurando modificador.
+- Remote Desktop Mode criar Virtual Display sem o usuário pedir.
+- Capturar display errado em Mac com mais de uma tela.
 - Hotspot/celular alternando rota durante sessão.
 - `InputPing` continua, mas vídeo trava.
 - Vídeo volta e input não volta, ou o inverso.
@@ -152,12 +160,13 @@ tailscale status
 - [ ] Passo 1.2: Rodar `./scripts/preflight.sh --full` -> Verificação: resultado anexado ao pacote de QA.
 - [ ] Passo 1.3: Rodar smoke curto com `--tap-connect` -> Verificação: app instala/abre/conecta ou falha com log.
 - [ ] Passo 1.4: Criar pasta de rodada em `qa-evidence/` -> Verificação: naming padrão e README da rodada.
+- [ ] Passo 1.5: Confirmar fonte de tela esperada -> Verificação: diagnóstico indica tela real existente ou Virtual Display explicitamente escolhido.
 
 ### Wave 2: Sessões longas, com paralelismo controlado
 
-- [ ] Passo 2.1: Rodar Tailnet 30 min via MagicDNS -> Verificação: stream, input channel, RTT/p95 e logs preservados.
+- [ ] Passo 2.1: Rodar Tailnet 30 min via MagicDNS em Remote Desktop Mode -> Verificação: tela real, stream, input channel, RTT/p95 e logs preservados.
 - [ ] Passo 2.2: Em paralelo ao Passo 2.1, revisar logs de preflight e preparar matriz de input -> Verificação: lista de casos pronta antes da sessão manual.
-- [ ] Passo 2.3: Rodar USB 30 min com ADB reverse `P` e `P+1` -> Verificação: não regressão do caminho USB.
+- [ ] Passo 2.3: Rodar USB 30 min com ADB reverse `P` e `P+1` em Remote Desktop Mode -> Verificação: não regressão do caminho USB.
 - [ ] Passo 2.4: Se MagicDNS falhar, rodar Tailnet 30 min via IP 100.x -> Verificação: fallback comprovado.
 
 ### Wave 3: Input real com hardware Bluetooth
@@ -193,6 +202,7 @@ tailscale status
 - [ ] Confirmar critérios de aceite do HTML visual.
 - [ ] Confirmar que cada falha tem evidência e reprodução.
 - [ ] Confirmar que “teclas Android impossíveis sem root” foram classificadas como limitação, não bug.
+- [ ] Confirmar que “segundo monitor funciona” não foi usado como substituto de “tela real funciona”.
 
 ## 9. Revisão Crítica
 
@@ -209,8 +219,9 @@ tailscale status
 
 Estes são os itens que devem aparecer resumidos no HTML:
 
-- Sessão Tailnet de 30 min aprovada com vídeo e input dedicado.
-- Sessão USB de 30 min aprovada com vídeo e input dedicado.
+- Remote Desktop Mode mostra e controla tela real existente do Mac.
+- Sessão Tailnet de 30 min aprovada com tela real, vídeo e input dedicado.
+- Sessão USB de 30 min aprovada com tela real, vídeo e input dedicado.
 - Matriz de teclado Bluetooth aprovada ou limitações sem root documentadas.
 - Matriz de mouse Bluetooth aprovada: movimento relativo, botões, drag e scroll.
 - Perda de foco/rede/pointer capture não deixa tecla ou botão preso.

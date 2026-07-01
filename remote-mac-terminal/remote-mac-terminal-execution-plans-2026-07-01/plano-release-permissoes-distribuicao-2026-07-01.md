@@ -116,7 +116,7 @@ swift test
 
 | Chave/área | Texto base | Módulo | Arquivo | Ação |
 |------------|------------|--------|---------|------|
-| mac.permission.screen_recording | “Screen Recording é necessário para capturar o display virtual.” | Mac | Settings/onboarding | Criar/ajustar |
+| mac.permission.screen_recording | “Screen Recording é necessário para capturar a tela remota selecionada.” | Mac | Settings/onboarding | Criar/ajustar |
 | mac.permission.accessibility | “Accessibility é necessário para o fallback CGEvent de teclado/mouse.” | Mac | Settings/onboarding | Criar/ajustar |
 | mac.permission.input_monitoring | “Input Monitoring pode ser necessário para input remoto confiável.” | Mac | Settings/onboarding | Criar/ajustar |
 | mac.virtualhid.permission | “Virtual HID exige aprovação do driver/helper no macOS.” | Mac | Settings/onboarding | Criar/ajustar |

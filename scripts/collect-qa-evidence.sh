@@ -287,6 +287,17 @@ write_selected_apk_evidence() {
     } > "$OUT_DIR/selected-apk.txt"
 }
 
+capture_android_diag_full() {
+    if ! command -v adb >/dev/null 2>&1; then
+        echo "adb unavailable" > "$OUT_DIR/android-diag-full.txt"
+        return
+    fi
+    capture_shell \
+        "Android app diagnostic log full" \
+        "android-diag-full.txt" \
+        ". '$SCRIPT_DIR/adb-env.sh' >/dev/null 2>&1 && sidescreen_select_adb_device >/dev/null 2>&1 && adb -s \"\$ANDROID_SERIAL\" shell run-as com.sidescreen.app cat files/diag.log"
+}
+
 print_matches() {
     local pattern="$1"
     local fallback="$2"
@@ -316,21 +327,21 @@ write_observation_summary() {
         echo "Tailnet host: ${TAILNET_HOST:-none}"
         echo ""
         echo "## Stream/input evidence"
-        if [ -f "$OUT_DIR/android-device-smoke.txt" ]; then
+        if [ -f "$OUT_DIR/android-device-smoke.txt" ] || [ -f "$OUT_DIR/android-diag-full.txt" ]; then
             print_matches \
-                "Stream connection and frame flow observed|Recent frame flow observed|No recent frame flow|First video frame|First output frame|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*|Input channel observed on $INPUT_PORT|Input channel connected to .*:$INPUT_PORT" \
+                "Stream connection and frame flow observed|Recent frame flow observed|No recent frame flow|First video frame|First output frame|Frame heartbeat: total=[1-9][0-9]*|Frames received: [1-9][0-9]*|Decode stats: input=[1-9][0-9]*|Input channel observed on $INPUT_PORT|Input channel connected to .*:$INPUT_PORT" \
                 "No stream/input observation lines found in android-device-smoke.txt" \
-                "$OUT_DIR/android-device-smoke.txt"
+                "$OUT_DIR/android-device-smoke.txt" "$OUT_DIR/android-diag-full.txt"
         else
             echo "android-device-smoke.txt not present; smoke was not requested."
         fi
         echo ""
         echo "## Backend evidence"
-        if [ -f "$OUT_DIR/android-device-smoke.txt" ] || [ -f "$OUT_DIR/mac-runtime-log-tail.txt" ]; then
+        if [ -f "$OUT_DIR/android-device-smoke.txt" ] || [ -f "$OUT_DIR/android-diag-full.txt" ] || [ -f "$OUT_DIR/mac-runtime-log-tail.txt" ]; then
             print_matches \
                 "backend=(CGEvent|Virtual HID)|Input: (CGEvent|Virtual HID) active|Input backend: (CGEvent|Virtual HID)|Active backend|Virtual HID" \
                 "No backend observation lines found." \
-                "$OUT_DIR/android-device-smoke.txt" "$OUT_DIR/mac-runtime-log-tail.txt"
+                "$OUT_DIR/android-device-smoke.txt" "$OUT_DIR/android-diag-full.txt" "$OUT_DIR/mac-runtime-log-tail.txt"
         else
             echo "No runtime logs available."
         fi
@@ -410,6 +421,7 @@ if [ "$RUN_SMOKE" -eq 1 ]; then
     capture "Android device smoke" "android-device-smoke.txt" "$SCRIPT_DIR/android-device-smoke.sh" "${smoke_args[@]}"
     SMOKE_STATUS=$?
     write_selected_apk_evidence
+    capture_android_diag_full
 fi
 
 if command -v adb >/dev/null 2>&1; then

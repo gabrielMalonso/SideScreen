@@ -27,7 +27,7 @@ class ScreenCapture {
     private var streamDelegate: StreamDelegate?
     private var encoder: VideoEncoder?
     private var display: SCDisplay?
-    private var virtualDisplayID: CGDirectDisplayID?
+    private var captureDisplayID: CGDirectDisplayID?
     private var refreshRate: Int = 60
 
     // Thread-safe state for cross-thread access (frame output queue + main queue)
@@ -111,11 +111,11 @@ class ScreenCapture {
     }
 
     var displayWidth: Int {
-        guard let id = virtualDisplayID else { return display?.width ?? 0 }
+        guard let id = captureDisplayID else { return display?.width ?? 0 }
         return ScreenCapture.physicalSize(for: id).width
     }
     var displayHeight: Int {
-        guard let id = virtualDisplayID else { return display?.height ?? 0 }
+        guard let id = captureDisplayID else { return display?.height ?? 0 }
         return ScreenCapture.physicalSize(for: id).height
     }
 
@@ -152,12 +152,22 @@ class ScreenCapture {
         debugLog("ScreenCapture init — macOS \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)")
     }
 
-    /// Setup screen capture for a specific virtual display
-    func setupForVirtualDisplay(_ displayID: CGDirectDisplayID, refreshRate: Int = 60) async throws {
-        self.virtualDisplayID = displayID
+    /// Setup screen capture for a specific display source.
+    func setup(for source: DisplaySource, refreshRate: Int = 60) async throws {
+        try await setupForDisplay(source.displayID, refreshRate: refreshRate, label: source.diagnosticKind)
+    }
+
+    /// Setup screen capture for a specific display.
+    func setupForDisplay(_ displayID: CGDirectDisplayID, refreshRate: Int = 60, label: String = "display") async throws {
+        self.captureDisplayID = displayID
         self.refreshRate = refreshRate
-        try await setupDisplay()
+        try await setupDisplay(label: label)
         try await setupStream()
+    }
+
+    /// Setup screen capture for a specific virtual display.
+    func setupForVirtualDisplay(_ displayID: CGDirectDisplayID, refreshRate: Int = 60) async throws {
+        try await setupForDisplay(displayID, refreshRate: refreshRate, label: "virtualDisplay")
     }
 
     // MARK: - SCShareableContent with timeout
@@ -181,10 +191,10 @@ class ScreenCapture {
 
     // MARK: - Display setup
 
-    private func setupDisplay() async throws {
-        guard let virtualDisplayID = virtualDisplayID else {
+    private func setupDisplay(label: String = "display") async throws {
+        guard let captureDisplayID = captureDisplayID else {
             throw NSError(domain: "ScreenCapture", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Virtual display ID not set"])
+                userInfo: [NSLocalizedDescriptionKey: "Display ID not set"])
         }
 
         for attempt in 1...5 {
@@ -202,26 +212,26 @@ class ScreenCapture {
 
             debugLog("SCShareableContent returned \(content.displays.count) displays: \(content.displays.map { $0.displayID })")
 
-            if let virtualDisplay = content.displays.first(where: { $0.displayID == virtualDisplayID }) {
-                display = virtualDisplay
-                debugLog("Capturing virtual display: \(virtualDisplay.width)x\(virtualDisplay.height) (ID: \(virtualDisplayID))")
+            if let selectedDisplay = content.displays.first(where: { $0.displayID == captureDisplayID }) {
+                display = selectedDisplay
+                debugLog("Capturing \(label): \(selectedDisplay.width)x\(selectedDisplay.height) (ID: \(captureDisplayID))")
                 return
             }
 
             if attempt < 5 {
-                debugLog("Virtual display \(virtualDisplayID) not found in attempt \(attempt), retrying...")
+                debugLog("Display \(captureDisplayID) not found in attempt \(attempt), retrying...")
                 try await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
 
         throw NSError(domain: "ScreenCapture", code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Virtual display with ID \(virtualDisplayID) not found after 5 attempts"])
+            userInfo: [NSLocalizedDescriptionKey: "Display with ID \(captureDisplayID) not found after 5 attempts"])
     }
 
     // MARK: - Stream setup
 
     private func setupStream() async throws {
-        guard let display = display, virtualDisplayID != nil else {
+        guard let display = display, captureDisplayID != nil else {
             throw NSError(domain: "ScreenCapture", code: 2,
                 userInfo: [NSLocalizedDescriptionKey: "Display not initialized"])
         }
@@ -463,7 +473,7 @@ class ScreenCapture {
     // MARK: - CGDisplayStream fallback
 
     private func attemptFallbackCapture() {
-        guard let displayID = virtualDisplayID else {
+        guard let displayID = captureDisplayID else {
             debugLog("Fallback skipped — no displayID")
             return
         }

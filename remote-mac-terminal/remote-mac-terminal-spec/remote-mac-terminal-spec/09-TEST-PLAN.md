@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Validar que o projeto entrega uma experiência de terminal remoto, não apenas vídeo remoto.
+Validar que o projeto entrega uma experiência de Remote Desktop minimalista, não apenas vídeo remoto ou segundo monitor.
 
 ## Ambientes de teste
 
@@ -88,6 +88,58 @@ Aceite:
 - Workaround de bind Wi-Fi, se ainda existir, só é aplicado em modo LAN.
 
 ## Testes de vídeo
+
+### RD-001 — Remote Desktop Mode captura tela principal
+
+Passos:
+
+1. Abrir o Mac host.
+2. Selecionar Remote Desktop Mode.
+3. Escolher a tela principal do Mac.
+4. Conectar pelo Android.
+
+Aceite:
+
+- Android mostra a tela principal real do Mac.
+- Mac não cria Virtual Display nesse modo.
+- Cursor/teclado controlam a tela real.
+- Diagnóstico mostra `DisplaySource=existingDisplay`.
+
+### RD-002 — Remote Desktop Mode captura monitor externo
+
+Passos:
+
+1. Conectar monitor externo ao Mac.
+2. Selecionar esse monitor como fonte.
+3. Conectar pelo Android.
+
+Aceite:
+
+- Android mostra o monitor externo escolhido.
+- Nome/resolução da fonte aparecem no diagnóstico.
+- Input atua no Mac normalmente.
+
+### RD-003 — Alternar fonte de tela
+
+Passos:
+
+1. Conectar em uma tela real.
+2. Alternar para outra tela real ou para Virtual Display.
+3. Observar reconexão/keyframe.
+
+Aceite:
+
+- Vídeo volta sem reiniciar todo o app quando possível.
+- Android recebe novo display config.
+- Input não fica preso durante a troca.
+
+### RD-004 — Extended Display Mode continua funcionando
+
+Aceite:
+
+- Virtual Display ainda pode ser criado explicitamente.
+- Android continua recebendo esse display quando o usuário escolhe segundo monitor.
+- Remote Desktop Mode e Extended Display Mode não ficam ambíguos na UI.
 
 ### VID-001 — Primeiro frame
 
@@ -381,7 +433,7 @@ Aceite Alpha/Beta:
 
 Aceite:
 
-- Host não inicia capture.
+- Host não inicia capture de tela real nem Virtual Display.
 - UI pede permissão corretamente.
 
 ### PERM-002 — Accessibility/Input Monitoring ausente

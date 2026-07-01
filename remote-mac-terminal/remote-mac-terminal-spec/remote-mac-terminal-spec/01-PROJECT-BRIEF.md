@@ -15,7 +15,11 @@ O projeto atual já resolve muito bem a parte de vídeo:
 - suporte a HiDPI;
 - touch básico.
 
-O novo objetivo é mais ambicioso: não criar apenas um segundo monitor, mas um terminal remoto para Mac.
+O novo objetivo é mais ambicioso: não criar apenas um segundo monitor, mas um Remote Desktop minimalista para Mac.
+
+O usuário quer substituir, no uso pessoal, Google Remote Desktop/Chrome Remote Desktop ou AnyDesk por uma ferramenta menor e menos intrusiva. Isso significa ver e controlar as telas reais que já existem no Mac, não apenas criar um monitor extra.
+
+O modo de segundo monitor/Virtual Display deve continuar como capacidade secundária herdada do SideScreen. Ele não deve ditar o produto principal.
 
 ## Produto-alvo
 
@@ -35,6 +39,16 @@ Tablet Android fora de casa
 
 O usuário deve conseguir abrir o tablet, conectar ao Mac mini e trabalhar como se estivesse usando um MacBook remoto.
 
+O primeiro fluxo de produto deve ser:
+
+```text
+Escolher Mac
+  → escolher tela real do Mac
+  → conectar
+  → ver/controlar essa tela em fullscreen
+  → desconectar ou revogar
+```
+
 ## Não-objetivos iniciais
 
 A primeira fase não deve tentar resolver tudo.
@@ -45,7 +59,7 @@ Não são objetivos do MVP:
 - usar root;
 - usar DriverKit próprio;
 - substituir Tailscale por NAT traversal próprio;
-- criar concorrente completo de AnyDesk/Parsec/RustDesk;
+- criar clone completo de AnyDesk/Parsec/RustDesk com chat, transferência de arquivos, áudio, clipboard avançado e gestão de times;
 - implementar clipboard, áudio, multi-monitor e file transfer imediatamente;
 - suportar múltiplos clientes simultâneos.
 
@@ -69,7 +83,8 @@ Logo, o projeto deve priorizar:
 O MVP é bem-sucedido se:
 
 - o Android conecta ao Mac via MagicDNS ou IP 100.x do Tailscale;
-- vídeo do Virtual Display aparece no tablet fora da LAN;
+- vídeo da tela real selecionada do Mac aparece no tablet fora da LAN;
+- Virtual Display continua disponível como modo secundário quando o usuário quiser segundo monitor;
 - o app não força socket para Wi-Fi em modo Tailnet;
 - mouse Bluetooth move o cursor do Mac com baixa latência;
 - clique esquerdo, clique direito, drag e scroll funcionam;
@@ -104,15 +119,32 @@ A versão final é bem-sucedida se:
 - o canal de input permanece responsivo mesmo com vídeo pesado;
 - logs e diagnóstico permitem depurar problemas de rede e input.
 
+## Modos de produto
+
+```text
+Remote Desktop Mode
+  captura uma tela real existente do Mac
+  envia essa tela ao Android
+  injeta teclado/mouse no Mac
+  é o modo principal
+
+Extended Display Mode
+  cria um Virtual Display no macOS
+  envia esse display ao Android
+  permite usar o tablet como segundo monitor
+  é modo secundário/herdado
+```
+
 ## Direção estratégica
 
-Criar um projeto novo ou um fork fortemente refatorado. A base do SideScreen deve ser aproveitada como motor de vídeo, mas o produto final deve ter arquitetura de terminal remoto.
+Criar um projeto novo ou um fork fortemente refatorado. A base do SideScreen deve ser aproveitada como motor de vídeo, mas o produto final deve ter arquitetura de Remote Desktop minimalista.
 
 Recomendação:
 
 ```text
 Novo projeto/fork estruturado
   ├─ video engine reaproveitado do SideScreen
+  ├─ display source layer novo
   ├─ session layer novo
   ├─ transport layer novo
   ├─ input layer novo
@@ -122,4 +154,3 @@ Novo projeto/fork estruturado
 ## Licença da base
 
 O snapshot analisado contém `LICENSE` MIT. Ao reaproveitar código, preservar o copyright e a licença em cópias substanciais do código.
-

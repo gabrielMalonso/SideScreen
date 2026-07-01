@@ -275,6 +275,20 @@ struct SettingsView: View {
                         // Display Configuration
                         FrostedGroupBox(title: "Display Configuration", icon: "display") {
                             VStack(alignment: .leading, spacing: 16) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Mode")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                    Picker("", selection: $settings.displaySourceMode) {
+                                        ForEach(DisplaySourceMode.allCases, id: \.self) { mode in
+                                            Text(mode.title).tag(mode)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .disabled(settings.isRunning)
+                                }
+
+                                if settings.displaySourceMode == .extendedDisplay {
                                 // Resolution
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
@@ -460,6 +474,7 @@ struct SettingsView: View {
                                         .controlSize(.small)
                                     }
                                     .padding(.top, 10)
+                                }
                                 }
 
                             }
@@ -816,10 +831,10 @@ struct SettingsView: View {
                         // Status
                         FrostedGroupBox(title: "Status", icon: "checkmark.circle") {
                             VStack(alignment: .leading, spacing: 12) {
-                                StatusRow(title: "Virtual Display",
-                                          status: settings.displayCreated ? "Active" : "Inactive",
-                                          color: settings.displayCreated ? .green : .secondary,
-                                          hint: "The macOS virtual display we render into. Created when you click Start; the tablet streams its pixels.")
+                                StatusRow(title: "Display Source",
+                                          status: settings.activeDisplaySourceName,
+                                          color: settings.activeDisplaySourceKind == "none" ? .secondary : .green,
+                                          hint: "Active capture source: existingDisplay for Remote Desktop, virtualDisplay for Extended Display.")
                                 StatusRow(title: "Client Connected",
                                           status: settings.clientConnected ? "Yes" : "No",
                                           color: settings.clientConnected ? .green : .secondary,
@@ -828,7 +843,7 @@ struct SettingsView: View {
                                     title: ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26 ? "Screen & System Audio" : "Screen Recording",
                                     status: settings.hasScreenRecordingPermission ? "Granted" : "Required",
                                     color: settings.hasScreenRecordingPermission ? .green : .red,
-                                    hint: "macOS privacy permission required to capture the virtual display. Grant in System Settings → Privacy & Security → Screen Recording."
+                                    hint: "macOS privacy permission required to capture the selected display. Grant in System Settings → Privacy & Security → Screen Recording."
                                 )
                                 StatusRow(title: "Accessibility",
                                           status: settings.hasAccessibilityPermission ? "Granted" : "Required for touch",
@@ -863,7 +878,7 @@ struct SettingsView: View {
                                     StatusRow(title: "Capture Method",
                                               status: settings.captureMethod,
                                               color: settings.captureMethod.contains("fallback") ? .orange : .green,
-                                              hint: "Which macOS API is currently capturing the virtual display. SCStream is the modern path; CGDisplayStream fallback activates if SCStream fails (e.g. on certain virtual display configs).")
+                                              hint: "Which macOS API is currently capturing the selected display. SCStream is the modern path; CGDisplayStream fallback activates if SCStream fails.")
                                 }
 
                                 // Mode-aware contextual rows
@@ -910,8 +925,8 @@ struct SettingsView: View {
                                                 .font(.system(size: 12, weight: .medium))
                                         }
                                         Text(ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
-                                            ? "Required to capture the virtual display. Go to System Settings > Privacy & Security > Screen & System Audio Recording."
-                                            : "Required to capture the virtual display.")
+                                            ? "Required to capture the selected display. Go to System Settings > Privacy & Security > Screen & System Audio Recording."
+                                            : "Required to capture the selected display.")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
                                         Button(action: {
@@ -1360,6 +1375,9 @@ class DisplaySettings: ObservableObject {
     @Published var connectionMode: ConnectionMode {
         didSet { save("connectionMode", connectionMode.rawValue) }
     }
+    @Published var displaySourceMode: DisplaySourceMode {
+        didSet { save("displaySourceMode", displaySourceMode.rawValue) }
+    }
     @Published var endpointMode: EndpointMode {
         didSet { save("endpointMode", endpointMode.rawValue) }
     }
@@ -1372,6 +1390,8 @@ class DisplaySettings: ObservableObject {
 
     // Runtime state (not persisted)
     @Published var displayCreated = false
+    @Published var activeDisplaySourceName: String = "None"
+    @Published var activeDisplaySourceKind: String = "none"
     @Published var clientConnected = false
     /// Device identity of the wireless client currently streaming (nil when none).
     /// WirelessSection reads this to show a "Connected" badge on the matching row.
@@ -1432,6 +1452,8 @@ class DisplaySettings: ObservableObject {
         self.touchEnabled = defaults.object(forKey: keyPrefix + "touchEnabled") as? Bool ?? true
         let modeRaw = defaults.string(forKey: keyPrefix + "connectionMode") ?? ConnectionMode.usb.rawValue
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
+        let displaySourceRaw = defaults.string(forKey: keyPrefix + "displaySourceMode") ?? DisplaySourceMode.remoteDesktop.rawValue
+        self.displaySourceMode = DisplaySourceMode(rawValue: displaySourceRaw) ?? .remoteDesktop
         let endpointRaw = defaults.string(forKey: keyPrefix + "endpointMode") ?? EndpointMode.lan.rawValue
         self.endpointMode = EndpointMode(rawValue: endpointRaw) ?? .lan
         self.tailnetHost = defaults.string(forKey: keyPrefix + "tailnetHost") ?? ""
@@ -1528,7 +1550,7 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality", "streamingProfile",
                     "gamingBoost", "port", "rotation", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "endpointMode", "tailnetHost",
+                    "customWidth", "customHeight", "touchEnabled", "displaySourceMode", "endpointMode", "tailnetHost",
                     "inputBackendMode"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
@@ -1547,6 +1569,7 @@ class DisplaySettings: ObservableObject {
         customWidth = 1920
         customHeight = 1200
         touchEnabled = true
+        displaySourceMode = .remoteDesktop
         endpointMode = .lan
         tailnetHost = ""
         inputBackendMode = .automatic

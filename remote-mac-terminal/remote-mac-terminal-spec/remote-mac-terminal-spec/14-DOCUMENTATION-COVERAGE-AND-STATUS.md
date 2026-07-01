@@ -13,6 +13,7 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 | Objetivo de produto | Completo | `01-PROJECT-BRIEF.md` | README principal e fluxo Mac/Android existentes |
 | Arquitetura macro | Completo | `03-TARGET-ARCHITECTURE.md` | `MacHost/Sources/*`, `AndroidClient/app/src/main/java/com/sidescreen/app/*` |
 | Reuso do vídeo SideScreen | Completo | `02-SIDESCREEN-DEEP-DIVE.md`, ADR-0002 | `VirtualDisplayManager.swift`, `ScreenCapture.swift`, `VideoEncoder.swift`, `VideoDecoder.kt` |
+| Remote Desktop Mode / telas reais | Completo como direção; implementação pendente | `01-PROJECT-BRIEF.md`, `03-TARGET-ARCHITECTURE.md`, ADR-0007 | A base atual ainda favorece Virtual Display; próxima etapa deve criar `DisplaySource` |
 | Tailnet/LAN/manual | Completo | `04-TAILSCALE-NETWORKING-SPEC.md` | `EndpointMode.swift`, `EndpointMode.kt`, `EndpointAdvertiser.swift`, `NetworkRoute.kt` |
 | Pareamento e sessão | Completo | `12-SESSION-AND-TRANSPORT-SPEC.md`, `13-SECURITY-MODEL.md` | `WirelessAuth.swift`, `AuthHandshake.kt`, `RemoteSessionStore.swift` |
 | Canal dedicado de input | Completo | `05-INPUT-ARCHITECTURE-SPEC.md`, `11-REMOTE-INPUT-PROTOCOL-V1.md` | `InputServer.swift`, `InputClient.kt` |
@@ -25,7 +26,7 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 | Diagnóstico operacional | Completo | `07-IMPLEMENTATION-ROADMAP.md`, `09-TEST-PLAN.md` | `DiagLog.kt`, `TailnetDiagnostics.swift`, `scripts/collect-qa-evidence.sh` |
 | Testes automatizados | Completo | `09-TEST-PLAN.md` | `MacHost/Tests/SideScreenTests/*`, `AndroidClient/app/src/test/*` |
 | QA manual diário | Completo | `09-TEST-PLAN.md` | `../../DAILY_USE_QA.md`, `../../qa-evidence/*` |
-| Riscos e decisões | Completo | `10-RISKS-AND-OPEN-QUESTIONS.md`, `adr/*` | ADRs 0001-0006 |
+| Riscos e decisões | Completo | `10-RISKS-AND-OPEN-QUESTIONS.md`, `adr/*` | ADRs 0001-0007 |
 | Estrutura sugerida | Completo | `appendix/C-SUGGESTED-PROJECT-STRUCTURE.md` | Estrutura atual já segue boa parte da divisão sugerida |
 
 ## Estado implementado
@@ -44,6 +45,7 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 | Device registry/revogação | Implementado | Existe store de dispositivos pareados/revogados no Mac. |
 | Diagnóstico Mac/Android | Implementado | Diagnósticos cobrem endpoint, rota, input, permissões, logs e erros recentes. |
 | Evidence collection | Implementado | Scripts coletam preflight, artefatos, Tailnet, assinatura, testes e smoke Android; smoke pode tocar Connect/Reconnect via ADB. |
+| Remote Desktop Mode em tela real | Pendente central | A direção de produto foi corrigida em 2026-07-01: o produto principal deve capturar telas reais existentes; Virtual Display fica como modo secundário. |
 | Root backend | Futuro intencional | A spec cobre plano e limites; não deve virar requisito do MVP. |
 | QUIC/single-port final | Futuro condicional | Só entra se medições reais mostrarem que TCP multi-channel é gargalo. |
 
@@ -89,6 +91,7 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 
 | Lacuna | Por que importa | Próximo passo pequeno |
 | --- | --- | --- |
+| Remote Desktop Mode em tela real | O produto quer substituir Google Remote Desktop/AnyDesk para uso pessoal; segundo monitor não basta. | Criar `DisplaySource` e provar captura da tela principal real do Mac sem criar Virtual Display. |
 | Sessão longa no tablet `SM_X610` | O produto quer ser diário, não apenas compilar. | Rodar USB e Tailnet por 30 min com `--expect-stream --tap-connect`, guardando evidência em `qa-evidence/`. |
 | Input QA com hardware real | Unit test não prova teclado/mouse Bluetooth, acentos, drag e scroll no corpo. | Usar `./scripts/open-input-qa.sh`, salvar o JSON do harness junto da evidência. |
 | Virtual HID real | Código e framing passam, mas helper/Karabiner precisam smoke em máquina real. | Instalar/ativar helper e testar Terminal, Finder, navegador e editor. |
@@ -104,6 +107,15 @@ Android tablet
   captura Activity / pointer capture / Accessibility assist
   gera Remote Input Protocol v1
   envia input por canal dedicado
+        |
+        v
+MacHost DisplaySource
+  ExistingDisplaySource como modo principal
+  VirtualDisplaySource como modo segundo monitor
+        |
+        v
+MacHost VideoService
+  captura/codifica a fonte selecionada
         |
         v
 MacHost InputServer
@@ -128,7 +140,8 @@ Input backend
 | QUIC | TCP com canais separados já cobre o desenho atual. | Medir latência/queda em rede real antes de trocar transporte. |
 | ABNT2 perfeito | Layout depende de teclado, Android e mapeamento físico. | Ampliar testes reais e tabela de key mapping. |
 | Installer polido | Arquitetura e permissões estão documentadas. | Transformar onboarding/installer em tarefa de produto. |
-| Áudio/clipboard/multimonitor/file drop | São extras, não fazem parte do terminal remoto mínimo. | Tratar cada um como epic separado depois da base estável. |
+| Áudio/clipboard/file drop | São extras, não fazem parte do terminal remoto mínimo. | Tratar cada um como epic separado depois da base estável. |
+| Multi-monitor simultâneo | Ver uma tela real selecionada é central; ver todas ao mesmo tempo é futuro. | Primeiro implementar seleção/troca de `ExistingDisplaySource`. |
 
 ## Regra de leitura para próximas sessões
 
@@ -148,6 +161,7 @@ Se houver conflito entre um backlog antigo e este documento, este documento venc
 A documentação está 100% quando uma pessoa consegue responder, sem ler o código inteiro:
 
 - o que o produto quer ser;
+- por que Remote Desktop Mode vem antes de Extended Display Mode;
 - quais decisões arquiteturais já foram tomadas;
 - quais partes do SideScreen são reaproveitadas;
 - como Tailnet, LAN e manual diferem;
