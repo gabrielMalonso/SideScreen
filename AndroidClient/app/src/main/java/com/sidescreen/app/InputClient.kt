@@ -99,7 +99,8 @@ class InputClient(
                 if (!accepted) throw IOException("input channel rejected")
                 val backendId = input.read()
                 if (backendId < 0) throw IOException("input channel closed before backend id")
-                val backendName = backendName(backendId)
+                val fallbackReason = readBackendFallbackReason(input)
+                val backendName = backendDisplayName(backendId, fallbackReason)
 
                 synchronized(lock) {
                     socket = sock
@@ -413,7 +414,8 @@ class InputClient(
                 RemoteInputProtocol.CAP_POINTER_CAPTURE or
                 RemoteInputProtocol.CAP_GENERIC_MOTION or
                 RemoteInputProtocol.CAP_TEXT_COMMIT or
-                RemoteInputProtocol.CAP_HID_USAGE_MAPPING
+                RemoteInputProtocol.CAP_HID_USAGE_MAPPING or
+                RemoteInputProtocol.CAP_BACKEND_STATUS
         if (context?.let { SideScreenAccessibilityService.isEnabled(it) } == true) {
             capabilities = capabilities or RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST
         }
@@ -457,12 +459,30 @@ class InputClient(
         private const val TAG = "InputClient"
         private const val INPUT_HEARTBEAT_SECONDS = 2L
         private const val POINTER_FLUSH_DELAY_MS = 4L
+        private fun backendDisplayName(
+            id: Int,
+            fallbackReason: String,
+        ): String {
+            val name = backendName(id)
+            return if (fallbackReason.isNotBlank()) "$name fallback: $fallbackReason" else name
+        }
+
         private fun backendName(id: Int): String =
             when (id) {
                 1 -> "CGEvent"
                 2 -> "Virtual HID"
                 else -> "None"
             }
+    }
+
+    private fun readBackendFallbackReason(input: BufferedInputStream): String {
+        val lengthBytes = ByteArray(2)
+        readFully(input, lengthBytes)
+        val length = (lengthBytes[0].toInt() and 0xff) or ((lengthBytes[1].toInt() and 0xff) shl 8)
+        if (length == 0) return ""
+        val reasonBytes = ByteArray(length)
+        readFully(input, reasonBytes)
+        return reasonBytes.toString(Charsets.UTF_8)
     }
 
     private data class PendingPointerRelative(

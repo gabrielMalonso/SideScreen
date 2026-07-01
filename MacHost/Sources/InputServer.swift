@@ -22,6 +22,7 @@ final class InputServer {
     private let validateAuthToken: ((Data, String, Data?) -> Bool)?
     private let backend: InputBackend
     private let activeBackend: ActiveInputBackend
+    private let fallbackReason: String?
     private let isDeviceRevoked: (String) -> Bool
     private var listener: NWListener?
     private var connection: NWConnection?
@@ -33,12 +34,14 @@ final class InputServer {
         validateAuthToken: ((Data, String, Data?) -> Bool)?,
         backend: InputBackend,
         activeBackend: ActiveInputBackend,
+        fallbackReason: String? = nil,
         isDeviceRevoked: @escaping (String) -> Bool = { _ in false }
     ) {
         self.port = port
         self.validateAuthToken = validateAuthToken
         self.backend = backend
         self.activeBackend = activeBackend
+        self.fallbackReason = fallbackReason
         self.isDeviceRevoked = isDeviceRevoked
         queue.setSpecific(key: queueKey, value: ())
     }
@@ -131,7 +134,14 @@ final class InputServer {
                 try self.authorize(hello, connection: conn)
                 debugLog("InputServer auth OK — device=\(hello.deviceId), caps=\(hello.capabilities)")
                 self.activate(conn, deviceId: hello.deviceId)
-                conn.send(content: RemoteInputCodec.acceptResponse(backend: self.activeBackend.rawValue), completion: .contentProcessed { _ in })
+                conn.send(
+                    content: RemoteInputCodec.acceptResponse(
+                        backend: self.activeBackend.rawValue,
+                        fallbackReason: self.fallbackReason,
+                        capabilities: hello.capabilities
+                    ),
+                    completion: .contentProcessed { _ in }
+                )
                 self.receiveEventHeader(on: conn)
             } catch RemoteInputProtocolError.invalidToken {
                 self.reject(conn, reason: 2)

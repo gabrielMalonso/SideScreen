@@ -8,13 +8,23 @@ enum KarabinerVirtualHIDError: Error, Equatable {
     case readFailed(Int32)
     case invalidResponse
     case unexpectedResponse
+    case helperLegacy
+    case upstreamUnavailable
 }
 
 protocol VirtualHIDReportClient: AnyObject {
+    func probe() throws
     func initializeDevices() throws
     func resetDevices() throws
     func postKeyboardReport(modifiers: UInt8, keys: [UInt16]) throws
     func postPointingReport(buttonMask: UInt32, dx: Int8, dy: Int8, verticalWheel: Int8, horizontalWheel: Int8) throws
+}
+
+struct SideScreenVirtualHIDHelperStatus: Equatable {
+    let helperProtocolVersion: UInt8
+    let helperBuildVersion: UInt16
+    let karabinerClientProtocolVersion: UInt16
+    let upstreamAvailable: Bool
 }
 
 enum KarabinerVirtualHIDReportCodec {
@@ -99,20 +109,24 @@ enum SideScreenVirtualHIDHelperCodec {
     static let requestMagic = Array("SSHV".utf8)
     static let responseMagic = Array("SSHR".utf8)
     static let version: UInt8 = 1
+    static let helperBuildVersion: UInt16 = 2
     static let requestHeaderLength = 8
     static let responseLength = 5
+    static let statusResponseLength = 11
 
     enum Command: UInt8 {
         case initializeDevices = 1
         case resetDevices = 2
         case keyboardReport = 3
         case pointingReport = 4
+        case status = 5
     }
 
     enum ResponseStatus: UInt8 {
         case ok = 0
         case invalidRequest = 1
         case upstreamFailed = 2
+        case protocolMismatch = 3
     }
 
     static func helperSocketPath(uid: uid_t = getuid()) -> String {
@@ -129,7 +143,7 @@ enum SideScreenVirtualHIDHelperCodec {
             guard payload.count == KarabinerVirtualHIDReportCodec.pointingReportLength else {
                 throw KarabinerVirtualHIDError.invalidResponse
             }
-        case .initializeDevices, .resetDevices:
+        case .initializeDevices, .resetDevices, .status:
             guard payload.isEmpty else { throw KarabinerVirtualHIDError.invalidResponse }
         }
 
@@ -154,6 +168,33 @@ enum SideScreenVirtualHIDHelperCodec {
     static func response(status: ResponseStatus) -> Data {
         Data(responseMagic + [status.rawValue])
     }
+
+    static func statusResponse(status: ResponseStatus, payload: SideScreenVirtualHIDHelperStatus) -> Data {
+        var data = response(status: status)
+        data.append(payload.helperProtocolVersion)
+        data.appendUInt16BE(payload.helperBuildVersion)
+        data.appendUInt16BE(payload.karabinerClientProtocolVersion)
+        data.append(payload.upstreamAvailable ? 1 : 0)
+        return data
+    }
+
+    static func parseStatusResponse(_ data: Data) throws -> SideScreenVirtualHIDHelperStatus {
+        let bytes = [UInt8](data)
+        guard bytes.count == statusResponseLength,
+              Array(bytes[0..<4]) == responseMagic,
+              let status = ResponseStatus(rawValue: bytes[4]) else {
+            throw KarabinerVirtualHIDError.helperLegacy
+        }
+        guard status == .ok else {
+            throw status == .upstreamFailed ? KarabinerVirtualHIDError.upstreamUnavailable : KarabinerVirtualHIDError.invalidResponse
+        }
+        return SideScreenVirtualHIDHelperStatus(
+            helperProtocolVersion: bytes[5],
+            helperBuildVersion: bytes.readUInt16BE(at: 6),
+            karabinerClientProtocolVersion: bytes.readUInt16BE(at: 8),
+            upstreamAvailable: bytes[10] != 0
+        )
+    }
 }
 
 final class KarabinerVirtualHIDServiceClient: VirtualHIDReportClient {
@@ -168,6 +209,13 @@ final class KarabinerVirtualHIDServiceClient: VirtualHIDReportClient {
 
     deinit {
         closeSocket()
+    }
+
+    func probe() throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        _ = try sendRequestLocked(.getStatus)
     }
 
     func initializeDevices() throws {
@@ -349,6 +397,32 @@ final class SideScreenVirtualHIDHelperClient: VirtualHIDReportClient {
         closeSocket()
     }
 
+    func probe() throws {
+        _ = try status()
+    }
+
+    func status() throws -> SideScreenVirtualHIDHelperStatus {
+        lock.lock()
+        defer { lock.unlock() }
+
+        try connectIfNeededLocked()
+        let request = try SideScreenVirtualHIDHelperCodec.request(command: .status)
+        do {
+            try writeAllLocked(request)
+            let response = try readExactLocked(byteCount: SideScreenVirtualHIDHelperCodec.statusResponseLength)
+            let status = try SideScreenVirtualHIDHelperCodec.parseStatusResponse(response)
+            guard status.helperProtocolVersion == SideScreenVirtualHIDHelperCodec.version,
+                  status.helperBuildVersion >= SideScreenVirtualHIDHelperCodec.helperBuildVersion,
+                  status.upstreamAvailable else {
+                throw status.upstreamAvailable ? KarabinerVirtualHIDError.helperLegacy : KarabinerVirtualHIDError.upstreamUnavailable
+            }
+            return status
+        } catch {
+            closeSocketLocked()
+            throw error
+        }
+    }
+
     func initializeDevices() throws {
         try send(.initializeDevices)
     }
@@ -383,6 +457,8 @@ final class SideScreenVirtualHIDHelperClient: VirtualHIDReportClient {
                 throw KarabinerVirtualHIDError.invalidResponse
             case .upstreamFailed:
                 throw KarabinerVirtualHIDError.unexpectedResponse
+            case .protocolMismatch:
+                throw KarabinerVirtualHIDError.helperLegacy
             }
         } catch {
             closeSocketLocked()
@@ -484,9 +560,11 @@ final class KarabinerVirtualHIDBackend: InputBackend {
     private let textInjector = UnicodeTextInjector()
     private var pressedKeys = Set<UInt16>()
     private var pressedButtons = Set<UInt8>()
+    private let onFailure: ((String) -> Void)?
 
-    init(client: VirtualHIDReportClient = KarabinerVirtualHIDServiceClient()) {
+    init(client: VirtualHIDReportClient = KarabinerVirtualHIDServiceClient(), onFailure: ((String) -> Void)? = nil) {
         self.client = client
+        self.onFailure = onFailure
     }
 
     func beginSession(deviceId: String) {
@@ -496,7 +574,7 @@ final class KarabinerVirtualHIDBackend: InputBackend {
             try postPointingState()
             debugLog("Karabiner VirtualHID session started — device=\(deviceId)")
         } catch {
-            debugLog("Karabiner VirtualHID begin failed: \(error)")
+            markFailure("VirtualHID begin failed: \(error)")
         }
     }
 
@@ -530,7 +608,8 @@ final class KarabinerVirtualHIDBackend: InputBackend {
                 break
             }
         } catch {
-            debugLog("Karabiner VirtualHID input failed: \(error)")
+            markFailure("VirtualHID input failed: \(error)")
+            releaseAll(reason: "VirtualHID event failure")
         }
     }
 
@@ -542,7 +621,7 @@ final class KarabinerVirtualHIDBackend: InputBackend {
             try postPointingState()
             debugLog("Karabiner VirtualHID release-all: \(reason)")
         } catch {
-            debugLog("Karabiner VirtualHID release-all failed: \(error)")
+            markFailure("VirtualHID release-all failed: \(error)")
         }
     }
 
@@ -551,8 +630,13 @@ final class KarabinerVirtualHIDBackend: InputBackend {
         do {
             try client.resetDevices()
         } catch {
-            debugLog("Karabiner VirtualHID reset failed: \(error)")
+            markFailure("VirtualHID reset failed: \(error)")
         }
+    }
+
+    private func markFailure(_ message: String) {
+        debugLog("Karabiner \(message)")
+        onFailure?(message)
     }
 
     private func postKeyboardState() throws {
@@ -678,5 +762,16 @@ private extension Data {
             (UInt64(bytes[offset + 5]) << 16) |
             (UInt64(bytes[offset + 6]) << 8) |
             UInt64(bytes[offset + 7])
+    }
+
+    func readUInt16BE(at offset: Int) -> UInt16 {
+        let bytes = [UInt8](self)
+        return (UInt16(bytes[offset]) << 8) | UInt16(bytes[offset + 1])
+    }
+}
+
+private extension Array where Element == UInt8 {
+    func readUInt16BE(at offset: Int) -> UInt16 {
+        (UInt16(self[offset]) << 8) | UInt16(self[offset + 1])
     }
 }

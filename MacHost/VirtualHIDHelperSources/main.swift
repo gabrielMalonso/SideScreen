@@ -12,12 +12,14 @@ private enum HelperCommand: UInt8 {
     case resetDevices = 2
     case keyboardReport = 3
     case pointingReport = 4
+    case status = 5
 }
 
 private enum HelperProtocol {
     static let requestMagic = Array("SSHV".utf8)
     static let responseMagic = Array("SSHR".utf8)
     static let version: UInt8 = 1
+    static let helperBuildVersion: UInt16 = 2
     static let requestHeaderLength = 8
     static let responseLength = 5
     static let keyboardReportLength = 67
@@ -30,9 +32,19 @@ private enum HelperProtocol {
     static func response(_ status: HelperStatus) -> Data {
         Data(responseMagic + [status.rawValue])
     }
+
+    static func statusResponse(upstreamAvailable: Bool) -> Data {
+        var data = response(upstreamAvailable ? .ok : .upstreamFailed)
+        data.append(version)
+        data.appendUInt16BE(helperBuildVersion)
+        data.appendUInt16BE(KarabinerClient.clientProtocolVersion)
+        data.append(upstreamAvailable ? 1 : 0)
+        return data
+    }
 }
 
 private enum KarabinerRequest: UInt8 {
+    case getStatus = 0
     case virtualHIDKeyboardInitialize = 1
     case virtualHIDKeyboardReset = 3
     case virtualHIDPointingInitialize = 4
@@ -51,7 +63,7 @@ private enum KarabinerFrameType: UInt8 {
 
 private final class KarabinerClient {
     private static let socketPath = "/Library/Application Support/org.pqrs/tmp/rootonly/karabiner_virtual_hid_device_service.sock"
-    private static let clientProtocolVersion: UInt16 = 6
+    static let clientProtocolVersion: UInt16 = 6
     private var fd: Int32 = -1
     private var nextRequestId: UInt64 = 1
 
@@ -67,6 +79,10 @@ private final class KarabinerClient {
     func resetDevices() throws {
         _ = try send(.virtualHIDKeyboardReset)
         _ = try send(.virtualHIDPointingReset)
+    }
+
+    func probe() throws {
+        _ = try send(.getStatus)
     }
 
     func postKeyboardReport(_ payload: Data) throws {
@@ -215,6 +231,7 @@ private final class HelperServer {
     private let allowedUID: uid_t
     private let socketPath: String
     private let karabiner = KarabinerClient()
+    private let karabinerQueue = DispatchQueue(label: "SideScreenVirtualHIDHelper.karabiner")
     private var serverFd: Int32 = -1
 
     init(allowedUID: uid_t, socketPath: String) {
@@ -245,8 +262,10 @@ private final class HelperServer {
             if clientFd < 0 {
                 continue
             }
-            handle(clientFd)
-            Darwin.close(clientFd)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.handle(clientFd)
+                Darwin.close(clientFd)
+            }
         }
     }
 
@@ -275,6 +294,7 @@ private final class HelperServer {
         guard peerUID(clientFd) == allowedUID else {
             return
         }
+        setSocketTimeouts(clientFd)
 
         while true {
             do {
@@ -293,7 +313,14 @@ private final class HelperServer {
                     return
                 }
                 let payload = try readExact(fd: clientFd, byteCount: payloadLength)
-                try handle(command, payload: payload)
+                if command == .status {
+                    let available = karabinerQueue.sync { (try? karabiner.probe()) != nil }
+                    try writeAllToSocket(fd: clientFd, data: HelperProtocol.statusResponse(upstreamAvailable: available))
+                    continue
+                }
+                try karabinerQueue.sync {
+                    try handle(command, payload: payload)
+                }
                 try writeAllToSocket(fd: clientFd, data: HelperProtocol.response(.ok))
             } catch let status as HelperStatus {
                 let responseStatus: HelperStatus = status == .invalidRequest ? .invalidRequest : .upstreamFailed
@@ -320,6 +347,9 @@ private final class HelperServer {
         case .pointingReport:
             guard payload.count == HelperProtocol.pointingReportLength else { throw HelperStatus.invalidRequest }
             try karabiner.postPointingReport(payload)
+        case .status:
+            guard payload.isEmpty else { throw HelperStatus.invalidRequest }
+            try karabiner.probe()
         }
     }
 
@@ -350,6 +380,12 @@ private func fillSunPath(_ address: inout sockaddr_un, path: String) -> Bool {
             }
         }
     }
+}
+
+private func setSocketTimeouts(_ fd: Int32) {
+    var timeout = timeval(tv_sec: 1, tv_usec: 0)
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 }
 
 private func readExact(fd: Int32, byteCount: Int) throws -> Data {
@@ -386,6 +422,11 @@ private extension Data {
     mutating func appendUInt16LE(_ value: UInt16) {
         append(UInt8(value & 0xff))
         append(UInt8((value >> 8) & 0xff))
+    }
+
+    mutating func appendUInt16BE(_ value: UInt16) {
+        append(UInt8((value >> 8) & 0xff))
+        append(UInt8(value & 0xff))
     }
 
     mutating func appendUInt32BE(_ value: UInt32) {

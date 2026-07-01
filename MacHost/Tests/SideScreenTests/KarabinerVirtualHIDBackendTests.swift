@@ -65,6 +65,19 @@ final class KarabinerVirtualHIDBackendTests: XCTestCase {
         XCTAssertThrowsError(try SideScreenVirtualHIDHelperCodec.parseResponse(Data(Array("NOPE".utf8) + [0])))
     }
 
+    func testHelperStatusResponseParsing() throws {
+        let payload = SideScreenVirtualHIDHelperStatus(
+            helperProtocolVersion: 1,
+            helperBuildVersion: 2,
+            karabinerClientProtocolVersion: 6,
+            upstreamAvailable: true
+        )
+        let response = SideScreenVirtualHIDHelperCodec.statusResponse(status: .ok, payload: payload)
+
+        XCTAssertEqual(try SideScreenVirtualHIDHelperCodec.parseStatusResponse(response), payload)
+        XCTAssertThrowsError(try SideScreenVirtualHIDHelperCodec.parseStatusResponse(Data(Array("SSHR".utf8) + [0])))
+    }
+
     func testHelperInstallerBuildsLaunchDaemonPlist() throws {
         let data = try VirtualHIDHelperInstaller.launchDaemonPlistData(uid: 501)
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])

@@ -92,6 +92,59 @@ final class InputServerIntegrationTests: XCTestCase {
         wait(for: [accepted], timeout: 3)
     }
 
+    func testAcceptResponseIncludesFallbackReasonForBackendStatusCapability() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, _ in
+                receivedToken == token && deviceId == "tablet"
+            },
+            backend: backend,
+            activeBackend: .cgevent,
+            fallbackReason: "helper not responding"
+        )
+        server.start()
+        defer { server.stop() }
+
+        let accepted = expectation(description: "server accepted with backend status metadata")
+        let connection = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(integerLiteral: port),
+            using: .tcp
+        )
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                connection.send(
+                    content: Self.hello(
+                        token: token,
+                        deviceId: "tablet",
+                        capabilities: RemoteInputCodec.capabilityBackendStatus
+                    ),
+                    completion: .contentProcessed { _ in }
+                )
+                connection.receive(minimumIncompleteLength: 8, maximumLength: 8) { data, _, _, _ in
+                    guard let data else {
+                        XCTFail("missing accept response")
+                        return
+                    }
+                    XCTAssertEqual(Array(data.prefix(6)), Array(RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue)))
+                    let length = Int(data[6]) | (Int(data[7]) << 8)
+                    connection.receive(minimumIncompleteLength: length, maximumLength: length) { reason, _, _, _ in
+                        XCTAssertEqual(String(data: reason ?? Data(), encoding: .utf8), "helper not responding")
+                        accepted.fulfill()
+                    }
+                }
+            }
+        }
+        connection.start(queue: .global(qos: .userInitiated))
+        defer { connection.cancel() }
+
+        wait(for: [accepted], timeout: 3)
+    }
+
     func testDropActiveConnectionKeepsListenerReadyForReconnect() throws {
         let token = Data((0..<32).map(UInt8.init))
         let backend = SocketRecordingInputBackend()
@@ -273,7 +326,12 @@ final class InputServerIntegrationTests: XCTestCase {
         wait(for: [staleEvent], timeout: 0.5)
     }
 
-    private static func hello(token: Data, deviceId: String, sessionId: Data? = nil) -> Data {
+    private static func hello(
+        token: Data,
+        deviceId: String,
+        sessionId: Data? = nil,
+        capabilities: UInt32 = 0x80
+    ) -> Data {
         let device = Array(deviceId.utf8)
         var data = Data(RemoteInputCodec.helloMagic)
         data.append(1)
@@ -281,7 +339,7 @@ final class InputServerIntegrationTests: XCTestCase {
         data.append(token)
         data.append(UInt8(device.count))
         data.append(contentsOf: device)
-        data.append(contentsOf: [0x80, 0x00, 0x00, 0x00])
+        data.appendUInt32LEForTest(capabilities)
         if let sessionId {
             data.append(sessionId)
         }
@@ -445,5 +503,12 @@ private extension Data {
         append(UInt8((value >> 40) & 0xff))
         append(UInt8((value >> 48) & 0xff))
         append(UInt8((value >> 56) & 0xff))
+    }
+
+    mutating func appendUInt32LEForTest(_ value: UInt32) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+        append(UInt8((value >> 16) & 0xff))
+        append(UInt8((value >> 24) & 0xff))
     }
 }

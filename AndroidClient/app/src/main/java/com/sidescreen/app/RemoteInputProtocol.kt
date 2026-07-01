@@ -14,6 +14,7 @@ object RemoteInputProtocol {
     const val CAP_ACCESSIBILITY_ASSIST = 1 shl 4
     const val CAP_TEXT_COMMIT = 1 shl 6
     const val CAP_HID_USAGE_MAPPING = 1 shl 7
+    const val CAP_BACKEND_STATUS = 1 shl 8
 
     const val FLAG_FROM_ACTIVITY = 1
     const val FLAG_FROM_ACCESSIBILITY = 1 shl 1

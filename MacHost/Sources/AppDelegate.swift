@@ -928,6 +928,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let inputPort = UInt16(min(Int(settings.port) + 1, Int(UInt16.max)))
             settings.activeInputBackend = inputSelection.activeBackend.title
+            if let fallbackReason = inputSelection.fallbackReason, !fallbackReason.isEmpty {
+                settings.activeInputBackend += " fallback"
+                settings.inputLastReleaseReason = fallbackReason
+            }
             settings.virtualHIDStatus = inputSelection.status.title
             settings.virtualHIDStatusDetail = inputSelection.status.detail
             inputServer = InputServer(
@@ -942,6 +946,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 } : nil,
                 backend: inputSelection.backend,
                 activeBackend: inputSelection.activeBackend,
+                fallbackReason: inputSelection.fallbackReason,
                 isDeviceRevoked: { [weak self] deviceId in
                     self?.pairedDeviceStore.isRevoked(id: deviceId) == true
                 }

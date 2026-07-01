@@ -10,6 +10,11 @@ struct InputIngressDiagnostics {
     let lastReleaseReason: String
 }
 
+private enum InputIngressDownstreamOperation {
+    case event(RemoteInputEvent)
+    case releaseAll(String)
+}
+
 final class InputIngress: InputBackend {
     private let downstream: InputBackend
     private let onDiagnosticsChanged: ((InputIngressDiagnostics) -> Void)?
@@ -53,6 +58,8 @@ final class InputIngress: InputBackend {
     }
 
     func handle(_ event: RemoteInputEvent) {
+        var downstreamOperations: [InputIngressDownstreamOperation] = []
+
         lock.lock()
         armWatchdogLocked()
         let validation = validateSequenceLocked(event)
@@ -61,15 +68,15 @@ final class InputIngress: InputBackend {
             return
         }
         if let releaseReason = validation.releaseReason {
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             pressedKeys.removeAll()
             pressedButtons.removeAll()
             releaseAllCount += 1
             lastReleaseReason = releaseReason
             emitDiagnosticsLocked()
-            lock.unlock()
-            downstream.releaseAll(reason: releaseReason)
-            lock.lock()
+            downstreamOperations.append(.releaseAll(releaseReason))
         }
 
         switch event {
@@ -77,58 +84,84 @@ final class InputIngress: InputBackend {
             enqueuePointerRelativeLocked(move)
             lock.unlock()
         case .textCommit:
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
         case .keyboard(let key):
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             updateKeyboardStateLocked(key)
             emitDiagnosticsLocked()
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
         case .pointerButton(let button):
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             updateButtonStateLocked(button)
             emitDiagnosticsLocked()
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
         case .pointerWheel:
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
         case .allInputsUp(let allUp):
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             pressedKeys.removeAll()
             pressedButtons.removeAll()
             releaseAllCount += 1
             lastReleaseReason = "client all-inputs-up: \(allUp.diagnosticReason)"
             emitDiagnosticsLocked()
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
         case .ping, .pong:
-            flushPendingPointerRelativeLocked()
+            if let pending = takePendingPointerRelativeLocked() {
+                downstreamOperations.append(.event(pending))
+            }
             lock.unlock()
-            downstream.handle(event)
+            downstreamOperations.append(.event(event))
+        }
+
+        for operation in downstreamOperations {
+            switch operation {
+            case .event(let forwarded):
+                downstream.handle(forwarded)
+            case .releaseAll(let reason):
+                downstream.releaseAll(reason: reason)
+            }
         }
     }
 
     func releaseAll(reason: String) {
+        var pendingEvent: RemoteInputEvent?
         lock.lock()
-        flushPendingPointerRelativeLocked()
+        pendingEvent = takePendingPointerRelativeLocked()
         pressedKeys.removeAll()
         pressedButtons.removeAll()
         releaseAllCount += 1
         lastReleaseReason = reason
         emitDiagnosticsLocked()
         lock.unlock()
+        if let pendingEvent {
+            downstream.handle(pendingEvent)
+        }
         downstream.releaseAll(reason: reason)
     }
 
     func endSession(reason: String) {
+        var pendingEvent: RemoteInputEvent?
         lock.lock()
         watchdog?.cancel()
         watchdog = nil
-        flushPendingPointerRelativeLocked()
+        pendingEvent = takePendingPointerRelativeLocked()
         pressedKeys.removeAll()
         pressedButtons.removeAll()
         releaseAllCount += 1
@@ -140,6 +173,9 @@ final class InputIngress: InputBackend {
         emitDiagnosticsLocked()
         lock.unlock()
 
+        if let pendingEvent {
+            downstream.handle(pendingEvent)
+        }
         downstream.endSession(reason: reason)
 
         if coalesced > 0 {
@@ -190,18 +226,21 @@ final class InputIngress: InputBackend {
         }
     }
 
-    private func flushPendingPointerRelativeLocked() {
-        guard let pending = pendingPointerRelative else { return }
+    private func takePendingPointerRelativeLocked() -> RemoteInputEvent? {
+        guard let pending = pendingPointerRelative else { return nil }
         pendingPointerRelative = nil
-        downstream.handle(.pointerRelative(pending))
+        return .pointerRelative(pending)
     }
 
     private func schedulePointerFlush() {
         watchdogQueue.asyncAfter(deadline: .now() + .milliseconds(4)) { [weak self] in
             guard let self else { return }
             self.lock.lock()
-            self.flushPendingPointerRelativeLocked()
+            let pending = self.takePendingPointerRelativeLocked()
             self.lock.unlock()
+            if let pending {
+                self.downstream.handle(pending)
+            }
         }
     }
 

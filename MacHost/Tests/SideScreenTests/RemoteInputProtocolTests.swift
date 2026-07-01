@@ -146,6 +146,24 @@ final class RemoteInputProtocolTests: XCTestCase {
         XCTAssertEqual(value, 0x0102_0304_0506_0708)
     }
 
+    func testAcceptResponseCarriesFallbackReasonOnlyWhenCapabilityIsPresent() {
+        let legacy = RemoteInputCodec.acceptResponse(
+            backend: ActiveInputBackend.cgevent.rawValue,
+            fallbackReason: "helper not responding",
+            capabilities: 0
+        )
+        XCTAssertEqual(legacy, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
+
+        let extended = RemoteInputCodec.acceptResponse(
+            backend: ActiveInputBackend.cgevent.rawValue,
+            fallbackReason: "helper not responding",
+            capabilities: RemoteInputCodec.capabilityBackendStatus
+        )
+        XCTAssertEqual(Array(extended.prefix(6)), Array(RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue)))
+        XCTAssertEqual(Array(extended.dropFirst(6).prefix(2)), [21, 0])
+        XCTAssertEqual(String(bytes: extended.dropFirst(8), encoding: .utf8), "helper not responding")
+    }
+
     func testInputPongFrameCarriesClientAndServerTimestamps() throws {
         let frame = RemoteInputCodec.inputPongFrame(
             sequence: 44,
@@ -307,6 +325,28 @@ final class InputIngressTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.pressedKeyCount, 0)
         XCTAssertEqual(snapshots.last?.releaseAllCount, 1)
         XCTAssertEqual(snapshots.last?.lastReleaseReason, "device revoked")
+    }
+
+    func testDownstreamCanReenterIngressDuringPendingPointerFlush() {
+        final class ReentrantBackend: InputBackend {
+            var onEvent: (() -> Void)?
+            func handle(_ event: RemoteInputEvent) {
+                onEvent?()
+            }
+            func releaseAll(reason: String) {}
+        }
+
+        let backend = ReentrantBackend()
+        var ingress: InputIngress!
+        ingress = InputIngress(downstream: backend)
+        backend.onEvent = {
+            ingress.releaseAll(reason: "reentrant downstream")
+        }
+
+        ingress.beginSession(deviceId: "tablet")
+        ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 1, dy: 1, unit: 0, flags: 0, sequence: 1)))
+        ingress.handle(.keyboard(key(sequence: 2, action: .down)))
+        ingress.endSession(reason: "test")
     }
 
     private func key(sequence: UInt64, action: RemoteInputAction) -> KeyboardKeyEvent {

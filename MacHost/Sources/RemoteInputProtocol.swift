@@ -243,6 +243,7 @@ enum RemoteInputCodec {
     static let helloMagic = Array("RMIP".utf8)
     static let acceptMagic = Array("RMIA".utf8)
     static let rejectMagic = Array("RMIR".utf8)
+    static let capabilityBackendStatus: UInt32 = 1 << 8
     static let helloFixedLength = 4 + 1 + 1 + 32 + 1
     private static let flagHasSessionId: UInt8 = 0x01
 
@@ -292,6 +293,16 @@ enum RemoteInputCodec {
 
     static func acceptResponse(backend: UInt8 = 1) -> Data {
         Data(acceptMagic + [0x00, backend])
+    }
+
+    static func acceptResponse(backend: UInt8 = 1, fallbackReason: String?, capabilities: UInt32) -> Data {
+        var data = acceptResponse(backend: backend)
+        guard capabilities & capabilityBackendStatus != 0 else { return data }
+        let reasonBytes = Array((fallbackReason ?? "").utf8.prefix(512))
+        data.append(UInt8(reasonBytes.count & 0xff))
+        data.append(UInt8((reasonBytes.count >> 8) & 0xff))
+        data.append(contentsOf: reasonBytes)
+        return data
     }
 
     static func rejectResponse(reason: UInt8) -> Data {
