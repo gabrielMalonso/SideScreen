@@ -4,10 +4,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PORT="${SIDESCREEN_PORT:-54321}"
-INPUT_PORT=$((PORT + 1))
-if [ "$INPUT_PORT" -gt 65535 ]; then
-    INPUT_PORT=65535
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; then
+    echo "SIDESCREEN_PORT must be 1..65534 because remote input uses port + 1." >&2
+    exit 1
 fi
+INPUT_PORT=$((PORT + 1))
 
 echo "🚀 Starting Side Screen..."
 

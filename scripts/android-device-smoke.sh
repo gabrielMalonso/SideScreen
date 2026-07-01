@@ -5,10 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK_PATH="$ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
 PORT="${SIDESCREEN_PORT:-54321}"
-INPUT_PORT=$((PORT + 1))
-if [ "$INPUT_PORT" -gt 65535 ]; then
-    INPUT_PORT=65535
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; then
+    echo "SIDESCREEN_PORT must be 1..65534 because remote input uses port + 1." >&2
+    exit 1
 fi
+INPUT_PORT=$((PORT + 1))
 DURATION=15
 INSTALL=1
 REVERSE=1
@@ -246,6 +247,12 @@ if [ "$EXPECT_STREAM" -eq 1 ]; then
         pass "Stream connection and frame flow observed"
     else
         fail "No stream connection/frame flow observed; tap Connect/Reconnect during the run and keep the Mac app running"
+    fi
+
+    if grep -E "Input channel connected to .*:$INPUT_PORT" "$STREAM_EVIDENCE_FILE" >/dev/null 2>&1; then
+        pass "Input channel observed on $INPUT_PORT"
+    else
+        fail "No input channel connection observed on $INPUT_PORT"
     fi
 fi
 

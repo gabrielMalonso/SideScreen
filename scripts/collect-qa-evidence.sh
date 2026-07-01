@@ -7,10 +7,11 @@ VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 STAMP="$(date '+%Y%m%d-%H%M%S')-$$"
 OUT_DIR="$ROOT_DIR/qa-evidence/$STAMP"
 PORT="${SIDESCREEN_PORT:-54321}"
-INPUT_PORT=$((PORT + 1))
-if [ "$INPUT_PORT" -gt 65535 ]; then
-    INPUT_PORT=65535
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; then
+    echo "SIDESCREEN_PORT must be 1..65534 because remote input uses port + 1." >&2
+    exit 1
 fi
+INPUT_PORT=$((PORT + 1))
 DURATION=15
 RUN_SMOKE=0
 EXPECT_STREAM=0

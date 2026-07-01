@@ -21,7 +21,7 @@ object PairingURL {
             }
         if (uri.scheme != "sidescreen") return null
         val host = uri.host ?: return null
-        val port = uri.port.takeIf { it in 1..65535 } ?: return null
+        val port = uri.port.takeIf(RemoteInputPorts::isValidVideoPort) ?: return null
         val tokenB64 = uri.getQueryParameter("t") ?: return null
         val token =
             try {

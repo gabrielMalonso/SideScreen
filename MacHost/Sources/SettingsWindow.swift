@@ -632,6 +632,10 @@ struct SettingsView: View {
                                     Text("Stop server to change port")
                                         .font(.system(size: 10))
                                         .foregroundColor(.orange)
+                                } else if settings.port == DisplaySettings.maxVideoPort {
+                                    Text("Port 65535 is reserved for input, so video is capped at 65534.")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
                                 } else if settings.connectionMode == .wireless {
                                     Text("Changing the port invalidates existing pairings — re-scan the QR on each tablet.")
                                         .font(.system(size: 10))
@@ -1329,7 +1333,14 @@ class DisplaySettings: ObservableObject {
         }
     }
     @Published var port: UInt16 {
-        didSet { save("port", Int(port)) }
+        didSet {
+            let clamped = Self.clampedVideoPort(Int(port))
+            if port != clamped {
+                port = clamped
+                return
+            }
+            save("port", Int(port))
+        }
     }
     @Published var rotation: Int {
         didSet { save("rotation", rotation) }
@@ -1412,8 +1423,8 @@ class DisplaySettings: ObservableObject {
         let streamingProfileRaw = defaults.string(forKey: keyPrefix + "streamingProfile") ?? StreamingProfile.custom.rawValue
         self.streamingProfile = StreamingProfile(rawValue: streamingProfileRaw) ?? .custom
         // Default port 54321 (was 8888 in <=0.7.1; 8888 collides with jupyter/splunk/HP printers).
-        // Existing users keep their saved value.
-        self.port = UInt16(defaults.object(forKey: keyPrefix + "port") as? Int ?? 54321)
+        // Existing users keep their saved value unless it would collide with the input port.
+        self.port = Self.clampedVideoPort(defaults.object(forKey: keyPrefix + "port") as? Int ?? 54321)
         self.rotation = defaults.object(forKey: keyPrefix + "rotation") as? Int ?? 0
         self.showAllResolutions = defaults.bool(forKey: keyPrefix + "showAllResolutions")
         self.customWidth = defaults.object(forKey: keyPrefix + "customWidth") as? Int ?? 1920
@@ -1432,6 +1443,12 @@ class DisplaySettings: ObservableObject {
 
     private func save(_ key: String, _ value: Any) {
         defaults.set(value, forKey: keyPrefix + key)
+    }
+
+    static let maxVideoPort = UInt16.max - 1
+
+    static func clampedVideoPort(_ value: Int) -> UInt16 {
+        UInt16(min(max(value, 1), Int(maxVideoPort)))
     }
 
     struct ResolutionGroup: Identifiable {

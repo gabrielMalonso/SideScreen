@@ -718,7 +718,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     let accepted = self?.remoteSessionStore.validateInputToken(token, deviceId: deviceId, sessionId: sessionId) == true
                     debugLog(
                         "Input auth \(accepted ? "OK" : "rejected") — device=...\(deviceId.suffix(4)), " +
-                        "session=\(sessionId?.shortHex ?? "none"), token=\(token.shortHex)"
+                        "session=\(sessionId?.shortHex ?? "none")"
                     )
                     return accepted
                 } : nil,

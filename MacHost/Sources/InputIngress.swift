@@ -140,7 +140,7 @@ final class InputIngress: InputBackend {
         emitDiagnosticsLocked()
         lock.unlock()
 
-        downstream.releaseAll(reason: reason)
+        downstream.endSession(reason: reason)
 
         if coalesced > 0 {
             debugLog("InputIngress session ended — coalesced pointer moves=\(coalesced)")

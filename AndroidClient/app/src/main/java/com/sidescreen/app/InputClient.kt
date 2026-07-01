@@ -398,6 +398,10 @@ class InputClient(
     }
 
     private fun bindIfNeeded(sock: Socket) {
+        if (isLoopbackHost()) {
+            DiagLog.log("IC", "$endpointMode input channel using loopback route")
+            return
+        }
         NetworkRoute.bindWifiIfNeeded(context, endpointMode, sock, "input channel") { message ->
             DiagLog.log("IC", message)
         }
@@ -444,6 +448,9 @@ class InputClient(
             socket = null
         }
     }
+
+    private fun isLoopbackHost(): Boolean =
+        host.equals("localhost", ignoreCase = true) || host == "127.0.0.1" || host == "::1" || host == "[::1]"
 
     companion object {
         private const val TAG = "InputClient"

@@ -256,6 +256,17 @@ final class InputIngressTests: XCTestCase {
         ingress.endSession(reason: "test")
     }
 
+    func testEndSessionPropagatesToDownstreamBackend() {
+        let backend = LifecycleRecordingInputBackend()
+        let ingress = InputIngress(downstream: backend)
+        ingress.beginSession(deviceId: "tablet")
+
+        ingress.endSession(reason: "stream disconnected")
+
+        XCTAssertEqual(backend.beginDeviceIds, ["tablet"])
+        XCTAssertEqual(backend.endReasons, ["stream disconnected"])
+    }
+
     private func key(sequence: UInt64, action: RemoteInputAction) -> KeyboardKeyEvent {
         KeyboardKeyEvent(
             action: action,
@@ -283,5 +294,22 @@ private final class RecordingInputBackend: InputBackend {
 
     func releaseAll(reason: String) {
         releaseReasons.append(reason)
+    }
+}
+
+private final class LifecycleRecordingInputBackend: InputBackend {
+    var beginDeviceIds: [String] = []
+    var endReasons: [String] = []
+
+    func beginSession(deviceId: String) {
+        beginDeviceIds.append(deviceId)
+    }
+
+    func handle(_ event: RemoteInputEvent) {}
+
+    func releaseAll(reason: String) {}
+
+    func endSession(reason: String) {
+        endReasons.append(reason)
     }
 }

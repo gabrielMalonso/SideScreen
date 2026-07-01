@@ -26,6 +26,7 @@ final class InputServer {
     private var listener: NWListener?
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "inputServerQueue", qos: .userInteractive)
+    private let queueKey = DispatchSpecificKey<Void>()
 
     init(
         port: UInt16,
@@ -39,6 +40,7 @@ final class InputServer {
         self.backend = backend
         self.activeBackend = activeBackend
         self.isDeviceRevoked = isDeviceRevoked
+        queue.setSpecific(key: queueKey, value: ())
     }
 
     func start() {
@@ -66,25 +68,25 @@ final class InputServer {
     }
 
     func stop() {
-        connection?.cancel()
-        listener?.cancel()
-        connection = nil
-        listener = nil
-        backend.endSession(reason: "input server stopped")
+        runOnQueueSync {
+            connection?.cancel()
+            listener?.cancel()
+            connection = nil
+            listener = nil
+            backend.endSession(reason: "input server stopped")
+        }
     }
 
     func dropActiveConnection(reason: String) {
-        connection?.cancel()
-        connection = nil
-        backend.endSession(reason: reason)
+        runOnQueueSync {
+            connection?.cancel()
+            connection = nil
+            backend.endSession(reason: reason)
+        }
     }
 
     private func handleConnection(_ conn: NWConnection) {
         debugLog("InputServer incoming connection")
-        connection?.cancel()
-        backend.endSession(reason: "new input connection")
-        connection = conn
-
         conn.stateUpdateHandler = { [weak self, weak conn] state in
             guard let self, let conn else { return }
             switch state {
@@ -92,10 +94,10 @@ final class InputServer {
                 self.receiveHelloPrefix(on: conn)
             case .failed(let error):
                 debugLog("InputServer connection failed: \(error)")
-                self.backend.endSession(reason: "input connection failed")
+                self.endCurrentConnection(conn, reason: "input connection failed", cancel: false)
             case .cancelled:
                 debugLog("InputServer connection cancelled")
-                self.backend.endSession(reason: "input connection cancelled")
+                self.endCurrentConnection(conn, reason: "input connection cancelled", cancel: false)
             default:
                 break
             }
@@ -122,7 +124,7 @@ final class InputServer {
                 let hello = try RemoteInputCodec.parseHello(prefix: prefix, suffix: suffix)
                 try self.authorize(hello, connection: conn)
                 debugLog("InputServer auth OK — device=\(hello.deviceId), caps=\(hello.capabilities)")
-                self.backend.beginSession(deviceId: hello.deviceId)
+                self.activate(conn, deviceId: hello.deviceId)
                 conn.send(content: RemoteInputCodec.acceptResponse(backend: self.activeBackend.rawValue), completion: .contentProcessed { _ in })
                 self.receiveEventHeader(on: conn)
             } catch RemoteInputProtocolError.invalidToken {
@@ -148,6 +150,17 @@ final class InputServer {
         }
     }
 
+    private func activate(_ conn: NWConnection, deviceId: String) {
+        if connection !== conn {
+            connection?.cancel()
+            if connection != nil {
+                backend.endSession(reason: "new input connection")
+            }
+            connection = conn
+        }
+        backend.beginSession(deviceId: deviceId)
+    }
+
     private func reject(_ conn: NWConnection, reason: UInt8) {
         let reasonText: String
         switch reason {
@@ -157,6 +170,9 @@ final class InputServer {
         default: reasonText = "unknown \(reason)"
         }
         debugLog("InputServer rejecting connection: \(reasonText)")
+        if connection === conn {
+            connection = nil
+        }
         conn.send(content: RemoteInputCodec.rejectResponse(reason: reason), completion: .contentProcessed { _ in
             conn.cancel()
         })
@@ -187,8 +203,7 @@ final class InputServer {
                 }
             } catch {
                 debugLog("InputServer invalid header: \(error)")
-                self.backend.endSession(reason: "invalid input header")
-                conn.cancel()
+                self.endCurrentConnection(conn, reason: "invalid input header")
             }
         }
     }
@@ -202,8 +217,7 @@ final class InputServer {
                 self.receiveEventHeader(on: conn)
             } catch {
                 debugLog("InputServer invalid payload: \(error)")
-                self.backend.endSession(reason: "invalid input payload")
-                conn.cancel()
+                self.endCurrentConnection(conn, reason: "invalid input payload")
             }
         }
     }
@@ -230,16 +244,37 @@ final class InputServer {
             guard let self else { return }
             if let error {
                 debugLog("InputServer receive error: \(error)")
-                self.backend.endSession(reason: "input receive error")
-                conn.cancel()
+                self.endCurrentConnection(conn, reason: "input receive error")
                 return
             }
             guard let data, data.count == length, !isComplete else {
-                self.backend.endSession(reason: "input closed")
-                conn.cancel()
+                self.endCurrentConnection(conn, reason: "input closed")
                 return
             }
             completion(data)
+        }
+    }
+
+    private func endCurrentConnection(_ conn: NWConnection, reason: String, cancel: Bool = true) {
+        guard connection === conn else {
+            if cancel {
+                conn.cancel()
+            }
+            debugLog("InputServer ignoring stale connection end: \(reason)")
+            return
+        }
+        connection = nil
+        backend.endSession(reason: reason)
+        if cancel {
+            conn.cancel()
+        }
+    }
+
+    private func runOnQueueSync(_ work: () -> Void) {
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            work()
+        } else {
+            queue.sync(execute: work)
         }
     }
 }

@@ -240,6 +240,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        inputClient?.let(RemoteInputBridge::attach)
         updateAccessibilityAssistStatus()
         requestPointerCaptureIfInputActive()
     }
@@ -477,6 +478,10 @@ class MainActivity : AppCompatActivity() {
                 showError("Please enter a host address")
                 return@setOnClickListener
             }
+            if (!RemoteInputPorts.isValidVideoPort(port)) {
+                showError("Use a server port from ${RemoteInputPorts.MIN_VIDEO_PORT} to ${RemoteInputPorts.MAX_VIDEO_PORT}. Remote input uses the next port.")
+                return@setOnClickListener
+            }
 
             updateStatus("Connecting...")
             connect(host, port)
@@ -618,6 +623,7 @@ class MainActivity : AppCompatActivity() {
 
         val view = dialog.findViewById<View>(android.R.id.content)
         val showStatsSwitch = view.findViewById<SwitchMaterial>(R.id.showStatsSwitch)
+        val showInputOverlaySwitch = view.findViewById<SwitchMaterial>(R.id.showInputOverlaySwitch)
         val opacitySlider = view.findViewById<Slider>(R.id.opacitySlider)
         val opacityValue = view.findViewById<TextView>(R.id.opacityValue)
         val mouseSensitivitySlider = view.findViewById<Slider>(R.id.mouseSensitivitySlider)
@@ -650,6 +656,7 @@ class MainActivity : AppCompatActivity() {
 
         // Load current settings
         showStatsSwitch.isChecked = prefs.showStatsOverlay
+        showInputOverlaySwitch.isChecked = prefs.showInputOverlay
         opacitySlider.value = prefs.overlayOpacity
         opacityValue.text = "${(prefs.overlayOpacity * 100).toInt()}%"
         mouseSensitivitySlider.value = prefs.mouseSensitivity
@@ -708,6 +715,11 @@ class MainActivity : AppCompatActivity() {
         showStatsSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.showStatsOverlay = isChecked
             updateOverlayVisibility(isChecked)
+        }
+
+        showInputOverlaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.showInputOverlay = isChecked
+            updateInputOverlayVisibility()
         }
 
         opacitySlider.addOnChangeListener { _, value, _ ->
@@ -1079,7 +1091,7 @@ class MainActivity : AppCompatActivity() {
                     enableFullscreenMode()
                     binding.settingsPanel.visibility = View.GONE
                     binding.settingsButton.visibility = View.VISIBLE
-                    binding.inputCaptureBar.visibility = View.VISIBLE
+                    updateInputOverlayVisibility()
                     restoreSettingsButtonPosition()
                     updateOverlayVisibility(prefs.showStatsOverlay)
                     // For wireless mode, transition controller to CONNECTED here —
@@ -1170,6 +1182,10 @@ class MainActivity : AppCompatActivity() {
         macName: String,
         endpointMode: EndpointMode,
     ) {
+        if (!RemoteInputPorts.isValidVideoPort(port)) {
+            showError("Use a server port from ${RemoteInputPorts.MIN_VIDEO_PORT} to ${RemoteInputPorts.MAX_VIDEO_PORT}. Remote input uses the next port.")
+            return
+        }
         userRequestedDisconnect = false
         lastWirelessTarget = WirelessConnectionTarget(host, port, token.copyOf(), deviceName, macName, endpointMode)
         cancelWirelessReconnect()
@@ -1262,6 +1278,10 @@ class MainActivity : AppCompatActivity() {
         host: String,
         port: Int,
     ) {
+        if (!RemoteInputPorts.isValidVideoPort(port)) {
+            showError("Use a server port from ${RemoteInputPorts.MIN_VIDEO_PORT} to ${RemoteInputPorts.MAX_VIDEO_PORT}. Remote input uses the next port.")
+            return
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 log("Connecting to $host:$port...")
@@ -1470,6 +1490,7 @@ class MainActivity : AppCompatActivity() {
         activeInputBackendName = "waiting"
         binding.inputLatencyText.text = "input --"
         updatePointerCaptureUi(false)
+        updateInputOverlayVisibility()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1489,6 +1510,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         inputClient?.sendAllInputsUp(RemoteInputProtocol.ALL_INPUTS_UP_ANDROID_LIFECYCLE_PAUSE)
+        RemoteInputBridge.detach(inputClient)
         recordInputEvent()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binding.surfaceView.hasPointerCapture()) {
             binding.surfaceView.releasePointerCapture()
@@ -1520,6 +1542,11 @@ class MainActivity : AppCompatActivity() {
             binding.releasePointerButton.isEnabled = hasCapture
             binding.releasePointerButton.alpha = if (hasCapture) 1f else 0.55f
         }
+    }
+
+    private fun updateInputOverlayVisibility() {
+        binding.inputCaptureBar.visibility =
+            if (isConnected && prefs.showInputOverlay) View.VISIBLE else View.GONE
     }
 
     private fun requestPointerCaptureIfInputActive() {

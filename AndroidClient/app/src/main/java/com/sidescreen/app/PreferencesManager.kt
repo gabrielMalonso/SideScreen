@@ -12,8 +12,12 @@ class PreferencesManager(
     private val prefs: SharedPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
     var showStatsOverlay: Boolean
-        get() = prefs.getBoolean("show_stats", true)
+        get() = prefs.getBoolean("show_stats", false)
         set(value) = prefs.edit().putBoolean("show_stats", value).apply()
+
+    var showInputOverlay: Boolean
+        get() = prefs.getBoolean("show_input_overlay", false)
+        set(value) = prefs.edit().putBoolean("show_input_overlay", value).apply()
 
     var overlayOpacity: Float
         get() = prefs.getFloat("overlay_opacity", 0.8f)

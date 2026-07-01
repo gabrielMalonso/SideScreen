@@ -43,4 +43,11 @@ final class PairingURLTests: XCTestCase {
             "mac-mini.example.ts.net"
         )
     }
+
+    func testVideoPortIsCappedBeforeInputPortCollision() {
+        XCTAssertEqual(DisplaySettings.clampedVideoPort(54321), 54321)
+        XCTAssertEqual(DisplaySettings.clampedVideoPort(65534), 65534)
+        XCTAssertEqual(DisplaySettings.clampedVideoPort(65535), 65534)
+        XCTAssertEqual(DisplaySettings.clampedVideoPort(0), 1)
+    }
 }

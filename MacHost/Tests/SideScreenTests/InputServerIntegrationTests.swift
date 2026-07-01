@@ -112,6 +112,81 @@ final class InputServerIntegrationTests: XCTestCase {
         try Self.connectAndExpectAccept(port: port, token: token)
     }
 
+    func testReplacingInputConnectionIgnoresStaleCancellationFromOldConnection() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, _ in
+                receivedToken == token && deviceId == "tablet"
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        let first = try Self.acceptedConnection(port: port, token: token)
+        defer { first.cancel() }
+
+        let staleCancel = expectation(description: "old connection cancellation must not end replacement session")
+        staleCancel.isInverted = true
+        backend.onEnd = { reason in
+            if reason == "input connection cancelled" {
+                staleCancel.fulfill()
+            }
+        }
+
+        let second = try Self.acceptedConnection(port: port, token: token)
+        defer { second.cancel() }
+
+        wait(for: [staleCancel], timeout: 0.5)
+        backend.onEnd = nil
+
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet", "tablet"])
+        XCTAssertEqual(backend.endReasonsSnapshot.filter { $0 == "new input connection" }.count, 1)
+        XCTAssertFalse(backend.endReasonsSnapshot.contains("input connection cancelled"))
+    }
+
+    func testInvalidNewConnectionDoesNotDropActiveInputConnection() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let invalidToken = Data((32..<64).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, _ in
+                receivedToken == token && deviceId == "tablet"
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        let active = try Self.acceptedConnection(port: port, token: token)
+        defer { active.cancel() }
+
+        let rejected = try Self.rejectedConnection(port: port, token: invalidToken, reason: 2)
+        defer { rejected.cancel() }
+
+        let receivedEvent = expectation(description: "active connection still dispatches after rejected replacement")
+        backend.onEvent = { event in
+            if case .keyboard(let key) = event, key.usageId == 0x04 {
+                receivedEvent.fulfill()
+            }
+        }
+
+        active.send(content: Self.keyboardFrame(), completion: .contentProcessed { error in
+            XCTAssertNil(error)
+        })
+
+        wait(for: [receivedEvent], timeout: 3)
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet"])
+        XCTAssertFalse(backend.endReasonsSnapshot.contains("new input connection"))
+    }
+
     private static func hello(token: Data, deviceId: String, sessionId: Data? = nil) -> Data {
         let device = Array(deviceId.utf8)
         var data = Data(RemoteInputCodec.helloMagic)
@@ -179,6 +254,11 @@ final class InputServerIntegrationTests: XCTestCase {
     }
 
     private static func connectAndExpectAccept(port: UInt16, token: Data) throws {
+        let connection = try acceptedConnection(port: port, token: token)
+        connection.cancel()
+    }
+
+    private static func acceptedConnection(port: UInt16, token: Data) throws -> NWConnection {
         let accepted = XCTestExpectation(description: "server accepted input channel")
         let connection = NWConnection(
             host: "127.0.0.1",
@@ -195,21 +275,73 @@ final class InputServerIntegrationTests: XCTestCase {
             }
         }
         connection.start(queue: .global(qos: .userInitiated))
-        defer { connection.cancel() }
 
         let result = XCTWaiter.wait(for: [accepted], timeout: 3)
         XCTAssertEqual(result, .completed)
+        return connection
+    }
+
+    private static func rejectedConnection(port: UInt16, token: Data, reason: UInt8) throws -> NWConnection {
+        let rejected = XCTestExpectation(description: "server rejected input channel")
+        let connection = NWConnection(
+            host: "127.0.0.1",
+            port: NWEndpoint.Port(integerLiteral: port),
+            using: .tcp
+        )
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                connection.send(content: hello(token: token, deviceId: "tablet"), completion: .contentProcessed { _ in })
+                connection.receive(minimumIncompleteLength: 5, maximumLength: 5) { data, _, _, _ in
+                    XCTAssertEqual(data, RemoteInputCodec.rejectResponse(reason: reason))
+                    rejected.fulfill()
+                }
+            }
+        }
+        connection.start(queue: .global(qos: .userInitiated))
+
+        let result = XCTWaiter.wait(for: [rejected], timeout: 3)
+        XCTAssertEqual(result, .completed)
+        return connection
     }
 }
 
 private final class SocketRecordingInputBackend: InputBackend {
+    private let lock = NSLock()
     var onEvent: ((RemoteInputEvent) -> Void)?
+    var onEnd: ((String) -> Void)?
+    private var beginDeviceIds: [String] = []
+    private var endReasons: [String] = []
+
+    var beginDeviceIdsSnapshot: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return beginDeviceIds
+    }
+
+    var endReasonsSnapshot: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return endReasons
+    }
+
+    func beginSession(deviceId: String) {
+        lock.lock()
+        beginDeviceIds.append(deviceId)
+        lock.unlock()
+    }
 
     func handle(_ event: RemoteInputEvent) {
         onEvent?(event)
     }
 
     func releaseAll(reason: String) {}
+
+    func endSession(reason: String) {
+        lock.lock()
+        endReasons.append(reason)
+        lock.unlock()
+        onEnd?(reason)
+    }
 }
 
 private extension Data {

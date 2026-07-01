@@ -297,7 +297,12 @@ class WirelessTabController(
         }
         views.endpointModeText.text = "Endpoint: ${entry.endpointMode.displayName} · ${entry.host}:${entry.port}"
         views.routeText.text = "Route: ${NetworkRoute.describeCurrentRoute(activity, entry.endpointMode)}"
-        views.inputRouteText.text = "$inputState · input port ${RemoteInputPorts.inputPortFor(entry.port)}"
+        views.inputRouteText.text =
+            if (RemoteInputPorts.isValidVideoPort(entry.port)) {
+                "$inputState · input port ${RemoteInputPorts.inputPortFor(entry.port)}"
+            } else {
+                "$inputState · invalid server port ${entry.port}"
+            }
         views.recentErrorsText.text = DiagLog.recentErrorSummary()
         views.limitationText.text =
             "No-root input handles normal keys, modifiers delivered by Android, mouse move, buttons, drag and wheel. Home, Power, Recents and some Meta shortcuts may stay on Android."
