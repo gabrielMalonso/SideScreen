@@ -71,6 +71,19 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 | Testes Mac atualizados | Passou | `swift test`: 83 testes, 0 falhas. |
 | Testes Android atualizados | Passou | `. scripts/android-env.sh && ./gradlew testDebugUnitTest`: sucesso com helper de porta de input. |
 | Preflight completo atualizado | Passou com warnings esperados | `./scripts/preflight.sh --full`: 19 passes, 4 warnings, 0 falhas. Warnings: worktree suja, Android release debug-signed, app/DMG ainda sem notarização e credenciais Android release ausentes. |
+| InputServer contra conexão inválida | Melhorado | Nova conexão de input só substitui a ativa depois de hello/auth aceito; conexão inválida em `P+1` não derruba o input atual. |
+| InputServer contra callbacks antigos | Melhorado | Callbacks atrasados de conexão cancelada são ignorados quando não pertencem mais à sessão ativa. |
+| Virtual HID em fim de sessão | Melhorado | `InputIngress.endSession` agora propaga `endSession(reason:)` ao backend downstream, permitindo reset real do Karabiner VirtualHID/helper. |
+| Logs de token no Mac | Melhorado | Log de autenticação de input removeu o prefixo do token; mantém apenas dispositivo e sessão curta para diagnóstico. |
+| USB/loopback de input | Melhorado | `InputClient` não tenta `bindSocket` em Wi-Fi quando o host é `127.0.0.1`/`localhost`; USB mantém rota loopback para `P/P+1`. |
+| Contrato de portas `P/P+1` | Melhorado | Mac, Android e scripts rejeitam/capam porta de vídeo acima de `65534`, evitando vídeo e input na mesma porta. |
+| UX Android conectada | Melhorado | Stats e barra de input ficam desligados por padrão; telemetria continua disponível no diálogo de settings. |
+| Accessibility em background | Melhorado | `onPause` envia `AllInputsUp` e desconecta o bridge de Accessibility; `onResume` reanexa se a sessão de input continuar ativa. |
+| Smoke Android mais rigoroso | Melhorado | `--expect-stream` agora exige stream/frame flow e canal de input observado em `P+1`. |
+| Testes Mac atuais | Passou | `swift test`: 87 testes, 0 falhas. |
+| Testes Android atuais | Passou | `. scripts/android-env.sh && ./gradlew testDebugUnitTest` e `./gradlew assembleDebug`: sucesso. |
+| Stream Tailnet curto pós-correções no `SM_X610` | Passou | `qa-evidence/20260701-113541-41224`: `--duration 60 --expect-stream --tap-connect --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net`; vídeo HEVC 1920x1200, 1140+ frames, input em `54322`, 0 falhas. |
+| Preflight completo pós-correções | Passou com warnings esperados | `qa-evidence/20260701-113541-41224/preflight.txt`: 19 passes, 4 warnings, 0 falhas. Warnings: worktree suja, Android release debug-signed, app/DMG não notarizados e credenciais Android release ausentes. |
 
 ## Lacunas reais para uso diário
 
@@ -80,7 +93,7 @@ Não significa que o produto final está 100% pronto. Significa que a documenta�
 | Input QA com hardware real | Unit test não prova teclado/mouse Bluetooth, acentos, drag e scroll no corpo. | Usar `./scripts/open-input-qa.sh`, salvar o JSON do harness junto da evidência. |
 | Virtual HID real | Código e framing passam, mas helper/Karabiner precisam smoke em máquina real. | Instalar/ativar helper e testar Terminal, Finder, navegador e editor. |
 | Revogação durante sessão ativa | O código agora derruba a sessão ativa, mas segurança boa não vive só de unit test. | Revogar tablet durante stream e confirmar queda/rejeição do input em `qa-evidence/`. |
-| Sessão Tailnet longa com `P/P+1` | O smoke curto provou vídeo e input em portas separadas; uso diário precisa tempo. | Rodar Tailnet por 30 min com `--expect-stream --tap-connect --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net`. |
+| Sessão Tailnet longa com `P/P+1` | O smoke de 60s provou vídeo e input em portas separadas; uso diário ainda precisa tempo. | Rodar Tailnet por 30 min com `--expect-stream --tap-connect --no-reverse --tailnet-host mac-mini-de-gabriel.tailad333c.ts.net`. |
 | Permissões macOS após assinatura estável | Developer ID estabiliza TCC, mas a nova identidade precisa autorização humana uma vez. | Abrir o app assinado, conceder Screen Recording/Accessibility e confirmar que rebuilds seguintes não pedem de novo. |
 | Distribuição | Builds locais agora usam Developer ID quando disponível, mas release público ainda exige notarização e Android release signing real. | Configurar notarização/staple e keystore Android release. |
 
