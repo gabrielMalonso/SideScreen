@@ -97,6 +97,22 @@ SideScreen/
 └── website/                 # Landing page
 ```
 
+### Release Checks
+
+Use dev checks while coding:
+
+```bash
+./scripts/preflight.sh --full
+```
+
+Use distribution checks before tagging or publishing:
+
+```bash
+./scripts/preflight.sh --full --release
+```
+
+Distribution builds require Developer ID signing, notarization, Gatekeeper acceptance, and Android release signing through environment variables or CI secrets. Never commit keystores, `.jks`, `.p12`, `.pem`, passwords, or app-specific Apple passwords. See [RELEASE.md](RELEASE.md).
+
 ---
 
 ## Coding Standards

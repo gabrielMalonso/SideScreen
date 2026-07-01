@@ -34,6 +34,7 @@ object RemoteInputProtocol {
     const val ALL_INPUTS_UP_INPUT_BACKEND_SWITCH = 3
     const val ALL_INPUTS_UP_NETWORK_DISCONNECT = 4
     const val ALL_INPUTS_UP_PROTOCOL_ERROR = 5
+    const val ALL_INPUTS_UP_WATCHDOG_TIMEOUT = 6
 
     data class EnvelopeHeader(
         val eventType: Int,

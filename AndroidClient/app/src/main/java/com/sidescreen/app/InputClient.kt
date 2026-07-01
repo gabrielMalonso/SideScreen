@@ -74,7 +74,7 @@ class InputClient(
                 sock.connect(InetSocketAddress(host, port), 5000)
                 DiagLog.log(
                     "IC",
-                    "Input hello to $host:$port session=${sessionId?.shortHex() ?: "none"}",
+                    "Input hello to $host:$port session=${if (sessionId == null) "missing" else "present"}",
                 )
                 val out = BufferedOutputStream(sock.getOutputStream(), 8192)
                 out.write(
@@ -362,7 +362,7 @@ class InputClient(
             } catch (e: Exception) {
                 if (!closed.get()) {
                     Log.e(TAG, "Input channel read failed", e)
-                    closeSocketOnly()
+                    executor.execute { closeSocketOnly() }
                 }
             }
         }
@@ -434,6 +434,7 @@ class InputClient(
 
     private fun closeSocketOnly() {
         stopHeartbeat()
+        pendingPointerRelative = null
         synchronized(lock) {
             isConnected = false
             try {
@@ -462,9 +463,6 @@ class InputClient(
                 2 -> "Virtual HID"
                 else -> "None"
             }
-
-        private fun ByteArray.shortHex(): String =
-            take(4).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private data class PendingPointerRelative(

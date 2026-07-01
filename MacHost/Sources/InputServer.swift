@@ -181,6 +181,10 @@ final class InputServer {
     private func receiveEventHeader(on conn: NWConnection) {
         receiveExact(RemoteInputEnvelope.headerLength, on: conn) { [weak self, weak conn] header in
             guard let self, let conn else { return }
+            guard self.connection === conn else {
+                debugLog("InputServer ignoring stale input header")
+                return
+            }
             do {
                 let parsedHeader = try RemoteInputEnvelope.parseHeader(header)
                 if parsedHeader.payloadLength == 0 {
@@ -211,6 +215,10 @@ final class InputServer {
     private func receiveEventPayload(type: RemoteInputEventType, sequence: UInt64, timestamp: UInt64, length: Int, on conn: NWConnection) {
         receiveExact(length, on: conn) { [weak self, weak conn] payload in
             guard let self, let conn else { return }
+            guard self.connection === conn else {
+                debugLog("InputServer ignoring stale input payload")
+                return
+            }
             do {
                 let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: payload)
                 self.handleParsedEvent(event, on: conn)
@@ -223,6 +231,10 @@ final class InputServer {
     }
 
     private func handleParsedEvent(_ event: RemoteInputEvent, on conn: NWConnection) {
+        guard connection === conn else {
+            debugLog("InputServer ignoring stale input event")
+            return
+        }
         backend.handle(event)
         if case .ping(let sequence, let clientTimestampNanos) = event {
             conn.send(

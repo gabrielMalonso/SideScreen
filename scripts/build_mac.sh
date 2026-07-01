@@ -9,6 +9,45 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
 SIGN_IDENTITY="${SIDESCREEN_CODESIGN_IDENTITY:-auto}"
 NOTARIZE="${SIDESCREEN_NOTARIZE:-0}"
+DISTRIBUTION=0
+
+usage() {
+    cat <<EOF
+Usage: ./scripts/build_mac.sh [--dev|--release|--distribution]
+
+Default dev mode auto-detects Developer ID, then Apple Development, then
+falls back to ad-hoc signing.
+
+Release/distribution mode requires a Developer ID Application identity and
+notarization credentials:
+  APPLE_ID
+  APPLE_TEAM_ID
+  APPLE_APP_SPECIFIC_PASSWORD
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dev)
+            DISTRIBUTION=0
+            ;;
+        --release|--distribution)
+            DISTRIBUTION=1
+            NOTARIZE=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: Unknown argument: $1" >&2
+            usage >&2
+            exit 64
+            ;;
+    esac
+    shift
+done
+
 echo "Building version $VERSION..."
 
 resolve_sign_identity() {
@@ -35,10 +74,34 @@ resolve_sign_identity() {
 }
 
 SIGN_IDENTITY="$(resolve_sign_identity)"
+if [ "$DISTRIBUTION" -eq 1 ]; then
+    case "$SIGN_IDENTITY" in
+        Developer\ ID\ Application:*)
+            ;;
+        *)
+            echo "❌ Distribution builds require a Developer ID Application identity."
+            echo "   Set SIDESCREEN_CODESIGN_IDENTITY=\"Developer ID Application: ...\" or install one in Keychain."
+            exit 1
+            ;;
+    esac
+
+    for name in APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD; do
+        if [ -z "${!name:-}" ]; then
+            echo "❌ Distribution notarization requires $name."
+            exit 1
+        fi
+    done
+fi
+
 if [ "$SIGN_IDENTITY" = "-" ]; then
     echo "Code signing identity: ad-hoc (set SIDESCREEN_CODESIGN_IDENTITY for stable macOS permissions)"
 else
     echo "Code signing identity: $SIGN_IDENTITY"
+fi
+if [ "$DISTRIBUTION" -eq 1 ]; then
+    echo "Build profile: distribution"
+else
+    echo "Build profile: dev"
 fi
 
 cd "$ROOT_DIR/MacHost"
@@ -134,9 +197,9 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
     codesign --force --deep --sign - --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
     echo "  ✓ App signed ad-hoc"
 else
-    echo "Code signing (Developer ID: $SIGN_IDENTITY)..."
+    echo "Code signing ($SIGN_IDENTITY)..."
     codesign --force --deep --timestamp --options runtime --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
-    echo "  ✓ App signed with Developer ID"
+    echo "  ✓ App signed with $SIGN_IDENTITY"
 fi
 
 echo ""
@@ -165,6 +228,14 @@ if [ "$NOTARIZE" = "1" ]; then
         echo "❌ SIDESCREEN_NOTARIZE=1 requires SIDESCREEN_CODESIGN_IDENTITY"
         exit 1
     fi
+    case "$SIGN_IDENTITY" in
+        Developer\ ID\ Application:*)
+            ;;
+        *)
+            echo "❌ SIDESCREEN_NOTARIZE=1 requires a Developer ID Application identity, not: $SIGN_IDENTITY"
+            exit 1
+            ;;
+    esac
     if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
         echo "❌ Notarization requires APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_SPECIFIC_PASSWORD"
         exit 1

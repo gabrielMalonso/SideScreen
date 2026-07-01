@@ -126,8 +126,10 @@ class StreamingServer {
 
         // Clean up old connection properly
         if let oldConnection = connection {
+            debugLog("Replacing active stream connection")
             isReceiving = false
             oldConnection.cancel()
+            onClientDisconnected?()
         }
 
         connectionReady = false
@@ -139,16 +141,21 @@ class StreamingServer {
         droppedFrames = 0
 
         connection?.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            guard self.connection === newConnection else {
+                debugLog("Ignoring stale stream connection state: \(state)")
+                return
+            }
             debugLog("Connection state: \(state)")
             switch state {
             case .ready:
-                self?.onConnectionReady(newConnection)
+                self.onConnectionReady(newConnection)
             case .failed(let error):
                 debugLog("Connection failed: \(error)")
-                self?.onClientDisconnected?()
+                self.onClientDisconnected?()
             case .cancelled:
                 debugLog("Connection cancelled")
-                self?.onClientDisconnected?()
+                self.onClientDisconnected?()
             default:
                 break
             }
@@ -443,6 +450,10 @@ class StreamingServer {
 
         connection.receive(minimumIncompleteLength: 1, maximumLength: 256) { [weak self] data, _, isComplete, error in
             guard let self = self, self.isReceiving, !self.isStopped else { return }
+            guard self.connection === connection else {
+                debugLog("Ignoring stale stream input callback")
+                return
+            }
 
             if error != nil || isComplete {
                 self.isReceiving = false
@@ -582,6 +593,7 @@ class StreamingServer {
         // The encode queue depth limit (2 pending) in ScreenCapture handles flow control.
         frameQueue.async { [weak self] in
             guard let self = self else { return }
+            guard self.connection === connection, !self.isStopped, self.connectionReady else { return }
 
             let packet = self.makeFramePacket(data, timestamp: timestamp, isKeyframe: isKeyframe)
 

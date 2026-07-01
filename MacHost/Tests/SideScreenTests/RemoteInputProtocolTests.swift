@@ -88,6 +88,17 @@ final class RemoteInputProtocolTests: XCTestCase {
         XCTAssertEqual(allUp.diagnosticReason, "pointer capture lost")
     }
 
+    func testAllInputsUpParsesWatchdogTimeoutReason() throws {
+        let event = try RemoteInputEvent.parse(type: .allInputsUp, sequence: 42, timestamp: 99, payload: Data([6]))
+
+        guard case .allInputsUp(let allUp) = event else {
+            XCTFail("expected all-inputs-up")
+            return
+        }
+        XCTAssertEqual(allUp.reason, 6)
+        XCTAssertEqual(allUp.diagnosticReason, "watchdog timeout")
+    }
+
     func testParsesTextCommit() throws {
         let text = "ação çãõ é 🧪"
         let textBytes = Array(text.utf8)
@@ -178,13 +189,29 @@ final class InputIngressTests: XCTestCase {
     }
 
     func testFlushesCoalescedPointerBeforeButton() {
+        assertFlushesCoalescedPointerBefore(.pointerButton(PointerButtonEvent(action: .down, button: 0, flags: 0, sequence: 3)))
+    }
+
+    func testFlushesCoalescedPointerBeforeWheel() {
+        assertFlushesCoalescedPointerBefore(.pointerWheel(PointerWheelEvent(deltaX: 0, deltaY: 1, unit: 1, flags: 0, sequence: 3)))
+    }
+
+    func testFlushesCoalescedPointerBeforeKeyboard() {
+        assertFlushesCoalescedPointerBefore(.keyboard(key(sequence: 3, action: .down)))
+    }
+
+    func testFlushesCoalescedPointerBeforeAllInputsUp() {
+        assertFlushesCoalescedPointerBefore(.allInputsUp(AllInputsUpEvent(reason: 2, sequence: 3)))
+    }
+
+    private func assertFlushesCoalescedPointerBefore(_ boundaryEvent: RemoteInputEvent) {
         let backend = RecordingInputBackend()
         let ingress = InputIngress(downstream: backend)
         ingress.beginSession(deviceId: "tablet")
 
         ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 1, dy: 2, unit: 0, flags: 0, sequence: 1)))
         ingress.handle(.pointerRelative(PointerRelativeEvent(dx: 3, dy: 4, unit: 0, flags: 0, sequence: 2)))
-        ingress.handle(.pointerButton(PointerButtonEvent(action: .down, button: 0, flags: 0, sequence: 3)))
+        ingress.handle(boundaryEvent)
 
         guard case .pointerRelative(let move) = backend.events.first else {
             XCTFail("expected pointer relative first")
@@ -234,7 +261,7 @@ final class InputIngressTests: XCTestCase {
         ingress.handle(.keyboard(key(sequence: 1, action: .down)))
         ingress.handle(.keyboard(key(sequence: 3, action: .up)))
 
-        XCTAssertEqual(backend.releaseReasons, ["sequence gap"])
+        XCTAssertEqual(backend.releaseReasons, ["sequence gap: last=1, next=3"])
         XCTAssertEqual(snapshots.last?.pressedKeyCount, 0)
         XCTAssertEqual(snapshots.last?.releaseAllCount, 1)
         XCTAssertEqual(snapshots.last?.sequenceGapCount, 1)
@@ -265,6 +292,21 @@ final class InputIngressTests: XCTestCase {
 
         XCTAssertEqual(backend.beginDeviceIds, ["tablet"])
         XCTAssertEqual(backend.endReasons, ["stream disconnected"])
+    }
+
+    func testEndSessionReleasesPressedState() {
+        let backend = RecordingInputBackend()
+        var snapshots: [InputIngressDiagnostics] = []
+        let ingress = InputIngress(downstream: backend) { snapshots.append($0) }
+        ingress.beginSession(deviceId: "tablet")
+
+        ingress.handle(.keyboard(key(sequence: 1, action: .down)))
+        ingress.endSession(reason: "device revoked")
+
+        XCTAssertEqual(backend.releaseReasons, ["device revoked"])
+        XCTAssertEqual(snapshots.last?.pressedKeyCount, 0)
+        XCTAssertEqual(snapshots.last?.releaseAllCount, 1)
+        XCTAssertEqual(snapshots.last?.lastReleaseReason, "device revoked")
     }
 
     private func key(sequence: UInt64, action: RemoteInputAction) -> KeyboardKeyEvent {

@@ -59,10 +59,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Used to roll its `lastConnected` timestamp forward every status refresh tick so the UI
     /// shows "just now" while connected and freezes at the disconnect moment afterward.
     private var currentWirelessDevice: PairedDevice?
+    private var wirelessConnectionGeneration: UInt64 = 0
     private var cancellables = Set<AnyCancellable>()
     private var permissionCheckTimer: Timer?
     private var statusRefreshTimer: Timer?
     private var pendingPipelineRestart: Task<Void, Never>?
+    private var shouldStartFromLaunchArguments = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("✅ App launched")
@@ -94,6 +96,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Show settings window
         showSettings()
+
+        Task { @MainActor in
+            applyLaunchArguments(ProcessInfo.processInfo.arguments)
+            guard shouldStartFromLaunchArguments else { return }
+            debugLog("Launch argument requested server start")
+            await checkPermissions()
+            await startServer()
+        }
+    }
+
+    @MainActor
+    private func applyLaunchArguments(_ arguments: [String]) {
+        var index = 1
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--start":
+                shouldStartFromLaunchArguments = true
+            case "--usb":
+                settings.connectionMode = .usb
+            case "--wireless":
+                settings.connectionMode = .wireless
+            case "--lan":
+                settings.connectionMode = .wireless
+                settings.endpointMode = .lan
+            case "--tailnet":
+                settings.connectionMode = .wireless
+                settings.endpointMode = .tailnet
+            case "--manual-endpoint":
+                settings.connectionMode = .wireless
+                settings.endpointMode = .manual
+            case "--tailnet-host":
+                if index + 1 < arguments.count {
+                    index += 1
+                    settings.connectionMode = .wireless
+                    settings.endpointMode = .tailnet
+                    settings.tailnetHost = arguments[index]
+                } else {
+                    debugLog("Ignoring --tailnet-host without value")
+                }
+            default:
+                break
+            }
+            index += 1
+        }
     }
 
     @MainActor
@@ -394,6 +441,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func dropActiveWirelessConnection(reason: String, recordLastConnected: Bool) {
+        wirelessConnectionGeneration += 1
         releaseLegacyTouchState(reason: reason)
         if let device = currentWirelessDevice {
             if recordLastConnected {
@@ -718,7 +766,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     let accepted = self?.remoteSessionStore.validateInputToken(token, deviceId: deviceId, sessionId: sessionId) == true
                     debugLog(
                         "Input auth \(accepted ? "OK" : "rejected") — device=...\(deviceId.suffix(4)), " +
-                        "session=\(sessionId?.shortHex ?? "none")"
+                        "session=\(sessionId == nil ? "missing" : "present")"
                     )
                     return accepted
                 } : nil,
@@ -743,6 +791,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 streamingServer?.onWirelessClientPaired = { [weak self] deviceId, deviceName, deviceSecret in
                     guard let self = self else { return }
                     Task { @MainActor in
+                        self.wirelessConnectionGeneration += 1
                         let device = PairedDevice(id: deviceId, name: deviceName, deviceSecret: deviceSecret, lastConnected: Date(), revoked: false)
                         self.currentWirelessDevice = device
                         self.settings.currentWirelessDeviceId = deviceId
@@ -789,16 +838,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             streamingServer?.onClientDisconnected = { [weak self] in
                 guard let self = self else { return }
-                self.inputServer?.dropActiveConnection(reason: "stream disconnected")
                 Task { @MainActor in
+                    let disconnectedGeneration = self.wirelessConnectionGeneration
+                    let disconnectedDevice = self.currentWirelessDevice
+                    self.inputServer?.dropActiveConnection(reason: "stream disconnected")
+                    if let device = disconnectedDevice {
+                        self.remoteSessionStore.revoke(deviceId: device.id)
+                    }
                     self.releaseLegacyTouchState(reason: "stream disconnected")
+                    guard self.wirelessConnectionGeneration == disconnectedGeneration else {
+                        debugLog("Ignoring stale stream disconnect callback")
+                        return
+                    }
                     self.settings.clientConnected = false
                     // Final lastConnected snapshot at the disconnect moment, then
                     // freeze (currentWirelessDevice = nil stops the rolling update
                     // in refreshStatusIndicators).
-                    if let device = self.currentWirelessDevice {
+                    if let device = disconnectedDevice {
                         self.pairedDeviceStore.upsert(id: device.id, name: device.name, deviceSecret: device.deviceSecret, lastConnected: Date())
-                        self.remoteSessionStore.revoke(deviceId: device.id)
                         self.currentWirelessDevice = nil
                         self.settings.currentWirelessDeviceId = nil
                         self.settings.currentWirelessDevice = nil
@@ -1286,11 +1343,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
-    }
-}
-
-private extension Data {
-    var shortHex: String {
-        prefix(4).map { String(format: "%02x", $0) }.joined()
     }
 }

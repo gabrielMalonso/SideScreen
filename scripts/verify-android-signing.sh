@@ -5,6 +5,53 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK="$ROOT_DIR/AndroidClient/app/build/outputs/apk/release/app-release.apk"
 AAB="$ROOT_DIR/AndroidClient/app/build/outputs/bundle/release/app-release.aab"
+DISTRIBUTION=0
+
+usage() {
+    cat <<EOF
+Usage: ./scripts/verify-android-signing.sh [--dev|--release|--distribution]
+
+Default dev mode exits 2 when release artifacts are debug-signed.
+Release/distribution mode exits 1 for the same condition.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dev)
+            DISTRIBUTION=0
+            ;;
+        --release|--distribution)
+            DISTRIBUTION=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: Unknown argument: $1" >&2
+            usage >&2
+            exit 64
+            ;;
+    esac
+    shift
+done
+
+issue_debug_signed() {
+    echo ""
+    if [ "$DISTRIBUTION" -eq 1 ]; then
+        echo "ERROR: Android release artifacts are signed with the debug certificate."
+        echo "   Set SIDESCREEN_RELEASE_STORE_FILE, SIDESCREEN_RELEASE_STORE_PASSWORD,"
+        echo "   SIDESCREEN_RELEASE_KEY_ALIAS, and SIDESCREEN_RELEASE_KEY_PASSWORD,"
+        echo "   then rebuild with SIDESCREEN_REQUIRE_RELEASE_SIGNING=1."
+        exit 1
+    fi
+
+    echo "WARNING: Android release artifacts are signed with the debug certificate."
+    echo "   Fine for local dev. Not fine for publication."
+    echo "   Set SIDESCREEN_RELEASE_* and rebuild before distribution."
+    exit 2
+}
 
 . "$SCRIPT_DIR/android-env.sh" >/tmp/sidescreen-android-signing-env.out 2>&1 || {
     cat /tmp/sidescreen-android-signing-env.out
@@ -56,10 +103,7 @@ if grep -q "CN=Android Debug" /tmp/sidescreen-aab-signing.out; then
 fi
 
 if [ "$DEBUG_SIGNED" -eq 1 ]; then
-    echo ""
-    echo "WARNING: Android release artifacts are signed with the debug certificate."
-    echo "   Set SIDESCREEN_RELEASE_* and rebuild before publication."
-    exit 2
+    issue_debug_signed
 fi
 
 echo ""

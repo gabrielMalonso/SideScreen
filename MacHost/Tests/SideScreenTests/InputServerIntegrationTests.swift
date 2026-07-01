@@ -187,6 +187,92 @@ final class InputServerIntegrationTests: XCTestCase {
         XCTAssertFalse(backend.endReasonsSnapshot.contains("new input connection"))
     }
 
+    func testInputChannelWithoutValidSessionIsRejectedWithoutDroppingActiveSession() throws {
+        let store = RemoteSessionStore(ttl: 60)
+        let credentials = try store.create(deviceId: "tablet", now: Date(timeIntervalSince1970: 100))
+        let backend = SocketRecordingInputBackend()
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { token, deviceId, sessionId in
+                store.validateInputToken(
+                    token,
+                    deviceId: deviceId,
+                    sessionId: sessionId,
+                    now: Date(timeIntervalSince1970: 120)
+                )
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        let active = try Self.acceptedConnection(
+            port: port,
+            token: credentials.inputToken,
+            sessionId: credentials.sessionId
+        )
+        defer { active.cancel() }
+
+        let rejected = try Self.rejectedConnection(port: port, token: credentials.inputToken, reason: 2)
+        defer { rejected.cancel() }
+
+        let receivedEvent = expectation(description: "active session still dispatches after sessionless channel reject")
+        backend.onEvent = { event in
+            if case .keyboard(let key) = event, key.usageId == 0x04 {
+                receivedEvent.fulfill()
+            }
+        }
+
+        active.send(content: Self.keyboardFrame(), completion: .contentProcessed { error in
+            XCTAssertNil(error)
+        })
+
+        wait(for: [receivedEvent], timeout: 3)
+        XCTAssertEqual(backend.beginDeviceIdsSnapshot, ["tablet"])
+        XCTAssertFalse(backend.endReasonsSnapshot.contains("new input connection"))
+    }
+
+    func testDropActiveConnectionEndsSessionAndIgnoresOldFrames() throws {
+        let token = Data((0..<32).map(UInt8.init))
+        let backend = SocketRecordingInputBackend()
+        let port = try Self.freePort()
+        let server = InputServer(
+            port: port,
+            validateAuthToken: { receivedToken, deviceId, _ in
+                receivedToken == token && deviceId == "tablet"
+            },
+            backend: backend,
+            activeBackend: .cgevent
+        )
+        server.start()
+        defer { server.stop() }
+
+        let active = try Self.acceptedConnection(port: port, token: token)
+        defer { active.cancel() }
+
+        let ended = expectation(description: "revocation ends active input session")
+        backend.onEnd = { reason in
+            if reason == "device revoked" {
+                ended.fulfill()
+            }
+        }
+        server.dropActiveConnection(reason: "device revoked")
+        wait(for: [ended], timeout: 3)
+
+        let staleEvent = expectation(description: "old connection frame must not dispatch after drop")
+        staleEvent.isInverted = true
+        backend.onEvent = { event in
+            if case .keyboard = event {
+                staleEvent.fulfill()
+            }
+        }
+        active.send(content: Self.keyboardFrame(), completion: .contentProcessed { _ in })
+
+        wait(for: [staleEvent], timeout: 0.5)
+    }
+
     private static func hello(token: Data, deviceId: String, sessionId: Data? = nil) -> Data {
         let device = Array(deviceId.utf8)
         var data = Data(RemoteInputCodec.helloMagic)
@@ -258,7 +344,7 @@ final class InputServerIntegrationTests: XCTestCase {
         connection.cancel()
     }
 
-    private static func acceptedConnection(port: UInt16, token: Data) throws -> NWConnection {
+    private static func acceptedConnection(port: UInt16, token: Data, sessionId: Data? = nil) throws -> NWConnection {
         let accepted = XCTestExpectation(description: "server accepted input channel")
         let connection = NWConnection(
             host: "127.0.0.1",
@@ -267,7 +353,7 @@ final class InputServerIntegrationTests: XCTestCase {
         )
         connection.stateUpdateHandler = { state in
             if case .ready = state {
-                connection.send(content: hello(token: token, deviceId: "tablet"), completion: .contentProcessed { _ in })
+                connection.send(content: hello(token: token, deviceId: "tablet", sessionId: sessionId), completion: .contentProcessed { _ in })
                 connection.receive(minimumIncompleteLength: 6, maximumLength: 6) { data, _, _, _ in
                     XCTAssertEqual(data, RemoteInputCodec.acceptResponse(backend: ActiveInputBackend.cgevent.rawValue))
                     accepted.fulfill()

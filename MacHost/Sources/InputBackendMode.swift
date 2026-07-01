@@ -157,6 +157,7 @@ enum InputBackendFactory {
                     status: status
                 )
             }
+            debugLog("VirtualHID unavailable — using CGEvent fallback: \(status.detail)")
             return InputBackendSelection(
                 backend: cgeventIngress(),
                 activeBackend: .cgevent,

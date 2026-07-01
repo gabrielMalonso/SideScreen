@@ -14,17 +14,21 @@ echo ""
 # 1. Preflight
 echo "[1/4] Preflight..."
 set +e
-"$ROOT_DIR/scripts/preflight.sh" --full
+"$ROOT_DIR/scripts/preflight.sh" --full --release
 STATUS=$?
 set -e
 if [ "$STATUS" -ne 0 ]; then
     if [ "$STATUS" -eq 2 ]; then
         echo ""
-        echo "Preflight finished with warnings. Fix them or rerun with SIDESCREEN_ALLOW_RELEASE_WARNINGS=1."
+        echo "Distribution preflight finished with non-blocking warnings."
+        echo "Fix them or rerun with SIDESCREEN_ALLOW_RELEASE_WARNINGS=1."
+        echo "Signing, notarization, Gatekeeper, and Android release-signing blockers cannot be bypassed."
         if [ "${SIDESCREEN_ALLOW_RELEASE_WARNINGS:-0}" != "1" ]; then
             exit 2
         fi
     else
+        echo ""
+        echo "Distribution preflight failed. Fix the blockers before tagging a release."
         exit "$STATUS"
     fi
 fi

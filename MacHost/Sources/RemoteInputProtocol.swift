@@ -227,6 +227,7 @@ struct AllInputsUpEvent {
         case 3: return "input backend switch"
         case 4: return "network disconnect"
         case 5: return "protocol error"
+        case 6: return "watchdog timeout"
         default: return "unknown reason \(reason)"
         }
     }

@@ -164,9 +164,10 @@ final class InputIngress: InputBackend {
         }
         if sequence > previous + 1 {
             sequenceGapCount += 1
-            debugLog("InputIngress sequence gap: last=\(previous), next=\(sequence)")
+            let reason = "sequence gap: last=\(previous), next=\(sequence)"
+            debugLog("InputIngress \(reason)")
             if !pressedKeys.isEmpty || !pressedButtons.isEmpty {
-                return (true, "sequence gap")
+                return (true, reason)
             }
         }
         return (true, nil)

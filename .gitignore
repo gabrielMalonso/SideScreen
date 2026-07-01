@@ -50,6 +50,10 @@ dist/
 .env
 .env.local
 *.pem
+*.jks
+*.p12
+*.keychain-db
+release.keystore
 
 # Docs (local design docs)
 docs/

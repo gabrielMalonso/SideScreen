@@ -127,6 +127,13 @@ class RemoteInputProtocolTest {
     }
 
     @Test
+    fun allInputsUpPayloadCarriesWatchdogTimeoutReason() {
+        val bytes = RemoteInputProtocol.allInputsUpPayload(RemoteInputProtocol.ALL_INPUTS_UP_WATCHDOG_TIMEOUT)
+
+        assertArrayEquals(byteArrayOf(6), bytes)
+    }
+
+    @Test
     fun exposesAccessibilityAssistCapabilityAndKeyboardFlag() {
         assertEquals(1 shl 4, RemoteInputProtocol.CAP_ACCESSIBILITY_ASSIST)
         assertEquals(1 shl 6, RemoteInputProtocol.CAP_TEXT_COMMIT)

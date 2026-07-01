@@ -9,6 +9,44 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; th
     exit 1
 fi
 INPUT_PORT=$((PORT + 1))
+APP_ARGS=()
+
+usage() {
+    echo "Usage: ./scripts/run.sh [--start] [--usb|--wireless|--lan|--tailnet|--manual-endpoint] [--tailnet-host host]"
+}
+
+require_value() {
+    local option="$1"
+    local value="${2:-}"
+    if [ -z "$value" ]; then
+        echo "$option requires a value" >&2
+        usage >&2
+        exit 1
+    fi
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --start|--usb|--wireless|--lan|--tailnet|--manual-endpoint)
+            APP_ARGS+=("$1")
+            shift
+            ;;
+        --tailnet-host)
+            require_value "$1" "${2:-}"
+            APP_ARGS+=("$1" "${2:-}")
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
 
 echo "🚀 Starting Side Screen..."
 
@@ -19,19 +57,27 @@ sleep 0.3
 # Check if app bundle exists
 if [ -d "$ROOT_DIR/SideScreen.app" ]; then
     echo "  Opening SideScreen.app..."
-    open "$ROOT_DIR/SideScreen.app"
+    if [ "${#APP_ARGS[@]}" -gt 0 ]; then
+        open "$ROOT_DIR/SideScreen.app" --args "${APP_ARGS[@]}"
+    else
+        open "$ROOT_DIR/SideScreen.app"
+    fi
 elif [ -f "$ROOT_DIR/MacHost/.build/out/Products/Release/SideScreen" ]; then
     echo "  Running release binary..."
-    "$ROOT_DIR/MacHost/.build/out/Products/Release/SideScreen" &
+    "$ROOT_DIR/MacHost/.build/out/Products/Release/SideScreen" "${APP_ARGS[@]}" &
 elif [ -f "$ROOT_DIR/MacHost/.build/debug/SideScreen" ]; then
     echo "  Running debug binary..."
-    "$ROOT_DIR/MacHost/.build/debug/SideScreen" &
+    "$ROOT_DIR/MacHost/.build/debug/SideScreen" "${APP_ARGS[@]}" &
 else
     echo "❌ No build found. Building now..."
     "$SCRIPT_DIR/build_mac.sh"
     echo ""
     echo "  Opening SideScreen.app..."
-    open "$ROOT_DIR/SideScreen.app"
+    if [ "${#APP_ARGS[@]}" -gt 0 ]; then
+        open "$ROOT_DIR/SideScreen.app" --args "${APP_ARGS[@]}"
+    else
+        open "$ROOT_DIR/SideScreen.app"
+    fi
 fi
 
 echo ""

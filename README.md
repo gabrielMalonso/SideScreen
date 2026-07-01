@@ -48,6 +48,7 @@ Built entirely open-source, Side Screen is designed to be fast, lightweight, and
 For full details, features, and documentation, please visit **[sidescreen.dev](https://sidescreen.dev)**
 
 For practical daily-driver validation, see **[DAILY_USE_QA.md](DAILY_USE_QA.md)**.
+For release signing, notarization, and install checks, see **[RELEASE.md](RELEASE.md)**.
 
 <p align="right"><a href="#readme-top">↑ Back to top</a></p>
 
@@ -133,7 +134,7 @@ Download the latest release from [**GitHub Releases**](https://github.com/tranvu
 > ```bash
 > sudo xattr -cr /Applications/SideScreen.app
 > ```
-> Then open the app again. This is needed because the app is not notarized with an Apple Developer certificate.
+> Then open the app again. This workaround is for local/dev builds only. A distribution build should be Developer ID signed, notarized, stapled, and accepted by Gatekeeper.
 
 > **⚠️ ADB Required**
 > The Mac app needs `adb` to communicate with your Android device. If the app doesn't show "Running" after launch, you likely need to install ADB:
@@ -181,7 +182,15 @@ Before a real daily-driver run or release candidate, run:
 ./scripts/preflight.sh --full
 ```
 
-It checks shell scripts, local toolchains, Mac signing, APK/DMG artifacts, ADB, Tailnet, and the automated Mac/Android tests. Warnings mean something still needs a human/device check.
+It checks shell scripts, local toolchains, Mac signing, APK/DMG artifacts, ADB, Tailnet, and the automated Mac/Android tests. Dev warnings mean something still needs a human/device check.
+
+For distribution, use the stricter profile:
+
+```bash
+./scripts/preflight.sh --full --release
+```
+
+This blocks debug-signed Android release artifacts, missing Android release credentials, missing Developer ID signing, failed Gatekeeper checks, and missing macOS notarization/stapling.
 
 To keep proof of what was checked, collect a QA evidence folder:
 
@@ -236,10 +245,10 @@ export SIDESCREEN_NOTARIZE=1
 export APPLE_ID="you@example.com"
 export APPLE_TEAM_ID="TEAMID"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-./scripts/build_mac.sh
+./scripts/build_mac.sh --release
 ```
 
-Without those values, Mac builds are ad-hoc signed for local testing and will still trigger Gatekeeper on other machines.
+Without those values, Mac builds are local-only and may still trigger Gatekeeper on other machines. Apple Development signing can stabilize local TCC permissions, but it is not a distribution identity.
 GitHub Releases require the same Apple values as repository secrets, plus:
 
 ```bash
@@ -255,22 +264,22 @@ APPLE_APP_SPECIFIC_PASSWORD
 Check local Mac distribution readiness with:
 
 ```bash
-./scripts/verify-mac-distribution.sh
+./scripts/verify-mac-distribution.sh --release
 ```
 
-For a real Android release build, set a release keystore before running `assembleRelease`:
+For a real Android release build, set a release keystore before running the release build:
 
 ```bash
 export SIDESCREEN_RELEASE_STORE_FILE=/path/to/release.keystore
 export SIDESCREEN_RELEASE_STORE_PASSWORD=...
 export SIDESCREEN_RELEASE_KEY_ALIAS=...
 export SIDESCREEN_RELEASE_KEY_PASSWORD=...
-cd AndroidClient && ./gradlew assembleRelease bundleRelease
+./scripts/build_android.sh --release
 ```
 
 Without those variables, `assembleRelease` falls back to the debug signing key for local testing only.
 The APK is useful for direct installs; the AAB is the Play Store publication artifact. GitHub Releases require the same values as repository secrets, plus `SIDESCREEN_RELEASE_KEYSTORE_BASE64`, and attach `SHA256SUMS.txt` for download verification.
-Use `./scripts/verify-android-signing.sh` to confirm the APK/AAB are not debug-signed before publication.
+Use `./scripts/verify-android-signing.sh --release` to confirm the APK/AAB are not debug-signed before publication.
 </details>
 
 ---
@@ -316,11 +325,11 @@ USB mode remains the lowest-latency option for drawing or fast-paced gaming. Wir
 <details>
 <summary><strong>"SideScreen is damaged" on macOS</strong></summary>
 
-This happens because the app is not notarized by Apple. Run this command to fix it:
+This usually means you are opening a local/dev build that is not notarized by Apple. For your own machine, run:
 ```bash
 sudo xattr -cr /Applications/SideScreen.app
 ```
-Then open the app again.
+Then open the app again. Do not publish a DMG that needs this workaround.
 </details>
 
 <details>

@@ -99,7 +99,9 @@
 
     .metric,
     .case,
-    .shortcut-panel {
+    .shortcut-panel,
+    .context-panel,
+    .manual-panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -182,6 +184,8 @@
     }
 
     pre,
+    input,
+    select,
     textarea {
       width: 100%;
       border: 1px solid var(--line);
@@ -208,7 +212,15 @@
       resize: vertical;
     }
 
+    input,
+    select {
+      min-height: 36px;
+      padding: 7px 9px;
+    }
+
     textarea:focus,
+    input:focus,
+    select:focus,
     button:focus-visible {
       outline: 3px solid rgba(36, 95, 115, 0.28);
       outline-offset: 1px;
@@ -235,6 +247,18 @@
     .shortcut-panel {
       grid-column: 1 / -1;
       padding: 14px;
+    }
+
+    .context-panel,
+    .manual-panel {
+      margin-bottom: 12px;
+      padding: 14px;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
     }
 
     .shortcut-grid {
@@ -271,6 +295,20 @@
       padding-bottom: 5px;
     }
 
+    .checklist label {
+      align-items: center;
+      display: flex;
+      gap: 6px;
+      margin: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .checklist input {
+      min-height: 0;
+      width: auto;
+    }
+
     footer {
       color: var(--muted);
       font-size: 12px;
@@ -281,6 +319,7 @@
       header,
       .summary,
       .grid,
+      .field-grid,
       .shortcut-grid {
         grid-template-columns: 1fr;
       }
@@ -312,6 +351,49 @@
       <div class="metric"><span>Status</span><strong id="overall-status">Pendente</strong></div>
     </section>
 
+    <section class="context-panel" aria-label="Contexto auditável">
+      <div class="case-head">
+        <h2>Contexto da rodada</h2>
+        <span class="badge pending">Sem texto digitado</span>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label for="backend-select">Backend ativo</label>
+          <select id="backend-select">
+            <option value="unknown">Não informado</option>
+            <option value="CGEvent">CGEvent</option>
+            <option value="Virtual HID">Virtual HID</option>
+          </select>
+        </div>
+        <div>
+          <label for="transport-select">Transporte</label>
+          <select id="transport-select">
+            <option value="unknown">Não informado</option>
+            <option value="USB">USB</option>
+            <option value="Tailnet">Tailnet</option>
+            <option value="LAN">LAN</option>
+          </select>
+        </div>
+        <div>
+          <label for="layout-input">Layout</label>
+          <input id="layout-input" value="unknown" autocomplete="off">
+        </div>
+        <div>
+          <label for="keyboard-model">Teclado</label>
+          <input id="keyboard-model" value="not-recorded" autocomplete="off">
+        </div>
+        <div>
+          <label for="mouse-model">Mouse</label>
+          <input id="mouse-model" value="not-recorded" autocomplete="off">
+        </div>
+        <div>
+          <label for="observations">Observações sem conteúdo sensível</label>
+          <input id="observations" placeholder="Ex.: drag falhou no Finder; sem colar texto digitado" autocomplete="off">
+        </div>
+      </div>
+      <p class="note">O relatório exporta metadados, comprimentos, índice de diferença, atalhos e checkboxes. Ele não exporta o texto digitado.</p>
+    </section>
+
     <section class="grid" id="cases"></section>
 
     <section class="shortcut-panel">
@@ -325,6 +407,14 @@
         <ul class="checklist" id="shortcut-checklist"></ul>
         <div class="log" id="shortcut-log" aria-live="polite"></div>
       </div>
+    </section>
+
+    <section class="manual-panel" id="manual-checks">
+      <div class="case-head">
+        <h2>Checklist manual</h2>
+        <span class="badge pending">Hardware real</span>
+      </div>
+      <ul class="checklist" id="manual-checklist"></ul>
     </section>
 
     <footer>
@@ -391,6 +481,21 @@
     const seenShortcuts = new Set();
     const caseState = new Map();
     const casesEl = document.getElementById("cases");
+    const manualChecks = [
+      { id: "duration-recorded", label: "Duração registrada no manifesto" },
+      { id: "video-p-observed", label: "Vídeo observado na porta P" },
+      { id: "input-p-plus-1-observed", label: "Input observado na porta P+1" },
+      { id: "backend-visible", label: "Backend ativo visível no diagnóstico" },
+      { id: "letters-numbers", label: "Teclado: A-Z e números" },
+      { id: "modifiers", label: "Teclado: Shift, Control, Option/Alt, Command/Meta" },
+      { id: "control-keys", label: "Teclado: Enter, Escape, Tab, Backspace, Delete e setas" },
+      { id: "accents-dead-keys", label: "Teclado: acentos/dead keys ou TextCommit" },
+      { id: "relative-move", label: "Mouse: movimento relativo" },
+      { id: "buttons", label: "Mouse: botões esquerdo, direito e meio" },
+      { id: "drag", label: "Mouse: drag inicia, move e solta" },
+      { id: "scroll", label: "Mouse: scroll vertical e horizontal quando houver" },
+      { id: "all-inputs-up", label: "Perda de foco/rede/captura solta todos os inputs" }
+    ];
 
     function createCase(testCase) {
       const section = document.createElement("article");
@@ -504,6 +609,39 @@
       updateSummary();
     }
 
+    function renderManualChecks() {
+      const list = document.getElementById("manual-checklist");
+      list.innerHTML = manualChecks.map(item => `
+        <li>
+          <span>${escapeHtml(item.label)}</span>
+          <label>
+            <input type="checkbox" data-manual-check="${escapeHtml(item.id)}">
+            OK
+          </label>
+        </li>
+      `).join("");
+    }
+
+    function manualCheckState() {
+      return manualChecks.map(item => ({
+        id: item.id,
+        label: item.label,
+        passed: Boolean(document.querySelector(`[data-manual-check="${item.id}"]`)?.checked)
+      }));
+    }
+
+    function context() {
+      return {
+        backend: document.getElementById("backend-select").value,
+        transport: document.getElementById("transport-select").value,
+        keyboardLayout: document.getElementById("layout-input").value.trim() || "unknown",
+        keyboard: document.getElementById("keyboard-model").value.trim() || "not-recorded",
+        mouse: document.getElementById("mouse-model").value.trim() || "not-recorded",
+        observations: document.getElementById("observations").value.trim(),
+        privacy: "No typed text, clipboard contents, passwords, tokens, or customer data are stored by this report."
+      };
+    }
+
     function logShortcut(event) {
       const id = shortcutId(event);
       if (shortcuts.some(shortcut => shortcut.id === id)) seenShortcuts.add(id);
@@ -519,6 +657,7 @@
         tool: "Side Screen Input QA",
         generatedAt: new Date().toISOString(),
         userAgent: navigator.userAgent,
+        context: context(),
         textCases: cases.map(testCase => ({
           id: testCase.id,
           title: testCase.title,
@@ -533,11 +672,7 @@
           label: shortcut.label,
           seen: seenShortcuts.has(shortcut.id)
         })),
-        manualChecks: [
-          "Command+Tab troca de aplicativo no macOS",
-          "Sessão não desconectou após paste grande demais",
-          "Copy Diagnostics foi coletado no Mac e no Android se houve falha"
-        ]
+        manualChecks: manualCheckState()
       };
     }
 
@@ -624,6 +759,7 @@
 
     cases.forEach(createCase);
     renderShortcuts();
+    renderManualChecks();
     updateSummary();
   </script>
 </body>

@@ -10,9 +10,45 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65534 ]; th
 fi
 INPUT_PORT=$((PORT + 1))
 FULL=0
+DISTRIBUTION=0
 
-if [ "${1:-}" = "--full" ]; then
-    FULL=1
+usage() {
+    cat <<EOF
+Usage: ./scripts/preflight.sh [--full] [--dev|--release|--distribution]
+
+Default dev mode allows local-only release warnings.
+Release/distribution mode turns signing, notarization, and Gatekeeper
+problems into blockers.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --full)
+            FULL=1
+            ;;
+        --dev)
+            DISTRIBUTION=0
+            ;;
+        --release|--distribution)
+            DISTRIBUTION=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage >&2
+            exit 64
+            ;;
+    esac
+    shift
+done
+
+VERIFY_MODE_ARG="--dev"
+if [ "$DISTRIBUTION" -eq 1 ]; then
+    VERIFY_MODE_ARG="--release"
 fi
 
 PASS=0
@@ -37,6 +73,14 @@ warn() {
 fail() {
     FAIL=$((FAIL + 1))
     echo "❌ $1"
+}
+
+distribution_issue() {
+    if [ "$DISTRIBUTION" -eq 1 ]; then
+        fail "Distribution blocker: $1"
+    else
+        warn "$1"
+    fi
 }
 
 run_check() {
@@ -66,6 +110,11 @@ echo ""
 echo "Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 echo "Root: $ROOT_DIR"
 echo "Port: $PORT"
+if [ "$DISTRIBUTION" -eq 1 ]; then
+    echo "Profile: distribution"
+else
+    echo "Profile: dev"
+fi
 
 section "Repository"
 run_check "Shell scripts parse" bash -lc "cd '$ROOT_DIR' && for f in scripts/*.sh; do bash -n \"\$f\" || exit 1; done"
@@ -94,6 +143,16 @@ else
     fail "Swift unavailable"
 fi
 
+if [ "$FULL" -eq 1 ]; then
+    section "Full Automated Tests"
+    run_check "Mac swift test" bash -lc "cd '$ROOT_DIR/MacHost' && swift test"
+    if [ "$DISTRIBUTION" -eq 1 ]; then
+        run_check "Android unit tests and signed release build" bash -lc "cd '$ROOT_DIR/AndroidClient' && JAVA_HOME='${JAVA_HOME:-}' ANDROID_HOME='${ANDROID_HOME:-}' SIDESCREEN_REQUIRE_RELEASE_SIGNING=1 ./gradlew testDebugUnitTest assembleRelease bundleRelease"
+    else
+        run_check "Android unit tests and local release build" bash -lc "cd '$ROOT_DIR/AndroidClient' && JAVA_HOME='${JAVA_HOME:-}' ANDROID_HOME='${ANDROID_HOME:-}' ./gradlew testDebugUnitTest assembleRelease bundleRelease"
+    fi
+fi
+
 section "Artifacts"
 run_check "Input QA harness" "$SCRIPT_DIR/validate-input-qa.sh"
 
@@ -109,13 +168,13 @@ if [ -d "$ROOT_DIR/SideScreen.app" ]; then
         warn "Virtual HID helper missing from app bundle; remote input will fall back to CGEvent"
     fi
 else
-    warn "SideScreen.app missing; run ./scripts/build_mac.sh"
+    distribution_issue "SideScreen.app missing; run ./scripts/build_mac.sh --release for distribution"
 fi
 
 if [ -f "$ROOT_DIR/SideScreen-$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')-mac-arm64.dmg" ]; then
     pass "Mac DMG exists"
 else
-    warn "Mac DMG missing; run ./scripts/build_mac.sh"
+    distribution_issue "Mac DMG missing; run ./scripts/build_mac.sh --release for distribution"
 fi
 
 if [ -f "$ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk" ]; then
@@ -127,18 +186,27 @@ fi
 if [ -f "$ROOT_DIR/AndroidClient/app/build/outputs/apk/release/app-release.apk" ]; then
     pass "Android release APK exists"
 else
-    warn "Android release APK missing; run assembleRelease"
+    distribution_issue "Android release APK missing; run ./scripts/build_android.sh --release for distribution"
 fi
 
 if [ -f "$ROOT_DIR/AndroidClient/app/build/outputs/bundle/release/app-release.aab" ]; then
     pass "Android release AAB exists"
 else
-    warn "Android release AAB missing; run bundleRelease"
+    distribution_issue "Android release AAB missing; run ./scripts/build_android.sh --release for distribution"
 fi
 
-run_check "Release checksums generated" "$SCRIPT_DIR/generate-checksums.sh" --stdout
+if "$SCRIPT_DIR/generate-checksums.sh" --stdout >/tmp/sidescreen-preflight.out 2>&1; then
+    pass "Release checksums generated"
+else
+    if [ "$DISTRIBUTION" -eq 1 ]; then
+        fail "Release checksums generated"
+    else
+        warn "Release checksums not generated; release artifacts are incomplete"
+    fi
+    print_matching_output "Missing artifact|❌|ERROR|WARNING" 40
+fi
 
-if "$SCRIPT_DIR/verify-android-signing.sh" >/tmp/sidescreen-preflight.out 2>&1; then
+if "$SCRIPT_DIR/verify-android-signing.sh" "$VERIFY_MODE_ARG" >/tmp/sidescreen-preflight.out 2>&1; then
     pass "Android release artifact signatures"
 else
     STATUS=$?
@@ -151,16 +219,16 @@ else
     fi
 fi
 
-if "$SCRIPT_DIR/verify-mac-distribution.sh" >/tmp/sidescreen-preflight.out 2>&1; then
+if "$SCRIPT_DIR/verify-mac-distribution.sh" "$VERIFY_MODE_ARG" >/tmp/sidescreen-preflight.out 2>&1; then
     pass "Mac Gatekeeper distribution readiness"
 else
     STATUS=$?
     if [ "$STATUS" -eq 2 ]; then
-        warn "Mac app/DMG rejected by Gatekeeper"
-        print_matching_output "rejected|source=|WARNING|OK:"
+        warn "Mac app/DMG not ready for Gatekeeper distribution"
+        print_matching_output "rejected|source=|WARNING|OK:|Signature=|Authority=|stapler" 50
     else
         fail "Mac Gatekeeper distribution readiness"
-        print_matching_output "ERROR|WARNING|rejected|source=" 50
+        print_matching_output "ERROR|WARNING|rejected|source=|Signature=|Authority=|stapler" 50
     fi
 fi
 
@@ -168,17 +236,41 @@ if [ -n "${SIDESCREEN_RELEASE_STORE_FILE:-}" ] &&
    [ -n "${SIDESCREEN_RELEASE_STORE_PASSWORD:-}" ] &&
    [ -n "${SIDESCREEN_RELEASE_KEY_ALIAS:-}" ] &&
    [ -n "${SIDESCREEN_RELEASE_KEY_PASSWORD:-}" ]; then
-    pass "Android release signing env configured"
+    if [ -f "$SIDESCREEN_RELEASE_STORE_FILE" ]; then
+        pass "Android release signing env configured"
+    else
+        distribution_issue "Android release keystore file does not exist at SIDESCREEN_RELEASE_STORE_FILE"
+    fi
 else
-    warn "Android release signing env missing; release APK/AAB will be debug-signed unless SIDESCREEN_REQUIRE_RELEASE_SIGNING=1"
+    distribution_issue "Android release signing env missing; release APK/AAB will be debug-signed unless SIDESCREEN_REQUIRE_RELEASE_SIGNING=1"
 fi
 
 if [ -n "${SIDESCREEN_CODESIGN_IDENTITY:-}" ] && [ "${SIDESCREEN_CODESIGN_IDENTITY:-}" != "-" ]; then
-    pass "Mac Developer ID signing identity configured"
+    case "$SIDESCREEN_CODESIGN_IDENTITY" in
+        Developer\ ID\ Application:*)
+            pass "Mac Developer ID signing identity configured"
+            ;;
+        Apple\ Development:*)
+            distribution_issue "Mac signing identity is Apple Development. Good for stable local TCC, not distribution."
+            ;;
+        *)
+            distribution_issue "Mac signing identity is not Developer ID Application"
+            ;;
+    esac
 elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"Developer ID Application:'; then
     pass "Mac Developer ID signing identity available for auto-signing"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q '"Apple Development:'; then
+    distribution_issue "Only Apple Development signing identity found. Stable enough for local TCC, not distribution."
 else
-    warn "Mac Developer ID signing identity missing; Mac app/DMG will be ad-hoc signed and not notarized"
+    distribution_issue "Mac Developer ID signing identity missing; Mac app/DMG will be ad-hoc signed and not notarized"
+fi
+
+if [ -n "${APPLE_ID:-}" ] &&
+   [ -n "${APPLE_TEAM_ID:-}" ] &&
+   [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
+    pass "Mac notarization env configured"
+else
+    distribution_issue "Mac notarization env missing; set APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_SPECIFIC_PASSWORD for distribution"
 fi
 
 section "Devices"
@@ -212,12 +304,6 @@ if command -v tailscale >/dev/null 2>&1; then
     fi
 else
     warn "tailscale unavailable"
-fi
-
-if [ "$FULL" -eq 1 ]; then
-    section "Full Automated Tests"
-    run_check "Mac swift test" bash -lc "cd '$ROOT_DIR/MacHost' && swift test"
-    run_check "Android unit tests and release build" bash -lc "cd '$ROOT_DIR/AndroidClient' && JAVA_HOME='$JAVA_HOME' ANDROID_HOME='$ANDROID_HOME' ./gradlew testDebugUnitTest assembleRelease bundleRelease"
 fi
 
 section "Summary"
