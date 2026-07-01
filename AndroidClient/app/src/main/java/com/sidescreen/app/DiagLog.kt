@@ -60,6 +60,24 @@ object DiagLog {
         }
     }
 
+    fun recentLogText(maxLines: Int = 80): String {
+        val f = logFile ?: return "Diagnostic log unavailable"
+        return try {
+            if (!f.exists()) return "Diagnostic log empty"
+            formatRecentLog(f.readLines(), maxLines)
+        } catch (_: Exception) {
+            "Diagnostic log unavailable"
+        }
+    }
+
+    fun formatRecentLog(
+        lines: List<String>,
+        maxLines: Int = 80,
+    ): String =
+        lines
+            .takeLast(maxLines.coerceAtLeast(1))
+            .joinToString("\n")
+
     fun summarizeRecentErrors(
         lines: List<String>,
         maxLines: Int = 3,

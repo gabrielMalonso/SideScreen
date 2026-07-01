@@ -1,5 +1,6 @@
 package com.sidescreen.app
 
+import android.view.KeyEvent
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -29,21 +30,28 @@ class RemoteInputProtocolTest {
 
     @Test
     fun mapsCommonAndroidKeyCodesToHidUsage() {
-        assertEquals(0x04, AndroidKeyToHid.usageIdForKeyCode(29))
-        assertEquals(0x27, AndroidKeyToHid.usageIdForKeyCode(7))
-        assertEquals(0x28, AndroidKeyToHid.usageIdForKeyCode(66))
-        assertEquals(0x52, AndroidKeyToHid.usageIdForKeyCode(19))
+        assertEquals(0x04, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_A))
+        assertEquals(0x27, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_0))
+        assertEquals(0x28, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_ENTER))
+        assertEquals(0x52, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_DPAD_UP))
     }
 
     @Test
     fun mapsMetaKeyUsingSelectedModifierMapping() {
-        assertEquals(0xE3, AndroidKeyToHid.usageIdForKeyCode(117))
-        assertEquals(0xE7, AndroidKeyToHid.usageIdForKeyCode(118))
-        assertEquals(0xE2, AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.OPTION))
-        assertEquals(0xE6, AndroidKeyToHid.usageIdForKeyCode(118, MetaKeyMapping.OPTION))
-        assertEquals(0xE0, AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.CONTROL))
-        assertEquals(0xE4, AndroidKeyToHid.usageIdForKeyCode(118, MetaKeyMapping.CONTROL))
-        assertNull(AndroidKeyToHid.usageIdForKeyCode(117, MetaKeyMapping.OFF))
+        assertEquals(0xE3, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_LEFT))
+        assertEquals(0xE7, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_RIGHT))
+        assertEquals(0xE2, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_LEFT, MetaKeyMapping.OPTION))
+        assertEquals(0xE6, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_RIGHT, MetaKeyMapping.OPTION))
+        assertEquals(0xE0, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_LEFT, MetaKeyMapping.CONTROL))
+        assertEquals(0xE4, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_RIGHT, MetaKeyMapping.CONTROL))
+        assertNull(AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_LEFT, MetaKeyMapping.OFF))
+    }
+
+    @Test
+    fun mapsCopyPasteShortcutKeys() {
+        assertEquals(0xE3, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_META_LEFT, MetaKeyMapping.COMMAND))
+        assertEquals(0x06, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_C))
+        assertEquals(0x19, AndroidKeyToHid.usageIdForKeyCode(KeyEvent.KEYCODE_V))
     }
 
     @Test
@@ -66,11 +74,27 @@ class RemoteInputProtocolTest {
 
     @Test
     fun textCommitPayloadPrefixesUtf8Length() {
-        val bytes = RemoteInputProtocol.textCommitPayload("ação")
+        val text = "ação çãõ é 🧪"
+        val bytes = RemoteInputProtocol.textCommitPayload(text)
 
-        assertEquals(6, bytes[0].toInt())
+        assertEquals(text.toByteArray(Charsets.UTF_8).size, bytes[0].toInt() and 0xff)
         assertEquals(0, bytes[1].toInt())
-        assertEquals("ação", bytes.copyOfRange(2, bytes.size).toString(Charsets.UTF_8))
+        assertEquals(text, bytes.copyOfRange(2, bytes.size).toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun textCommitPayloadRejectsHostTooLargePaste() {
+        val oversized = "a".repeat(RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES + 1)
+
+        try {
+            RemoteInputProtocol.textCommitPayload(oversized)
+            throw AssertionError("Expected oversized text commit to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertEquals(
+                "text commit payload too large: ${RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES + 1} bytes, max ${RemoteInputProtocol.MAX_TEXT_COMMIT_BYTES}",
+                expected.message,
+            )
+        }
     }
 
     @Test

@@ -4,6 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK_PATH="$ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
+PORT="${SIDESCREEN_PORT:-54321}"
+
+. "$SCRIPT_DIR/adb-env.sh"
 
 echo "📱 Installing Android app..."
 
@@ -14,9 +17,8 @@ if [ ! -f "$APK_PATH" ]; then
 fi
 
 # Check ADB connection
-if ! adb devices | grep -q "device$"; then
-    echo "❌ No Android device found via ADB"
-    echo "   Please connect your device via USB and enable USB debugging"
+if ! sidescreen_select_adb_device; then
+    echo "   Please connect one Android device by USB, enable USB debugging, and accept the prompt."
     exit 1
 fi
 
@@ -27,10 +29,10 @@ echo ""
 echo "✅ App installed successfully!"
 echo ""
 echo "📲 Setting up USB port forwarding..."
-adb reverse --remove tcp:8888 2>/dev/null || true
-adb reverse tcp:8888 tcp:8888
+adb reverse --remove "tcp:$PORT" 2>/dev/null || true
+adb reverse "tcp:$PORT" "tcp:$PORT"
 
-echo "✅ Port 8888 forwarded"
+echo "✅ Port $PORT forwarded"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Ready! Open 'Side Screen' on your Android device"

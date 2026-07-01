@@ -876,7 +876,18 @@
                         android:layout_height="wrap_content"
                         android:text="No-root mode captures Activity keyboard events and pointer capture. Android system keys may stay local."
                         android:textColor="#888888"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        android:layout_marginBottom="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/copyDiagnosticsButton"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Copy Diagnostics"
+                        android:textAllCaps="false"
+                        android:textColor="#DDFFFFFF"
+                        app:strokeColor="#44FFFFFF" />
                 </LinearLayout>
 
                 <LinearLayout

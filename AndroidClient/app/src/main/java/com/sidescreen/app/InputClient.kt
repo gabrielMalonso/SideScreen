@@ -323,7 +323,7 @@ class InputClient(
                     val headerBytes = ByteArray(RemoteInputProtocol.ENVELOPE_HEADER_LENGTH)
                     readFully(input, headerBytes)
                     val header = RemoteInputProtocol.parseEnvelopeHeader(headerBytes)
-                    if (header.payloadLength > MAX_SERVER_PAYLOAD_BYTES) {
+                    if (header.payloadLength > RemoteInputProtocol.MAX_PAYLOAD_BYTES) {
                         throw IOException("server input payload too large: ${header.payloadLength}")
                     }
                     val payload = ByteArray(header.payloadLength)
@@ -420,8 +420,6 @@ class InputClient(
         private const val TAG = "InputClient"
         private const val INPUT_HEARTBEAT_SECONDS = 2L
         private const val POINTER_FLUSH_DELAY_MS = 4L
-        private const val MAX_SERVER_PAYLOAD_BYTES = 4096
-
         private fun backendName(id: Int): String =
             when (id) {
                 1 -> "CGEvent"

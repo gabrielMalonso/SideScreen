@@ -47,6 +47,8 @@ Built entirely open-source, Side Screen is designed to be fast, lightweight, and
 
 For full details, features, and documentation, please visit **[sidescreen.dev](https://sidescreen.dev)**
 
+For practical daily-driver validation, see **[DAILY_USE_QA.md](DAILY_USE_QA.md)**.
+
 <p align="right"><a href="#readme-top">↑ Back to top</a></p>
 
 ---
@@ -55,7 +57,7 @@ For full details, features, and documentation, please visit **[sidescreen.dev](h
 
 ### USB-C or Wireless
 
-Two ways to connect, same picture quality. **USB-C** plugs in the cable for the lowest possible latency — adb-reverse port forwarding is set up automatically. **Wireless** lets you scan a QR code from the Mac once and the tablet auto-reconnects on every future launch over WiFi (5 GHz strongly recommended). The auth token is generated locally and stays on your Mac; reset it any time to revoke access.
+Two ways to connect, same picture quality. **USB-C** plugs in the cable for the lowest possible latency — adb-reverse port forwarding is set up automatically. **Wireless** lets you scan a QR code from the Mac once, then reconnect from the saved Mac entry on later launches over WiFi or Tailnet. If the wireless link drops during a session, the Android app retries a few times before asking you to reconnect manually. The auth token is generated locally and stays on your Mac; reset it any time to revoke access.
 
 ### Virtual Display
 
@@ -76,6 +78,13 @@ Hardware-accelerated H.265 encoding on Mac and decoding on Android. Async pipeli
 ### Touch Support
 
 Use your tablet's touchscreen to interact with macOS. Touch prediction compensates for network latency, making taps and drags feel natural.
+
+Remote input needs one of these Mac paths:
+
+- **Accessibility granted** for the CGEvent backend
+- **Virtual HID ready** for the privileged helper path
+
+Streaming video still works without Accessibility; touch, mouse, and keyboard control do not.
 
 ### HiDPI (Retina) Support
 
@@ -135,7 +144,7 @@ Download the latest release from [**GitHub Releases**](https://github.com/tranvu
 >    ```
 > 2. Install ADB:
 >    ```bash
->    brew install --cask android-platform-tools
+>    brew install android-platform-tools
 >    ```
 
 <details>
@@ -151,6 +160,117 @@ cd MacHost && swift build -c release
 # Android
 cd AndroidClient && ./gradlew assembleDebug
 ```
+
+For the friendlier local installer, run from the repo root:
+
+```bash
+./scripts/install.sh
+```
+
+It always builds the Mac app. If one authorized ADB device is connected, it also builds/installs Android and configures USB forwarding. Useful variants:
+
+```bash
+./scripts/install.sh --mac-only
+./scripts/install.sh --android-only
+./scripts/install.sh --require-android
+```
+
+Before a real daily-driver run or release candidate, run:
+
+```bash
+./scripts/preflight.sh --full
+```
+
+It checks shell scripts, local toolchains, Mac signing, APK/DMG artifacts, ADB, Tailnet, and the automated Mac/Android tests. Warnings mean something still needs a human/device check.
+
+To keep proof of what was checked, collect a QA evidence folder:
+
+```bash
+./scripts/collect-qa-evidence.sh
+```
+
+For local release artifact checksums:
+
+```bash
+./scripts/generate-checksums.sh
+```
+
+When an Android tablet is connected over USB, run the practical smoke test:
+
+```bash
+./scripts/android-device-smoke.sh
+```
+
+For a real session check, keep the Mac app running, start the script below, then tap **Connect** or **Reconnect** on Android. It records logcat, the app diagnostic log, and battery/thermal snapshots, and fails if no stream connection was observed:
+
+```bash
+./scripts/android-device-smoke.sh --duration 1800 --expect-stream
+```
+
+Or collect the same long-run proof into `qa-evidence/`:
+
+```bash
+./scripts/collect-qa-evidence.sh --smoke --duration 1800 --expect-stream
+```
+
+For keyboard, accents, shortcuts, and paste validation, open the local input harness:
+
+```bash
+./scripts/open-input-qa.sh
+```
+
+Type into that page from the Android tablet and download its JSON report next to the matching `qa-evidence/` folder.
+
+For Tailnet reachability from the tablet:
+
+```bash
+./scripts/tailnet-diagnostics.sh
+./scripts/android-device-smoke.sh --duration 1800 --expect-stream --tailnet-host mac-mini.example.ts.net
+```
+
+For a local Mac build signed for real distribution, use a Developer ID Application certificate and notarization credentials:
+
+```bash
+export SIDESCREEN_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export SIDESCREEN_NOTARIZE=1
+export APPLE_ID="you@example.com"
+export APPLE_TEAM_ID="TEAMID"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+./scripts/build_mac.sh
+```
+
+Without those values, Mac builds are ad-hoc signed for local testing and will still trigger Gatekeeper on other machines.
+GitHub Releases require the same Apple values as repository secrets, plus:
+
+```bash
+MAC_CERTIFICATE_BASE64          # base64-encoded Developer ID .p12
+MAC_CERTIFICATE_PASSWORD
+MAC_KEYCHAIN_PASSWORD
+MAC_CODESIGN_IDENTITY           # Developer ID Application: ...
+APPLE_ID
+APPLE_TEAM_ID
+APPLE_APP_SPECIFIC_PASSWORD
+```
+
+Check local Mac distribution readiness with:
+
+```bash
+./scripts/verify-mac-distribution.sh
+```
+
+For a real Android release build, set a release keystore before running `assembleRelease`:
+
+```bash
+export SIDESCREEN_RELEASE_STORE_FILE=/path/to/release.keystore
+export SIDESCREEN_RELEASE_STORE_PASSWORD=...
+export SIDESCREEN_RELEASE_KEY_ALIAS=...
+export SIDESCREEN_RELEASE_KEY_PASSWORD=...
+cd AndroidClient && ./gradlew assembleRelease bundleRelease
+```
+
+Without those variables, `assembleRelease` falls back to the debug signing key for local testing only.
+The APK is useful for direct installs; the AAB is the Play Store publication artifact. GitHub Releases require the same values as repository secrets, plus `SIDESCREEN_RELEASE_KEYSTORE_BASE64`, and attach `SHA256SUMS.txt` for download verification.
+Use `./scripts/verify-android-signing.sh` to confirm the APK/AAB are not debug-signed before publication.
 </details>
 
 ---
@@ -168,7 +288,7 @@ cd AndroidClient && ./gradlew assembleDebug
 
 1. Launch **Side Screen** on Mac → toggle to the **Wireless** tab → a QR code appears
 2. Open **Side Screen** on tablet → switch to the **Wireless** tab → tap **Scan QR Code** → grant camera permission → aim at the QR on the Mac
-3. The tablet remembers the Mac. Subsequent launches auto-reconnect — no rescan.
+3. The tablet remembers the Mac. Subsequent launches show the saved Mac with a **Reconnect** button — no rescan unless the token, endpoint, or port changed.
 
 Wireless mode requires both devices to be on the same WiFi network. **5 GHz is strongly recommended** — 2.4 GHz can introduce noticeable jitter on dynamic content. If you need to revoke access, click **Reset Token (forget all)** on the Mac and re-pair each tablet.
 
@@ -181,12 +301,13 @@ USB mode remains the lowest-latency option for drawing or fast-paced gaming. Wir
 | Setting | Options | Default |
 |---------|---------|---------|
 | Resolution | 720p to 8K, 30+ presets + custom | 1920x1200 |
-| Frame Rate | 30, 60, 90, 120 FPS | 120 |
+| Frame Rate | 30, 60, 90, 120 FPS | 60 |
 | Bitrate | 20–5000 Mbps | 1000 Mbps |
 | Quality | Ultra Low, Low, Medium, High | Ultra Low |
 | HiDPI (Retina) | On/Off | Off |
-| Gaming Boost | On/Off (1 Gbps, 120 Hz) | Off |
+| Gaming Boost | On/Off (50 Mbps cap, 120 Hz, ultra-low latency) | Off |
 | Touch Input | On/Off | On |
+| Remote Profile | Manual, Productivity, Quality, Low latency, Economy | Manual |
 
 ---
 
@@ -222,7 +343,7 @@ The Mac app sets up `adb reverse` automatically when streaming starts. If it sti
 
 - Both devices must be on the same WiFi network (and same subnet — some mesh routers isolate "guest" devices)
 - Click **Start** on the Mac before scanning the QR — the listener only binds when the server is running
-- If the Mac changes WiFi or its LAN IP, scan a fresh QR (the cached one points to the old address)
+- If the Mac changes WiFi, LAN IP, Tailnet host, or port, scan a fresh QR (the cached one points to the old endpoint)
 - macOS may prompt for **Local Network** permission on first wireless toggle — grant it; without it, LAN inbound is silently dropped
 </details>
 
@@ -233,9 +354,23 @@ The Mac's auth token resets when you click **Reset Token (forget all)** or reins
 </details>
 
 <details>
+<summary><strong>Wireless: "Invalid QR code"</strong></summary>
+
+Scan the QR shown inside Side Screen's **Wireless** tab on the Mac. Browser links, old screenshots, camera roll QR codes, and QR codes from other apps are rejected on purpose.
+</details>
+
+<details>
 <summary><strong>Virtual display not appearing</strong></summary>
 
 Grant Screen Recording permission: **System Preferences → Privacy & Security → Screen Recording → Enable Side Screen**
+</details>
+
+<details>
+<summary><strong>Touch or keyboard input does nothing</strong></summary>
+
+- In the Mac app, check **Status → Accessibility**. If it says **Required for touch**, click **Open Accessibility Settings** and enable Side Screen.
+- If using Virtual HID, check **Remote Input → Virtual HID**. It should say **Ready** or **Ready via helper**.
+- Click **Copy Diagnostics** on both Mac and Android before debugging; stuck input without diagnostics is just guessing in a trench coat.
 </details>
 
 ---

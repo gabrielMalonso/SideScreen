@@ -28,6 +28,7 @@ class QRScannerActivity : AppCompatActivity() {
         )
     }
     private var alreadyDelivered = false
+    private var lastInvalidNoticeMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,12 +72,16 @@ class QRScannerActivity : AppCompatActivity() {
         val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
         scanner.process(input)
             .addOnSuccessListener { barcodes ->
+                val hasAnyQr = barcodes.any { !it.rawValue.isNullOrBlank() }
                 val raw = barcodes.firstOrNull { it.rawValue?.startsWith("sidescreen://") == true }?.rawValue
+                if (raw == null && hasAnyQr) {
+                    showInvalidQrNotice()
+                }
                 if (raw != null && !alreadyDelivered) {
                     alreadyDelivered = true
                     val parsed = PairingURL.parse(raw)
                     if (parsed == null) {
-                        Toast.makeText(this, "Invalid QR, expected SideScreen pairing code", Toast.LENGTH_SHORT).show()
+                        showInvalidQrNotice()
                         alreadyDelivered = false
                     } else {
                         setResult(RESULT_OK, Intent().putExtra(EXTRA_URL, raw))
@@ -86,8 +91,17 @@ class QRScannerActivity : AppCompatActivity() {
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "ML Kit scan error", e)
+                DiagLog.log("QR", "ML Kit scan error: ${e.javaClass.simpleName}: ${e.message}")
             }
             .addOnCompleteListener { proxy.close() }
+    }
+
+    private fun showInvalidQrNotice() {
+        val now = System.currentTimeMillis()
+        if (now - lastInvalidNoticeMs < INVALID_NOTICE_THROTTLE_MS) return
+        lastInvalidNoticeMs = now
+        DiagLog.log("QR", "Invalid QR detected while scanning")
+        Toast.makeText(this, "Not a Side Screen QR. Scan the QR shown on your Mac.", Toast.LENGTH_SHORT).show()
     }
 
     private fun finishCanceled() {
@@ -97,6 +111,7 @@ class QRScannerActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "QRScanner"
+        private const val INVALID_NOTICE_THROTTLE_MS = 2_500L
         const val EXTRA_URL = "qr_url"
     }
 }

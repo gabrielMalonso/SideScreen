@@ -9,4 +9,3 @@ enum EndpointMode: String, Codable, CaseIterable {
         rawValue
     }
 }
-

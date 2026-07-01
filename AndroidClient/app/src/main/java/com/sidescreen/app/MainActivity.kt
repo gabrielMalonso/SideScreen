@@ -2,6 +2,8 @@ package com.sidescreen.app
 
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -25,6 +27,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -34,6 +37,8 @@ import com.google.android.material.slider.Slider
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sidescreen.app.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -41,6 +46,7 @@ import java.net.Socket
 private fun mainDiag(msg: String) = DiagLog.log("MA", msg)
 
 class MainActivity : AppCompatActivity() {
+    private val sessionWakeLockTimeoutMs = 2 * 60 * 60 * 1000L
     private lateinit var wirelessController: WirelessTabController
     private val pairedHostStorage by lazy { PairedHostStorage(this) }
     private val cameraPerm by lazy { CameraPermissionManager(this) }
@@ -66,6 +72,10 @@ class MainActivity : AppCompatActivity() {
     private var displayRotation = 0 // 0, 90, 180, 270 degrees
     private var wakeLock: PowerManager.WakeLock? = null
     private var pingJob: kotlinx.coroutines.Job? = null
+    private var wirelessReconnectJob: Job? = null
+    private var wirelessReconnectAttempts = 0
+    private var userRequestedDisconnect = false
+    private var lastWirelessTarget: WirelessConnectionTarget? = null
 
     // For dragging stats overlay
     private var isDraggingOverlay = false
@@ -79,6 +89,15 @@ class MainActivity : AppCompatActivity() {
     private val checklistHandler = Handler(Looper.getMainLooper())
     private var checklistRunnable: Runnable? = null
     private var isConnected = false // Track connection state to prevent checklist conflicts
+
+    private data class WirelessConnectionTarget(
+        val host: String,
+        val port: Int,
+        val token: ByteArray,
+        val deviceName: String,
+        val macName: String,
+        val endpointMode: EndpointMode,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         // Apply fullscreen mode immediately
         enableFullscreenMode()
 
-        // Enable performance mode for gaming (after binding is initialized)
+        // Prepare balanced wake lock for active streaming sessions.
         enablePerformanceMode()
 
         setupSurface()
@@ -213,6 +232,9 @@ class MainActivity : AppCompatActivity() {
         binding.accessibilityAssistButton.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
+        binding.copyDiagnosticsButton.setOnClickListener {
+            copyDiagnosticsToClipboard()
+        }
         updateAccessibilityAssistStatus()
     }
 
@@ -226,6 +248,29 @@ class MainActivity : AppCompatActivity() {
         val enabled = SideScreenAccessibilityService.isEnabled(this)
         binding.accessibilityAssistStatus.text = if (enabled) "Assist: enabled" else "Assist: off"
         binding.accessibilityAssistStatus.setTextColor(Color.parseColor(if (enabled) "#4ade80" else "#BBBBBB"))
+    }
+
+    private fun copyDiagnosticsToClipboard() {
+        val entry = pairedHostStorage.load()
+        val text =
+            buildString {
+                appendLine("Side Screen Android diagnostics")
+                appendLine("Mode: ${prefs.connectionMode}")
+                appendLine("Connected: $isConnected")
+                appendLine("Host: ${entry?.macName ?: "not paired"}")
+                appendLine("Endpoint: ${entry?.endpointMode?.displayName ?: "not paired"} ${entry?.host ?: ""}:${entry?.port ?: ""}")
+                appendLine("Route: ${entry?.let { NetworkRoute.describeCurrentRoute(this@MainActivity, it.endpointMode) } ?: "not paired"}")
+                appendLine("Input backend: $activeInputBackendName")
+                appendLine("Input connected: ${inputClient?.isConnected == true}")
+                appendLine(RemoteInputDiagnostics.snapshot().keySummary())
+                appendLine(DiagLog.recentErrorSummary())
+                appendLine()
+                appendLine("Recent log:")
+                appendLine(DiagLog.recentLogText())
+            }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Side Screen diagnostics", text))
+        Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
     }
 
     override fun onActivityResult(
@@ -264,20 +309,42 @@ class MainActivity : AppCompatActivity() {
             // thermal throttling on extended use, making the device laggy.
             // Let the SoC manage power efficiently instead.
 
-            // Use PARTIAL_WAKE_LOCK with timeout to prevent battery drain
-            // Screen is already kept on via FLAG_KEEP_SCREEN_ON
+            // Prepare a non-reference-counted PARTIAL_WAKE_LOCK. It is acquired
+            // only while a stream is connected; the screen is already kept on
+            // via FLAG_KEEP_SCREEN_ON.
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock =
                 powerManager.newWakeLock(
                     PowerManager.PARTIAL_WAKE_LOCK,
                     "SideScreen::PerformanceMode",
-                )
-            // 30 minute timeout instead of infinite acquire
-            wakeLock?.acquire(30 * 60 * 1000L)
+                ).apply {
+                    setReferenceCounted(false)
+                }
 
-            log("🎮 Performance mode ENABLED (balanced)")
+            log("🎮 Performance mode ready (balanced)")
         } catch (e: Exception) {
             log("⚠️ Performance mode failed: ${e.message}")
+        }
+    }
+
+    private fun acquireSessionWakeLock() {
+        try {
+            if (wakeLock == null) enablePerformanceMode()
+            wakeLock?.acquire(sessionWakeLockTimeoutMs)
+            mainDiag("Session wake lock acquired for ${sessionWakeLockTimeoutMs / 60000} minutes")
+        } catch (e: Exception) {
+            mainDiag("Session wake lock acquire failed: ${e.message}")
+        }
+    }
+
+    private fun releaseSessionWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                mainDiag("Session wake lock released")
+            }
+        } catch (e: Exception) {
+            mainDiag("Session wake lock release failed: ${e.message}")
         }
     }
 
@@ -1000,7 +1067,11 @@ class MainActivity : AppCompatActivity() {
                     if (connected) android.R.color.holo_green_light else android.R.color.holo_red_light,
                 )
                 if (connected) {
+                    mainDiag("Stream connected - mode=${prefs.connectionMode}")
+                    acquireSessionWakeLock()
                     startPingTimer()
+                    wirelessReconnectJob = null
+                    wirelessReconnectAttempts = 0
                     startInputRateUpdates()
                     connectInputChannel()
                     stopChecklistUpdates()
@@ -1022,6 +1093,7 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                 } else {
+                    releaseSessionWakeLock()
                     disconnectInputChannel()
                     stopInputRateUpdates()
                     stopPingTimer()
@@ -1032,6 +1104,7 @@ class MainActivity : AppCompatActivity() {
                     binding.inputCaptureBar.visibility = View.GONE
                     binding.statusBar.visibility = View.GONE
                     val mode = prefs.connectionMode
+                    mainDiag("Stream disconnected - mode=$mode")
                     val willTransition = mode == ConnectionMode.WIRELESS
                     android.util.Log.i(
                         "MainActivity",
@@ -1039,8 +1112,11 @@ class MainActivity : AppCompatActivity() {
                     )
                     if (mode == ConnectionMode.WIRELESS) {
                         // Don't restart checklist (it conflicts with wireless on Mac).
-                        // Tell wireless controller to show the idle/reconnect UI.
-                        wirelessController.onStreamDisconnected()
+                        if (userRequestedDisconnect || lastWirelessTarget == null) {
+                            wirelessController.onStreamDisconnected()
+                        } else {
+                            scheduleWirelessReconnect()
+                        }
                     } else {
                         log("📋 Restarting checklist updates")
                         startChecklistUpdates()
@@ -1093,13 +1169,12 @@ class MainActivity : AppCompatActivity() {
         macName: String,
         endpointMode: EndpointMode,
     ) {
+        userRequestedDisconnect = false
+        lastWirelessTarget = WirelessConnectionTarget(host, port, token.copyOf(), deviceName, macName, endpointMode)
+        cancelWirelessReconnect()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                log("Connecting wirelessly to $macName at $host:$port...")
-                configureInputChannel(host, port + 1, token, deviceName, endpointMode)
-                streamClient = StreamClient(host, port, applicationContext)
-                setupStreamClientCallbacks()
-                streamClient?.connectWireless(token, deviceName, prefs.remoteInputDeviceId, prefs.remoteDeviceSecret, endpointMode)
+                connectWirelessOnce(lastWirelessTarget ?: return@launch)
                 // NOTE: onConnectSuccess is fired from the onConnectionStatus(true)
                 // listener (above) right after handshake OK — not here. This line
                 // would otherwise run AFTER the receive loop exits, i.e. AFTER
@@ -1115,6 +1190,71 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private suspend fun connectWirelessOnce(target: WirelessConnectionTarget) {
+        log("Connecting wirelessly to ${target.macName} at ${target.host}:${target.port}...")
+        configureInputChannel(
+            target.host,
+            target.port + 1,
+            target.token,
+            target.deviceName,
+            target.endpointMode,
+        )
+        streamClient = StreamClient(target.host, target.port, applicationContext)
+        setupStreamClientCallbacks()
+        streamClient?.connectWireless(
+            target.token,
+            target.deviceName,
+            prefs.remoteInputDeviceId,
+            prefs.remoteDeviceSecret,
+            target.endpointMode,
+        )
+    }
+
+    private fun scheduleWirelessReconnect() {
+        val target = lastWirelessTarget ?: return
+        if (wirelessReconnectJob?.isActive == true) return
+        if (wirelessReconnectAttempts >= WirelessReconnectPolicy.maxAttempts) {
+            wirelessController.onStreamDisconnected()
+            log("Wireless reconnect stopped after $wirelessReconnectAttempts attempts")
+            return
+        }
+
+        wirelessReconnectAttempts += 1
+        val attempt = wirelessReconnectAttempts
+        val delayMs = WirelessReconnectPolicy.delayForAttempt(attempt) ?: return
+        wirelessController.onReconnectScheduled(attempt, WirelessReconnectPolicy.maxAttempts, delayMs)
+
+        wirelessReconnectJob =
+            lifecycleScope.launch(Dispatchers.IO) {
+                delay(delayMs)
+                if (userRequestedDisconnect || prefs.connectionMode != ConnectionMode.WIRELESS) return@launch
+                try {
+                    connectWirelessOnce(target)
+                } catch (e: StreamClient.WirelessConnectError) {
+                    runOnUiThread {
+                        if (e is StreamClient.WirelessConnectError.NetworkUnreachable && !userRequestedDisconnect) {
+                            wirelessReconnectJob = null
+                            scheduleWirelessReconnect()
+                        } else {
+                            wirelessController.onConnectError(e)
+                        }
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        if (!userRequestedDisconnect) {
+                            wirelessReconnectJob = null
+                            scheduleWirelessReconnect()
+                        }
+                    }
+                }
+            }
+    }
+
+    private fun cancelWirelessReconnect() {
+        wirelessReconnectJob?.cancel()
+        wirelessReconnectJob = null
     }
 
     private fun connect(
@@ -1164,6 +1304,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disconnect() {
+        userRequestedDisconnect = true
+        cancelWirelessReconnect()
         stopPingTimer()
         disconnectInputChannel()
         streamClient?.disconnect()
@@ -1197,14 +1339,7 @@ class MainActivity : AppCompatActivity() {
             videoDecoder?.release()
             videoDecoder = null
 
-            // Release wake lock safely
-            try {
-                if (wakeLock?.isHeld == true) {
-                    wakeLock?.release()
-                }
-            } catch (e: Exception) {
-                // Ignore wake lock release errors
-            }
+            releaseSessionWakeLock()
             wakeLock = null
             log("🎮 Performance mode DISABLED")
         } catch (e: Exception) {
@@ -1585,7 +1720,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Check if Mac server is actually running (not just ADB reverse)
      *
-     * Problem: When `adb reverse tcp:8888 tcp:8888` is active, ADB daemon listens on port 8888.
+     * Problem: When `adb reverse tcp:<port> tcp:<port>` is active, ADB daemon listens on that port.
      * A simple socket connect will succeed to ADB daemon, not the actual Mac server.
      *
      * Solution: After connecting, try to read data with a short timeout.

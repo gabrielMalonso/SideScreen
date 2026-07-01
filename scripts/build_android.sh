@@ -7,22 +7,16 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 echo "🔨 Building Android Client..."
 cd "$ROOT_DIR/AndroidClient"
 
-# Set JAVA_HOME for Android Studio's bundled JDK
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+. "$SCRIPT_DIR/android-env.sh"
 
-# Check if Java is available
-if [ ! -d "$JAVA_HOME" ]; then
-    echo "❌ Java not found at: $JAVA_HOME"
-    echo "   Please install Android Studio or set JAVA_HOME manually"
-    exit 1
-fi
-
-./gradlew assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleRelease bundleRelease
 
 echo ""
 echo "✅ Build successful!"
 echo ""
-echo "📦 APK: $ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
+echo "📦 Debug APK:   $ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
+echo "📦 Release APK: $ROOT_DIR/AndroidClient/app/build/outputs/apk/release/app-release.apk"
+echo "📦 Release AAB: $ROOT_DIR/AndroidClient/app/build/outputs/bundle/release/app-release.aab"
 echo ""
 echo "To install on device:"
 echo "  adb install -r $ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"

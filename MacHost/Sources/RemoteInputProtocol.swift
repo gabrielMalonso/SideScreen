@@ -40,7 +40,7 @@ struct RemoteInputEnvelope {
     let androidTimestampNanos: UInt64
     let payload: Data
 
-    static func parseHeader(_ data: Data) throws -> (RemoteInputEventType, UInt64, UInt64, Int) {
+    static func parseHeader(_ data: Data) throws -> RemoteInputHeader {
         let bytes = [UInt8](data)
         guard bytes.count == headerLength,
               let eventType = RemoteInputEventType(rawValue: bytes[0]) else {
@@ -50,8 +50,20 @@ struct RemoteInputEnvelope {
         let timestamp = bytes.readUInt64LE(at: 9)
         let payloadLength = Int(bytes.readUInt16LE(at: 17))
         guard payloadLength <= 4096 else { throw RemoteInputProtocolError.invalidFrame }
-        return (eventType, sequence, timestamp, payloadLength)
+        return RemoteInputHeader(
+            eventType: eventType,
+            sequence: sequence,
+            timestamp: timestamp,
+            payloadLength: payloadLength
+        )
     }
+}
+
+struct RemoteInputHeader {
+    let eventType: RemoteInputEventType
+    let sequence: UInt64
+    let timestamp: UInt64
+    let payloadLength: Int
 }
 
 enum RemoteInputEvent {
@@ -233,7 +245,7 @@ enum RemoteInputCodec {
     static let helloFixedLength = 4 + 1 + 1 + 32 + 1
     private static let flagHasSessionId: UInt8 = 0x01
 
-    static func parseHelloPrefix(_ data: Data) throws -> (token: Data, flags: UInt8, deviceIdLength: Int) {
+    static func parseHelloPrefix(_ data: Data) throws -> InputHelloPrefix {
         let bytes = [UInt8](data)
         guard bytes.count == helloFixedLength,
               Array(bytes[0..<4]) == helloMagic else {
@@ -247,10 +259,10 @@ enum RemoteInputCodec {
         guard (1...64).contains(deviceIdLength) else {
             throw RemoteInputProtocolError.invalidHello
         }
-        return (token, flags, deviceIdLength)
+        return InputHelloPrefix(token: token, flags: flags, deviceIdLength: deviceIdLength)
     }
 
-    static func helloSuffixLength(for parsedPrefix: (token: Data, flags: UInt8, deviceIdLength: Int)) -> Int {
+    static func helloSuffixLength(for parsedPrefix: InputHelloPrefix) -> Int {
         let sessionLength = (parsedPrefix.flags & flagHasSessionId) != 0 ? RemoteSessionCredentials.sessionIdLength : 0
         return parsedPrefix.deviceIdLength + 4 + sessionLength
     }
@@ -302,6 +314,12 @@ enum RemoteInputCodec {
         data.append(payload)
         return data
     }
+}
+
+struct InputHelloPrefix {
+    let token: Data
+    let flags: UInt8
+    let deviceIdLength: Int
 }
 
 private extension Array where Element == UInt8 {

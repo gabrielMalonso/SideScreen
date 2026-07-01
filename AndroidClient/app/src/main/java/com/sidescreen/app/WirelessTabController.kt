@@ -5,6 +5,7 @@ import android.content.Intent
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 
 /**
  * Five-state UI machine for the Wireless tab on Android.
@@ -146,7 +147,18 @@ class WirelessTabController(
     }
 
     fun onScanResult(url: String) {
-        val parsed = PairingURL.parse(url) ?: return
+        val parsed =
+            PairingURL.parse(url) ?: run {
+                DiagLog.log("WT", "Invalid pairing QR returned by scanner")
+                Toast.makeText(activity, "Invalid Side Screen QR. Scan the QR shown on your Mac.", Toast.LENGTH_LONG)
+                    .show()
+                views.repairTitle.text = "Invalid QR code"
+                views.repairMessage.text =
+                    "That QR code is not a valid Side Screen pairing code. Open Side Screen on the Mac and scan the QR from the Wireless tab."
+                updateDiagnostics(storage.load(), "Input: waiting for valid QR")
+                transition(State.REPAIR_NEEDED)
+                return
+            }
         val deviceName = (android.os.Build.MODEL ?: "Android").take(64)
         val entry = PairedHostStorage.Entry(parsed.host, parsed.port, parsed.token, parsed.macName, parsed.endpointMode)
         storage.save(entry)
@@ -219,6 +231,19 @@ class WirelessTabController(
         views.connectedMacIp.text = entry?.endpointSummary() ?: ip
         updateDiagnostics(entry, "Input: connecting on port +1")
         transition(State.CONNECTED)
+    }
+
+    fun onReconnectScheduled(
+        attempt: Int,
+        maxAttempts: Int,
+        delayMs: Long,
+    ) {
+        val entry = storage.load()
+        updateDiagnostics(entry, "Input: reconnecting")
+        showConnecting(
+            "Reconnecting to ${entry?.macName ?: "Mac"}",
+            "Attempt $attempt/$maxAttempts in ${delayMs / 1000}s",
+        )
     }
 
     fun onInputBackendAccepted(backendName: String) {

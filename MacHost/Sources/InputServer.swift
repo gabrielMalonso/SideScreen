@@ -160,13 +160,24 @@ final class InputServer {
         receiveExact(RemoteInputEnvelope.headerLength, on: conn) { [weak self, weak conn] header in
             guard let self, let conn else { return }
             do {
-                let (type, sequence, timestamp, payloadLength) = try RemoteInputEnvelope.parseHeader(header)
-                if payloadLength == 0 {
-                    let event = try RemoteInputEvent.parse(type: type, sequence: sequence, timestamp: timestamp, payload: Data())
+                let parsedHeader = try RemoteInputEnvelope.parseHeader(header)
+                if parsedHeader.payloadLength == 0 {
+                    let event = try RemoteInputEvent.parse(
+                        type: parsedHeader.eventType,
+                        sequence: parsedHeader.sequence,
+                        timestamp: parsedHeader.timestamp,
+                        payload: Data()
+                    )
                     self.handleParsedEvent(event, on: conn)
                     self.receiveEventHeader(on: conn)
                 } else {
-                    self.receiveEventPayload(type: type, sequence: sequence, timestamp: timestamp, length: payloadLength, on: conn)
+                    self.receiveEventPayload(
+                        type: parsedHeader.eventType,
+                        sequence: parsedHeader.sequence,
+                        timestamp: parsedHeader.timestamp,
+                        length: parsedHeader.payloadLength,
+                        on: conn
+                    )
                 }
             } catch {
                 debugLog("InputServer invalid header: \(error)")

@@ -7,6 +7,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Read version
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
+SIGN_IDENTITY="${SIDESCREEN_CODESIGN_IDENTITY:--}"
+NOTARIZE="${SIDESCREEN_NOTARIZE:-0}"
 echo "Building version $VERSION..."
 
 cd "$ROOT_DIR/MacHost"
@@ -97,10 +99,15 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
 </plist>
 EOF
 
-# Ad-hoc code sign to prevent Gatekeeper "damaged" error
-echo "Code signing (ad-hoc)..."
-codesign --force --deep --sign - --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
-echo "  ✓ App signed"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "Code signing (ad-hoc)..."
+    codesign --force --deep --sign - --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
+    echo "  ✓ App signed ad-hoc"
+else
+    echo "Code signing (Developer ID: $SIGN_IDENTITY)..."
+    codesign --force --deep --timestamp --options runtime --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
+    echo "  ✓ App signed with Developer ID"
+fi
 
 echo ""
 echo "Build successful!"
@@ -117,4 +124,32 @@ ln -s /Applications "$DMG_DIR/Applications"
 DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-arm64.dmg"
 hdiutil create -volname "Side Screen" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
 rm -rf "$DMG_DIR"
+
+if [ "$SIGN_IDENTITY" != "-" ]; then
+    echo "Signing DMG..."
+    codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_PATH"
+fi
+
+if [ "$NOTARIZE" = "1" ]; then
+    if [ "$SIGN_IDENTITY" = "-" ]; then
+        echo "❌ SIDESCREEN_NOTARIZE=1 requires SIDESCREEN_CODESIGN_IDENTITY"
+        exit 1
+    fi
+    if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
+        echo "❌ Notarization requires APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_SPECIFIC_PASSWORD"
+        exit 1
+    fi
+
+    echo "Submitting DMG for notarization..."
+    xcrun notarytool submit "$DMG_PATH" \
+        --apple-id "$APPLE_ID" \
+        --team-id "$APPLE_TEAM_ID" \
+        --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+        --wait
+    xcrun stapler staple "$DMG_PATH"
+    echo "  ✓ DMG notarized and stapled"
+elif [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "Not notarized: set SIDESCREEN_CODESIGN_IDENTITY and SIDESCREEN_NOTARIZE=1 for distributable builds."
+fi
+
 echo "DMG: $DMG_PATH"

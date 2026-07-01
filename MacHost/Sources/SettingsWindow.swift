@@ -73,6 +73,7 @@ struct VisualEffectBlur: NSViewRepresentable {
 enum StreamingProfile: String, Codable, CaseIterable {
     case custom
     case productivity
+    case quality
     case lowLatency
     case lowBandwidth
 
@@ -80,8 +81,9 @@ enum StreamingProfile: String, Codable, CaseIterable {
         switch self {
         case .custom: return "Manual"
         case .productivity: return "Productivity"
+        case .quality: return "Quality"
         case .lowLatency: return "Low latency"
-        case .lowBandwidth: return "Low bandwidth"
+        case .lowBandwidth: return "Economy"
         }
     }
 
@@ -91,25 +93,66 @@ enum StreamingProfile: String, Codable, CaseIterable {
             return "Use the controls below without a preset."
         case .productivity:
             return "Readable text and stable frame pacing for terminal, browser, and editor work."
+        case .quality:
+            return "Sharper image for reading, design review, and slower desktop work."
         case .lowLatency:
             return "Prioritizes fast pointer and keyboard feel; video quality gives way first."
         case .lowBandwidth:
-            return "Keeps the stream usable on relayed Tailnet or weak hotel/cafe Wi-Fi."
+            return "Uses less bandwidth and battery for long sessions or relayed Tailnet."
         }
     }
 
-    var settings: (resolution: String, refreshRate: Int, bitrate: Int, quality: String, hiDPI: Bool, gamingBoost: Bool)? {
+    var settings: StreamingProfileSettings? {
         switch self {
         case .custom:
             return nil
         case .productivity:
-            return ("1920x1200", 60, 500, "medium", false, false)
+            return StreamingProfileSettings(
+                resolution: "1920x1200",
+                refreshRate: 60,
+                bitrate: 500,
+                quality: "medium",
+                hiDPI: false,
+                gamingBoost: false
+            )
+        case .quality:
+            return StreamingProfileSettings(
+                resolution: "2560x1600",
+                refreshRate: 60,
+                bitrate: 800,
+                quality: "high",
+                hiDPI: true,
+                gamingBoost: false
+            )
         case .lowLatency:
-            return ("1920x1080", 120, 300, "ultralow", false, false)
+            return StreamingProfileSettings(
+                resolution: "1920x1080",
+                refreshRate: 120,
+                bitrate: 300,
+                quality: "ultralow",
+                hiDPI: false,
+                gamingBoost: false
+            )
         case .lowBandwidth:
-            return ("1280x800", 30, 60, "low", false, false)
+            return StreamingProfileSettings(
+                resolution: "1280x800",
+                refreshRate: 30,
+                bitrate: 60,
+                quality: "low",
+                hiDPI: false,
+                gamingBoost: false
+            )
         }
     }
+}
+
+struct StreamingProfileSettings {
+    let resolution: String
+    let refreshRate: Int
+    let bitrate: Int
+    let quality: String
+    let hiDPI: Bool
+    let gamingBoost: Bool
 }
 
 // MARK: - Settings View
@@ -784,9 +827,34 @@ struct SettingsView: View {
                                     hint: "macOS privacy permission required to capture the virtual display. Grant in System Settings → Privacy & Security → Screen Recording."
                                 )
                                 StatusRow(title: "Accessibility",
-                                          status: settings.hasAccessibilityPermission ? "Granted" : "Optional",
+                                          status: settings.hasAccessibilityPermission ? "Granted" : "Required for touch",
                                           color: settings.hasAccessibilityPermission ? .green : .orange,
-                                          hint: "Optional permission. Required only if you want touch/tap input from the tablet to control the Mac. Streaming works without it.")
+                                          hint: "Streaming works without this. Touch, mouse, and keyboard control need Accessibility when Side Screen is using the CGEvent backend. Virtual HID can avoid it once its helper is ready.")
+                                HStack(spacing: 8) {
+                                    Spacer()
+                                    Button(action: { settings.onCopyDiagnostics?() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "doc.on.doc")
+                                            Text("Copy Diagnostics")
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+
+                                    Button(action: { settings.onRefreshPermissions?() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.clockwise")
+                                            Text("Refresh Permissions")
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+                                if !settings.diagnosticsMessage.isEmpty {
+                                    Text(settings.diagnosticsMessage)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
                                 if settings.isRunning {
                                     StatusRow(title: "Capture Method",
                                               status: settings.captureMethod,
@@ -863,18 +931,18 @@ struct SettingsView: View {
                                         HStack(spacing: 6) {
                                             Image(systemName: "hand.tap.fill")
                                                 .foregroundColor(.blue)
-                                            Text("Enable Touch Control")
+                                            Text("Accessibility Needed for Remote Input")
                                                 .font(.system(size: 12, weight: .medium))
                                         }
-                                        Text("Control your Mac from your tablet.")
+                                        Text("Grant this if you want tablet touch, mouse, or keyboard input to control the Mac. Video streaming still works without it.")
                                             .font(.system(size: 11))
                                             .foregroundColor(.secondary)
                                         Button(action: {
-                                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                                            settings.onPromptAccessibility?()
                                         }) {
                                             HStack {
                                                 Image(systemName: "gear")
-                                                Text("Open Settings")
+                                                Text("Open Accessibility Settings")
                                             }
                                             .frame(maxWidth: .infinity)
                                         }
@@ -1315,6 +1383,7 @@ class DisplaySettings: ObservableObject {
     @Published var virtualHIDHelperInstalled: Bool = false
     @Published var virtualHIDHelperActionInProgress: Bool = false
     @Published var virtualHIDHelperMessage: String = ""
+    @Published var diagnosticsMessage: String = ""
     @Published var inputPressedKeys: Int = 0
     @Published var inputPressedButtons: Int = 0
     @Published var inputReleaseAllCount: UInt64 = 0
@@ -1327,6 +1396,9 @@ class DisplaySettings: ObservableObject {
     var onInstallVirtualHIDHelper: (() -> Void)?
     var onUninstallVirtualHIDHelper: (() -> Void)?
     var onRefreshVirtualHIDStatus: (() -> Void)?
+    var onRefreshPermissions: (() -> Void)?
+    var onCopyDiagnostics: (() -> Void)?
+    var onPromptAccessibility: (() -> Void)?
 
     init() {
         self.resolution = defaults.string(forKey: keyPrefix + "resolution") ?? "1920x1200"
@@ -1444,7 +1516,7 @@ class DisplaySettings: ObservableObject {
         }
 
         resolution = "1920x1200"
-        refreshRate = 120  // Default: highest FPS
+        refreshRate = 60  // Default: balanced for daily use
         hiDPI = false
         bitrate = 1000  // Default: 1000 Mbps
         quality = "ultralow"  // Default: fastest encoding

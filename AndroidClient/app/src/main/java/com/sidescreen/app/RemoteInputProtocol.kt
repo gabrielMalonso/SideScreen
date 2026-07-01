@@ -5,6 +5,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object RemoteInputProtocol {
+    const val MAX_PAYLOAD_BYTES = 4096
+    const val MAX_TEXT_COMMIT_BYTES = MAX_PAYLOAD_BYTES - 2
+
     const val CAP_KEYBOARD_ACTIVITY = 1 shl 0
     const val CAP_POINTER_CAPTURE = 1 shl 1
     const val CAP_GENERIC_MOTION = 1 shl 2
@@ -109,7 +112,9 @@ object RemoteInputProtocol {
     fun textCommitPayload(text: String): ByteArray {
         val bytes = text.toByteArray(Charsets.UTF_8)
         require(bytes.isNotEmpty()) { "text commit must not be empty" }
-        require(bytes.size <= UShort.MAX_VALUE.toInt() - 2) { "text commit payload too large" }
+        require(bytes.size <= MAX_TEXT_COMMIT_BYTES) {
+            "text commit payload too large: ${bytes.size} bytes, max $MAX_TEXT_COMMIT_BYTES"
+        }
         return ByteBuffer.allocate(2 + bytes.size)
             .order(ByteOrder.LITTLE_ENDIAN)
             .putShort(bytes.size.toShort())
@@ -163,7 +168,7 @@ object RemoteInputProtocol {
         byteArrayOf(reason.coerceIn(0, 255).toByte())
 
     fun parseEnvelopeHeader(bytes: ByteArray): EnvelopeHeader {
-        require(bytes.size == ENVELOPE_HEADER_LENGTH) { "input envelope header must be 21 bytes" }
+        require(bytes.size == ENVELOPE_HEADER_LENGTH) { "input envelope header must be $ENVELOPE_HEADER_LENGTH bytes" }
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         return EnvelopeHeader(
             eventType = buffer.get().toInt() and 0xff,

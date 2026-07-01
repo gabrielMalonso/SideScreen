@@ -15,6 +15,7 @@ jobs:
       - name: Build (Universal Binary)
         run: |
           cd MacHost
+          swift test
           swift build -c release --arch arm64
           swift build -c release --arch x86_64
           mkdir -p .build/release-universal
@@ -22,6 +23,10 @@ jobs:
             .build/arm64-apple-macosx/release/SideScreen \
             .build/x86_64-apple-macosx/release/SideScreen \
             -output .build/release-universal/SideScreen
+          lipo -create \
+            .build/arm64-apple-macosx/release/SideScreenVirtualHIDHelper \
+            .build/x86_64-apple-macosx/release/SideScreenVirtualHIDHelper \
+            -output .build/release-universal/SideScreenVirtualHIDHelper
 
       - name: Lint
         run: |

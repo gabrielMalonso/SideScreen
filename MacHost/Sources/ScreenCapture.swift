@@ -383,9 +383,6 @@ class ScreenCapture {
             if let last = lastTime {
                 let elapsed = Double(DispatchTime.now().uptimeNanoseconds - last.uptimeNanoseconds) / 1_000_000_000
                 stalled = elapsed > 5.0
-                if stalled {
-                    debugLog("Frame flow stalled — no frames for \(String(format: "%.1f", elapsed))s, triggering fallback")
-                }
             } else {
                 stalled = true
                 debugLog("Frame flow stalled — no frames ever received after 5s, triggering fallback")
@@ -397,6 +394,10 @@ class ScreenCapture {
                 if hasHadFrames, let lastBuffer = self.lastPixelBuffer {
                     // Screen is idle — SCStream is healthy but not delivering frames (macOS optimization).
                     // Re-send the last captured frame as a keepalive so the tablet stays connected.
+                    if let last = lastTime {
+                        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - last.uptimeNanoseconds) / 1_000_000_000
+                        debugLog("Frame flow idle — no changed frames for \(String(format: "%.1f", elapsed))s, re-sending last frame")
+                    }
                     let pts = CMTime(
                         value: CMTimeValue(DispatchTime.now().uptimeNanoseconds / 1000),
                         timescale: 1_000_000

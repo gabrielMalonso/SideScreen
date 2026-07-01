@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
 APP_DIR="$ROOT_DIR/SideScreen.app"
+PORT="${SIDESCREEN_PORT:-54321}"
+ADB_AVAILABLE=0
 
 echo "======================================="
 echo "  Side Screen - Dev Test (v$VERSION)"
@@ -21,7 +23,10 @@ echo "  OK"
 echo "[2/5] Creating .app bundle..."
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
-cp .build/release/SideScreen "$APP_DIR/Contents/MacOS/"
+cp .build/out/Products/Release/SideScreen "$APP_DIR/Contents/MacOS/"
+if [ -f ".build/out/Products/Release/SideScreenVirtualHIDHelper" ]; then
+    cp .build/out/Products/Release/SideScreenVirtualHIDHelper "$APP_DIR/Contents/MacOS/"
+fi
 
 if [ -f "Resources/AppIcon.icns" ]; then
     cp Resources/AppIcon.icns "$APP_DIR/Contents/Resources/"
@@ -52,8 +57,16 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture your virtual display.</string>
+    <string>Side Screen needs screen recording access to capture your virtual display and stream it to your Android device.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_sidescreen._tcp</string>
+    </array>
 </dict>
 </plist>
 EOF
@@ -64,14 +77,18 @@ echo "  OK"
 # 3. Build Android
 echo "[3/5] Building Android..."
 cd "$ROOT_DIR/AndroidClient"
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+. "$SCRIPT_DIR/android-env.sh"
 ./gradlew assembleDebug -q
 APK="$ROOT_DIR/AndroidClient/app/build/outputs/apk/debug/app-debug.apk"
 echo "  OK"
 
 # 4. Install APK on device
 echo "[4/5] Installing APK..."
-if adb devices | grep -q "device$"; then
+if . "$SCRIPT_DIR/adb-env.sh" >/tmp/sidescreen-dev-test-adb.out 2>&1; then
+    ADB_AVAILABLE=1
+fi
+
+if [ "$ADB_AVAILABLE" -eq 1 ] && sidescreen_select_adb_device >/tmp/sidescreen-dev-test-device.out 2>&1; then
     adb install -r "$APK" 2>&1 | tail -1
 else
     echo "  No device connected, skipping install"
@@ -82,7 +99,9 @@ echo "[5/5] Starting macOS app..."
 pkill -f "SideScreen.app" 2>/dev/null || true
 sleep 0.5
 
-adb reverse tcp:8888 tcp:8888 2>/dev/null || true
+if [ "$ADB_AVAILABLE" -eq 1 ] && [ -n "${ANDROID_SERIAL:-}" ]; then
+    adb reverse "tcp:$PORT" "tcp:$PORT" 2>/dev/null || true
+fi
 open "$APP_DIR"
 
 echo ""

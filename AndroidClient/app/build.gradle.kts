@@ -6,6 +6,18 @@ plugins {
 val appVersion = rootProject.file("../VERSION").readText().trim()
 val versionParts = appVersion.split(".")
 val computedVersionCode = versionParts[0].toInt() * 10000 + versionParts[1].toInt() * 100 + versionParts[2].toInt()
+val releaseStoreFile = providers.environmentVariable("SIDESCREEN_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("SIDESCREEN_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("SIDESCREEN_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("SIDESCREEN_RELEASE_KEY_PASSWORD").orNull
+val requireReleaseSigning = providers.environmentVariable("SIDESCREEN_REQUIRE_RELEASE_SIGNING").orNull == "1"
+val hasReleaseSigning =
+    listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+        .all { !it.isNullOrBlank() }
+
+if (requireReleaseSigning && !hasReleaseSigning) {
+    throw GradleException("Release signing is required. Set SIDESCREEN_RELEASE_STORE_FILE, SIDESCREEN_RELEASE_STORE_PASSWORD, SIDESCREEN_RELEASE_KEY_ALIAS, and SIDESCREEN_RELEASE_KEY_PASSWORD.")
+}
 
 android {
     namespace = "com.sidescreen.app"
@@ -19,10 +31,21 @@ android {
         versionName = appVersion
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

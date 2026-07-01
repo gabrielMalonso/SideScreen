@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Side Screen Input QA</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f2ea;
+      --ink: #1d2524;
+      --muted: #60706c;
+      --line: #cfc8b8;
+      --panel: #fffdf7;
+      --good: #0b7a4b;
+      --bad: #b3261e;
+      --warn: #9a6200;
+      --accent: #245f73;
+      --accent-ink: #f8fbfb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: end;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 18px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 52px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 10px 0 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--ink);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      min-height: 36px;
+      padding: 7px 11px;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    button:hover {
+      filter: brightness(0.96);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .metric,
+    .case,
+    .shortcut-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .metric {
+      padding: 13px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      margin-top: 4px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .case {
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .case.full {
+      grid-column: 1 / -1;
+    }
+
+    .case-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .pass {
+      background: #dff3e8;
+      color: var(--good);
+    }
+
+    .fail {
+      background: #f9dedc;
+      color: var(--bad);
+    }
+
+    .pending {
+      background: #f5ead0;
+      color: var(--warn);
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin: 10px 0 4px;
+      text-transform: uppercase;
+    }
+
+    pre,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fffefa;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    pre {
+      margin: 0;
+      min-height: 74px;
+      overflow: auto;
+      padding: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    textarea {
+      min-height: 108px;
+      padding: 10px;
+      resize: vertical;
+    }
+
+    textarea:focus,
+    button:focus-visible {
+      outline: 3px solid rgba(36, 95, 115, 0.28);
+      outline-offset: 1px;
+    }
+
+    .case-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .note,
+    .diff {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    .diff strong {
+      color: var(--bad);
+    }
+
+    .shortcut-panel {
+      grid-column: 1 / -1;
+      padding: 14px;
+    }
+
+    .shortcut-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .log {
+      min-height: 140px;
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fffefa;
+      padding: 10px;
+      font-size: 12px;
+    }
+
+    .checklist {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px dashed var(--line);
+      padding-bottom: 5px;
+    }
+
+    footer {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 820px) {
+      header,
+      .summary,
+      .grid,
+      .shortcut-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Input QA</h1>
+        <p class="subtitle">Abra esta página no Mac, conecte o Side Screen e use o Android para digitar nos campos. A página compara texto, registra atalhos e exporta um relatório honesto.</p>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="reset">Limpar</button>
+        <button type="button" id="copy-report">Copiar relatório</button>
+        <button type="button" class="primary" id="download-report">Baixar relatório</button>
+      </div>
+    </header>
+
+    <section class="summary" aria-label="Resumo">
+      <div class="metric"><span>Casos exatos</span><strong id="exact-score">0/0</strong></div>
+      <div class="metric"><span>Atalhos vistos</span><strong id="shortcut-score">0/0</strong></div>
+      <div class="metric"><span>Último mismatch</span><strong id="first-mismatch">—</strong></div>
+      <div class="metric"><span>Status</span><strong id="overall-status">Pendente</strong></div>
+    </section>
+
+    <section class="grid" id="cases"></section>
+
+    <section class="shortcut-panel">
+      <div class="case-head">
+        <h2>Atalhos e teclas de controle</h2>
+        <span class="badge pending" id="shortcut-badge">Pendente</span>
+      </div>
+      <p class="note">Foque o campo abaixo e acione os atalhos pelo Android. Command+Tab é do sistema e deve ser validado visualmente fora do navegador.</p>
+      <textarea id="shortcut-probe" spellcheck="false" placeholder="Foque aqui e teste Command+C, Command+V, Command+A, Enter, Tab, Backspace e Delete."></textarea>
+      <div class="shortcut-grid">
+        <ul class="checklist" id="shortcut-checklist"></ul>
+        <div class="log" id="shortcut-log" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <footer>
+      Dica prática: salve o JSON baixado junto da pasta gerada por <code>./scripts/collect-qa-evidence.sh</code>. Se algum teste falhar, copie diagnósticos no Mac e no Android antes de reiniciar qualquer coisa.
+    </footer>
+  </main>
+
+  <script>
+    const longPaste = Array.from({ length: 4096 }, (_, index) => String.fromCharCode(65 + (index % 26))).join("");
+    const oversizedPaste = Array.from({ length: 5000 }, (_, index) => String.fromCharCode(48 + (index % 10))).join("");
+
+    const cases = [
+      {
+        id: "ptbr",
+        title: "Acentos PT-BR",
+        expected: "ação, coração, amanhã, útil, você, João",
+        note: "Deve chegar idêntico, sem trocar cedilha, til ou acento agudo."
+      },
+      {
+        id: "symbols",
+        title: "Símbolos",
+        expected: "@ # $ % & * / \\\\ | [] {} ()",
+        note: "Bom para detectar layout quebrado entre Android e macOS."
+      },
+      {
+        id: "emoji",
+        title: "Emoji e UTF-8",
+        expected: "teste 🧪 ✅",
+        note: "Emoji precisa chegar inteiro ou falhar sem travar a sessão."
+      },
+      {
+        id: "multiline",
+        title: "Multilinha",
+        expected: "linha 1\nlinha 2\nfim",
+        note: "Valida Enter e preservação de quebras de linha."
+      },
+      {
+        id: "longpaste",
+        title: "Paste longo de 4 KB",
+        expected: longPaste,
+        note: "Use colar pelo Android. Deve entrar completo sem desconectar.",
+        full: true
+      },
+      {
+        id: "oversize",
+        title: "Paste grande demais",
+        expected: oversizedPaste,
+        note: "Este caso pode ser rejeitado ou truncado pelo app, mas a sessão não deve cair. Exato só passa se o transporte aceitar tudo.",
+        full: true,
+        optional: true
+      }
+    ];
+
+    const shortcuts = [
+      { id: "Meta+c", label: "Command+C" },
+      { id: "Meta+v", label: "Command+V" },
+      { id: "Meta+a", label: "Command+A" },
+      { id: "Enter", label: "Enter" },
+      { id: "Tab", label: "Tab" },
+      { id: "Backspace", label: "Backspace" },
+      { id: "Delete", label: "Delete" }
+    ];
+
+    const seenShortcuts = new Set();
+    const caseState = new Map();
+    const casesEl = document.getElementById("cases");
+
+    function createCase(testCase) {
+      const section = document.createElement("article");
+      section.className = `case${testCase.full ? " full" : ""}`;
+      section.innerHTML = `
+        <div class="case-head">
+          <h2>${escapeHtml(testCase.title)}</h2>
+          <span class="badge pending" id="${testCase.id}-badge">Pendente</span>
+        </div>
+        <label for="${testCase.id}-expected">Esperado</label>
+        <pre id="${testCase.id}-expected">${escapeHtml(testCase.expected)}</pre>
+        <label for="${testCase.id}-actual">Digitado pelo Android</label>
+        <textarea id="${testCase.id}-actual" spellcheck="false"></textarea>
+        <div class="case-actions">
+          <button type="button" data-copy="${testCase.id}">Copiar esperado</button>
+          <button type="button" data-clear="${testCase.id}">Limpar caso</button>
+        </div>
+        <div class="note">${escapeHtml(testCase.note)}</div>
+        <div class="diff" id="${testCase.id}-diff">Aguardando entrada.</div>
+      `;
+      casesEl.appendChild(section);
+
+      const textarea = document.getElementById(`${testCase.id}-actual`);
+      textarea.addEventListener("input", () => updateCase(testCase));
+      caseState.set(testCase.id, { passed: false, mismatch: null, actualLength: 0 });
+    }
+
+    function updateCase(testCase) {
+      const actual = document.getElementById(`${testCase.id}-actual`).value;
+      const expected = testCase.expected;
+      const badge = document.getElementById(`${testCase.id}-badge`);
+      const diff = document.getElementById(`${testCase.id}-diff`);
+      const exact = actual === expected;
+      const mismatch = firstMismatch(expected, actual);
+
+      caseState.set(testCase.id, {
+        passed: exact,
+        mismatch,
+        actualLength: actual.length,
+        expectedLength: expected.length
+      });
+
+      badge.className = `badge ${exact ? "pass" : actual ? "fail" : "pending"}`;
+      badge.textContent = exact ? "OK" : actual ? "Mismatch" : "Pendente";
+
+      if (exact) {
+        diff.textContent = `OK: ${actual.length} caracteres.`;
+      } else if (!actual) {
+        diff.textContent = "Aguardando entrada.";
+      } else {
+        diff.innerHTML = mismatch === null
+          ? "Tamanho diferente."
+          : `Primeira diferença no índice <strong>${mismatch}</strong>. Esperado ${printChar(expected[mismatch])}, veio ${printChar(actual[mismatch])}.`;
+      }
+
+      updateSummary();
+    }
+
+    function firstMismatch(expected, actual) {
+      const limit = Math.max(expected.length, actual.length);
+      for (let index = 0; index < limit; index += 1) {
+        if (expected[index] !== actual[index]) return index;
+      }
+      return null;
+    }
+
+    function printChar(char) {
+      if (char === undefined) return "fim do texto";
+      if (char === "\n") return "\\n";
+      if (char === "\t") return "\\t";
+      return JSON.stringify(char);
+    }
+
+    function updateSummary() {
+      const required = cases.filter(testCase => !testCase.optional);
+      const passed = required.filter(testCase => caseState.get(testCase.id)?.passed).length;
+      document.getElementById("exact-score").textContent = `${passed}/${required.length}`;
+
+      const mismatches = required
+        .map(testCase => caseState.get(testCase.id)?.mismatch)
+        .filter(value => value !== null && value !== undefined);
+      document.getElementById("first-mismatch").textContent = mismatches.length ? Math.min(...mismatches) : "—";
+
+      const shortcutPassed = shortcuts.filter(shortcut => seenShortcuts.has(shortcut.id)).length;
+      document.getElementById("shortcut-score").textContent = `${shortcutPassed}/${shortcuts.length}`;
+
+      const allText = passed === required.length;
+      const enoughShortcuts = shortcutPassed === shortcuts.length;
+      document.getElementById("overall-status").textContent = allText && enoughShortcuts ? "OK" : "Pendente";
+    }
+
+    function shortcutId(event) {
+      const parts = [];
+      if (event.metaKey) parts.push("Meta");
+      if (event.ctrlKey) parts.push("Control");
+      if (event.altKey) parts.push("Alt");
+      if (event.shiftKey) parts.push("Shift");
+      parts.push(event.key.length === 1 ? event.key.toLowerCase() : event.key);
+      return parts.join("+");
+    }
+
+    function renderShortcuts() {
+      const list = document.getElementById("shortcut-checklist");
+      list.innerHTML = shortcuts.map(shortcut => `
+        <li><span>${escapeHtml(shortcut.label)}</span><strong>${seenShortcuts.has(shortcut.id) ? "OK" : "Pendente"}</strong></li>
+      `).join("");
+      const count = shortcuts.filter(shortcut => seenShortcuts.has(shortcut.id)).length;
+      const badge = document.getElementById("shortcut-badge");
+      badge.className = `badge ${count === shortcuts.length ? "pass" : count ? "fail" : "pending"}`;
+      badge.textContent = `${count}/${shortcuts.length}`;
+      updateSummary();
+    }
+
+    function logShortcut(event) {
+      const id = shortcutId(event);
+      if (shortcuts.some(shortcut => shortcut.id === id)) seenShortcuts.add(id);
+      const log = document.getElementById("shortcut-log");
+      const row = document.createElement("div");
+      row.textContent = `${new Date().toLocaleTimeString()}  ${id}`;
+      log.prepend(row);
+      renderShortcuts();
+    }
+
+    function report() {
+      return {
+        tool: "Side Screen Input QA",
+        generatedAt: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        textCases: cases.map(testCase => ({
+          id: testCase.id,
+          title: testCase.title,
+          optional: Boolean(testCase.optional),
+          expectedLength: testCase.expected.length,
+          actualLength: caseState.get(testCase.id)?.actualLength ?? 0,
+          passed: Boolean(caseState.get(testCase.id)?.passed),
+          firstMismatch: caseState.get(testCase.id)?.mismatch ?? null
+        })),
+        shortcuts: shortcuts.map(shortcut => ({
+          id: shortcut.id,
+          label: shortcut.label,
+          seen: seenShortcuts.has(shortcut.id)
+        })),
+        manualChecks: [
+          "Command+Tab troca de aplicativo no macOS",
+          "Sessão não desconectou após paste grande demais",
+          "Copy Diagnostics foi coletado no Mac e no Android se houve falha"
+        ]
+      };
+    }
+
+    function downloadReport() {
+      const blob = new Blob([JSON.stringify(report(), null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sidescreen-input-qa-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyText(value) {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(value);
+          return;
+        } catch (_) {
+          // Fall back below for browsers that restrict clipboard on file:// pages.
+        }
+      }
+      const helper = document.createElement("textarea");
+      helper.value = value;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.left = "-9999px";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      document.body.removeChild(helper);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    document.addEventListener("click", async event => {
+      const copyId = event.target.getAttribute("data-copy");
+      const clearId = event.target.getAttribute("data-clear");
+      if (copyId) {
+        const testCase = cases.find(item => item.id === copyId);
+        await copyText(testCase.expected);
+      }
+      if (clearId) {
+        const textarea = document.getElementById(`${clearId}-actual`);
+        textarea.value = "";
+        updateCase(cases.find(item => item.id === clearId));
+      }
+    });
+
+    document.getElementById("shortcut-probe").addEventListener("keydown", event => {
+      logShortcut(event);
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const target = event.target;
+        const start = target.selectionStart;
+        target.value = `${target.value.slice(0, start)}\t${target.value.slice(target.selectionEnd)}`;
+        target.selectionStart = target.selectionEnd = start + 1;
+      }
+    });
+
+    document.getElementById("reset").addEventListener("click", () => {
+      cases.forEach(testCase => {
+        document.getElementById(`${testCase.id}-actual`).value = "";
+        updateCase(testCase);
+      });
+      seenShortcuts.clear();
+      document.getElementById("shortcut-log").innerHTML = "";
+      document.getElementById("shortcut-probe").value = "";
+      renderShortcuts();
+    });
+
+    document.getElementById("copy-report").addEventListener("click", async () => {
+      await copyText(JSON.stringify(report(), null, 2));
+    });
+
+    document.getElementById("download-report").addEventListener("click", downloadReport);
+
+    cases.forEach(createCase);
+    renderShortcuts();
+    updateSummary();
+  </script>
+</body>
+</html>

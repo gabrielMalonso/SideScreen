@@ -26,6 +26,29 @@ final class StreamingProfileTests: XCTestCase {
         XCTAssertFalse(settings.gamingBoost)
     }
 
+    func testQualityProfileAppliesSharpDailySettings() {
+        let settings = DisplaySettings()
+
+        settings.applyStreamingProfile(.quality)
+
+        XCTAssertEqual(settings.streamingProfile, .quality)
+        XCTAssertEqual(settings.resolution, "2560x1600")
+        XCTAssertEqual(settings.refreshRate, 60)
+        XCTAssertEqual(settings.bitrate, 800)
+        XCTAssertEqual(settings.quality, "high")
+        XCTAssertTrue(settings.hiDPI)
+        XCTAssertFalse(settings.gamingBoost)
+    }
+
+    func testResetUsesBalancedDailyRefreshRate() {
+        let settings = DisplaySettings()
+
+        settings.refreshRate = 120
+        settings.resetToDefaults()
+
+        XCTAssertEqual(settings.refreshRate, 60)
+    }
+
     func testManualChangeMarksProfileAsCustom() {
         let settings = DisplaySettings()
 

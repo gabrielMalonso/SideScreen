@@ -345,6 +345,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.refreshVirtualHIDStatus()
             }
         }
+        settings.onRefreshPermissions = { [weak self] in
+            self?.refreshPermissions()
+        }
+        settings.onCopyDiagnostics = { [weak self] in
+            Task { @MainActor in
+                self?.copyDiagnosticsToClipboard()
+            }
+        }
+        settings.onPromptAccessibility = { [weak self] in
+            Task { @MainActor in
+                self?.promptAccessibilityPermission()
+            }
+        }
+    }
+
+    @MainActor
+    private func copyDiagnosticsToClipboard() {
+        let text = buildDiagnosticsText()
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        settings.diagnosticsMessage = "Diagnostics copied."
+    }
+
+    private func buildDiagnosticsText() -> String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let logTail = (try? String(contentsOfFile: "/tmp/sidescreen.log", encoding: .utf8))
+            .map { $0.split(separator: "\n").suffix(80).joined(separator: "\n") } ?? "No log found at /tmp/sidescreen.log"
+
+        return """
+        Side Screen Mac diagnostics
+        Version: \(version)
+        macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
+        Mode: \(settings.connectionMode.rawValue)
+        Endpoint: \(settings.endpointMode.rawValue)
+        Port: \(settings.port)
+        Running: \(settings.isRunning)
+        Client connected: \(settings.clientConnected)
+        Screen Recording: \(settings.hasScreenRecordingPermission)
+        Accessibility: \(settings.hasAccessibilityPermission)
+        Touch enabled: \(settings.touchEnabled)
+        ADB installed: \(settings.adbInstalled)
+        ADB reverse: \(settings.adbReverseConfigured)
+        USB device: \(settings.usbDeviceConnected)
+        Listening address: \(settings.listeningAddress ?? "none")
+        Capture method: \(settings.captureMethod)
+        Input backend: \(settings.activeInputBackend)
+        Virtual HID: \(settings.virtualHIDStatus) \(settings.virtualHIDStatusDetail)
+        Input state: \(settings.inputPressedKeys) keys / \(settings.inputPressedButtons) buttons
+        Input release-all: \(settings.inputReleaseAllCount), last: \(settings.inputLastReleaseReason)
+        Input sequence: \(settings.inputSequenceGapCount) gaps / \(settings.inputDroppedStaleCount) stale
+
+        Recent log:
+        \(logTail)
+        """
     }
 
     @objc func showSettings() {
@@ -397,13 +453,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func promptAccessibilityPermission() {
-        // This will show the system prompt to grant Accessibility permission
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         settings.hasAccessibilityPermission = trusted
 
         if !trusted {
-            print("⚠️  User needs to grant Accessibility permission in System Settings")
+            debugLog("Accessibility prompt shown; user still needs to grant permission in System Settings")
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
         }
     }
 

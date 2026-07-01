@@ -33,4 +33,15 @@ class DiagLogTest {
 
         assertEquals("Recent errors: none", summary)
     }
+
+    @Test
+    fun formatsRecentLogWithLineLimit() {
+        val text =
+            DiagLog.formatRecentLog(
+                listOf("[1] first", "[2] second", "[3] third"),
+                maxLines = 2,
+            )
+
+        assertEquals("[2] second\n[3] third", text)
+    }
 }

@@ -1,11 +1,15 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PORT="${SIDESCREEN_PORT:-54321}"
+
+. "$SCRIPT_DIR/adb-env.sh"
+
 echo "🔧 Setting up USB port forwarding..."
 
 # Check ADB connection
-if ! adb devices | grep -q "device$"; then
-    echo "❌ No Android device found via ADB"
+if ! sidescreen_select_adb_device; then
     echo ""
     echo "Troubleshooting:"
     echo "  1. Connect device via USB cable"
@@ -16,19 +20,19 @@ if ! adb devices | grep -q "device$"; then
     exit 1
 fi
 
-echo "  ✓ Device connected"
+echo "  ✓ Device connected ($ANDROID_SERIAL)"
 
-# Remove existing reverse
-echo "  Clearing existing port forwards..."
-adb reverse --remove-all 2>/dev/null || true
+# Remove existing reverse for Side Screen only. Other adb forwards may belong to debuggers.
+echo "  Clearing existing Side Screen port forward..."
+adb reverse --remove "tcp:$PORT" 2>/dev/null || true
 sleep 0.5
 
 # Setup new reverse
-echo "  Setting up port 8888..."
-adb reverse tcp:8888 tcp:8888
+echo "  Setting up port $PORT..."
+adb reverse "tcp:$PORT" "tcp:$PORT"
 
 # Verify
-if adb reverse --list | grep -q "tcp:8888"; then
+if adb reverse --list | grep -q "tcp:$PORT"; then
     echo ""
     echo "✅ USB port forwarding active!"
     echo ""

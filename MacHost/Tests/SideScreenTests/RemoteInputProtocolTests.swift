@@ -89,7 +89,7 @@ final class RemoteInputProtocolTests: XCTestCase {
     }
 
     func testParsesTextCommit() throws {
-        let text = "ação"
+        let text = "ação çãõ é 🧪"
         let textBytes = Array(text.utf8)
         var payload = Data()
         payload.append(UInt8(textBytes.count & 0xff))
@@ -105,6 +105,15 @@ final class RemoteInputProtocolTests: XCTestCase {
         }
         XCTAssertEqual(commit.text, text)
         XCTAssertEqual(commit.androidTimestampNanos, 99)
+    }
+
+    func testRejectsOversizedPayloadHeader() {
+        var header = Data()
+        header.append(RemoteInputEventType.textCommit.rawValue)
+        header.append(contentsOf: Array(repeating: 0, count: 16))
+        header.append(contentsOf: [0x01, 0x10]) // 4097 bytes
+
+        XCTAssertThrowsError(try RemoteInputEnvelope.parseHeader(header))
     }
 
     func testRejectsInvalidTextCommitLength() {
@@ -133,16 +142,16 @@ final class RemoteInputProtocolTests: XCTestCase {
             serverTimestampNanos: 0x1112_1314_1516_1718
         )
 
-        let (type, sequence, timestamp, payloadLength) = try RemoteInputEnvelope.parseHeader(Data(frame.prefix(RemoteInputEnvelope.headerLength)))
-        XCTAssertEqual(type, .inputPong)
-        XCTAssertEqual(sequence, 44)
-        XCTAssertEqual(timestamp, 0x1112_1314_1516_1718)
-        XCTAssertEqual(payloadLength, 16)
+        let header = try RemoteInputEnvelope.parseHeader(Data(frame.prefix(RemoteInputEnvelope.headerLength)))
+        XCTAssertEqual(header.eventType, .inputPong)
+        XCTAssertEqual(header.sequence, 44)
+        XCTAssertEqual(header.timestamp, 0x1112_1314_1516_1718)
+        XCTAssertEqual(header.payloadLength, 16)
 
         let event = try RemoteInputEvent.parse(
-            type: type,
-            sequence: sequence,
-            timestamp: timestamp,
+            type: header.eventType,
+            sequence: header.sequence,
+            timestamp: header.timestamp,
             payload: Data(frame.dropFirst(RemoteInputEnvelope.headerLength))
         )
         guard case .pong(let pong) = event else {

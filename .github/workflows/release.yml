@@ -21,6 +21,7 @@ jobs:
       - name: Build macOS (Universal Binary)
         run: |
           cd MacHost
+          swift test
           swift build -c release --arch arm64
           swift build -c release --arch x86_64
           mkdir -p .build/release-universal
@@ -28,6 +29,10 @@ jobs:
             .build/arm64-apple-macosx/release/SideScreen \
             .build/x86_64-apple-macosx/release/SideScreen \
             -output .build/release-universal/SideScreen
+          lipo -create \
+            .build/arm64-apple-macosx/release/SideScreenVirtualHIDHelper \
+            .build/x86_64-apple-macosx/release/SideScreenVirtualHIDHelper \
+            -output .build/release-universal/SideScreenVirtualHIDHelper
 
       - name: Create .app bundle
         run: |
@@ -36,6 +41,7 @@ jobs:
           mkdir -p "$APP_DIR/Contents/MacOS"
           mkdir -p "$APP_DIR/Contents/Resources"
           cp MacHost/.build/release-universal/SideScreen "$APP_DIR/Contents/MacOS/"
+          cp MacHost/.build/release-universal/SideScreenVirtualHIDHelper "$APP_DIR/Contents/MacOS/"
 
           # Copy icon if exists
           if [ -f "MacHost/Resources/AppIcon.icns" ]; then
@@ -83,8 +89,45 @@ jobs:
           </plist>
           EOF
 
-      - name: Ad-hoc code sign
-        run: codesign --force --deep --sign - SideScreen.app
+      - name: Import Developer ID certificate
+        env:
+          MAC_CERTIFICATE_BASE64: ${{ secrets.MAC_CERTIFICATE_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MAC_KEYCHAIN_PASSWORD: ${{ secrets.MAC_KEYCHAIN_PASSWORD }}
+        run: |
+          for name in MAC_CERTIFICATE_BASE64 MAC_CERTIFICATE_PASSWORD MAC_KEYCHAIN_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing $name secret"
+              exit 1
+            fi
+          done
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/sidescreen-signing.keychain-db"
+          echo "$MAC_CERTIFICATE_BASE64" | base64 -D > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/developer-id.p12" \
+            -P "$MAC_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Developer ID code sign
+        env:
+          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+        run: |
+          if [ -z "$MAC_CODESIGN_IDENTITY" ]; then
+            echo "Missing MAC_CODESIGN_IDENTITY secret"
+            exit 1
+          fi
+          codesign --force --deep --timestamp --options runtime \
+            --sign "$MAC_CODESIGN_IDENTITY" \
+            --entitlements MacHost/SideScreen.entitlements \
+            SideScreen.app
 
       - name: Create DMG
         run: |
@@ -94,6 +137,31 @@ jobs:
           ln -s /Applications dmg-content/Applications
           hdiutil create -volname "Side Screen" -srcfolder dmg-content -ov -format UDZO "SideScreen-${VERSION}-mac-universal.dmg"
           rm -rf dmg-content
+
+      - name: Sign and notarize DMG
+        env:
+          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          DMG="SideScreen-${VERSION}-mac-universal.dmg"
+          for name in MAC_CODESIGN_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing $name secret"
+              exit 1
+            fi
+          done
+
+          codesign --force --timestamp --sign "$MAC_CODESIGN_IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
+          spctl -a -vv -t open --context context:primary-signature "$DMG"
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
@@ -116,22 +184,36 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build APK
+      - name: Build Android release artifacts
+        env:
+          SIDESCREEN_RELEASE_STORE_FILE: ${{ github.workspace }}/release.keystore
+          SIDESCREEN_RELEASE_STORE_PASSWORD: ${{ secrets.SIDESCREEN_RELEASE_STORE_PASSWORD }}
+          SIDESCREEN_RELEASE_KEY_ALIAS: ${{ secrets.SIDESCREEN_RELEASE_KEY_ALIAS }}
+          SIDESCREEN_RELEASE_KEY_PASSWORD: ${{ secrets.SIDESCREEN_RELEASE_KEY_PASSWORD }}
+          SIDESCREEN_REQUIRE_RELEASE_SIGNING: "1"
         run: |
+          if [ -z "${{ secrets.SIDESCREEN_RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "Missing SIDESCREEN_RELEASE_KEYSTORE_BASE64 secret"
+            exit 1
+          fi
+          echo "${{ secrets.SIDESCREEN_RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
           cd AndroidClient
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew testDebugUnitTest assembleRelease bundleRelease
 
-      - name: Rename APK
+      - name: Rename Android artifacts
         run: |
           VERSION=${{ steps.version.outputs.version }}
           cp AndroidClient/app/build/outputs/apk/release/app-release.apk "SideScreen-${VERSION}-android.apk"
+          cp AndroidClient/app/build/outputs/bundle/release/app-release.aab "SideScreen-${VERSION}-android.aab"
 
-      - name: Upload APK
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: "*.apk"
+          name: android-artifacts
+          path: |
+            *.apk
+            *.aab
 
   create-release:
     needs: [build-mac, build-android]
@@ -168,6 +250,16 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
+      - name: Generate checksums
+        run: |
+          find artifacts -type f \( -name "*.dmg" -o -name "*.apk" -o -name "*.aab" \) -print0 \
+            | sort -z \
+            | while IFS= read -r -d '' file; do
+                checksum=$(shasum -a 256 "$file" | awk '{print $1}')
+                printf "%s  %s\n" "$checksum" "$(basename "$file")"
+              done > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -181,8 +273,12 @@ jobs:
             |----------|------|
             | macOS (Universal) | `SideScreen-${{ steps.version.outputs.version }}-mac-universal.dmg` |
             | Android | `SideScreen-${{ steps.version.outputs.version }}-android.apk` |
+            | Android Play Store | `SideScreen-${{ steps.version.outputs.version }}-android.aab` |
+            | Checksums | `SHA256SUMS.txt` |
           files: |
             artifacts/macos-dmg/*.dmg
-            artifacts/android-apk/*.apk
+            artifacts/android-artifacts/*.apk
+            artifacts/android-artifacts/*.aab
+            SHA256SUMS.txt
           draft: false
           prerelease: false
