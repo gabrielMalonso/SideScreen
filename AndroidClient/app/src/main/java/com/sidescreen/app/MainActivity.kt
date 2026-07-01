@@ -1346,7 +1346,21 @@ class MainActivity : AppCompatActivity() {
             displayHeight = height
             displayRotation = rotation
             if (videoDecoder != null) {
-                videoDecoder?.updateResolution(width, height)
+                try {
+                    videoDecoder?.updateResolution(width, height)
+                } catch (e: Exception) {
+                    mainDiag("Decoder resize failed: ${e.javaClass.simpleName}: ${e.message}")
+                    videoDecoder?.release()
+                    videoDecoder = null
+                    val holder = currentSurfaceHolder
+                    if (holder != null && holder.surface.isValid) {
+                        runOnUiThread {
+                            if (videoDecoder == null) {
+                                initializeDecoder(holder)
+                            }
+                        }
+                    }
+                }
             } else {
                 val holder = currentSurfaceHolder
                 if (holder != null && holder.surface.isValid) {

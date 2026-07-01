@@ -837,7 +837,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 rotation: displayConfigRotation(for: source)
             )
             streamingServer?.sendDisplaySize()
-            capture.requestKeyframeOrReplayCachedFrame(force: true)
+            capture.requestKeyframe()
             streamingServer?.sendDisplayControl(.selectDisplayResult(displayId: displayID, status: "ok"))
             sendRemoteDisplayList()
             debugLog("Remote display switched to \(source.title) (ID: \(displayID))")

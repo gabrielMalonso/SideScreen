@@ -15,6 +15,30 @@ VERSION=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
 INSTALL_MAC=1
 INSTALL_ANDROID=1
 REQUIRE_ANDROID=0
+SIGN_IDENTITY="${SIDESCREEN_CODESIGN_IDENTITY:-auto}"
+
+resolve_sign_identity() {
+    if [ "$SIGN_IDENTITY" != "auto" ]; then
+        echo "$SIGN_IDENTITY"
+        return
+    fi
+
+    local identity
+    identity="$(security find-identity -v -p codesigning 2>/dev/null |
+        sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' |
+        head -1)"
+    if [ -z "$identity" ]; then
+        identity="$(security find-identity -v -p codesigning 2>/dev/null |
+            sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' |
+            head -1)"
+    fi
+
+    if [ -n "$identity" ]; then
+        echo "$identity"
+    else
+        echo "-"
+    fi
+}
 
 usage() {
     echo "Usage: ./scripts/install.sh [--mac-only] [--android-only] [--skip-android] [--require-android]"
@@ -53,6 +77,8 @@ echo "🚀 Installing Side Screen..."
 echo ""
 
 if [ "$INSTALL_MAC" -eq 1 ]; then
+    SIGN_IDENTITY="$(resolve_sign_identity)"
+
     # Build macOS app
     echo "📦 Building macOS app..."
     cd MacHost
@@ -121,7 +147,13 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
 </plist>
 PLIST
 
-    codesign --force --deep --sign - --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
+    if [ "$SIGN_IDENTITY" = "-" ]; then
+        echo "  ⚠️  Code signing identity: ad-hoc"
+        codesign --force --deep --sign - --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
+    else
+        echo "  ✓ Code signing identity: $SIGN_IDENTITY"
+        codesign --force --deep --timestamp --options runtime --sign "$SIGN_IDENTITY" --entitlements "$ROOT_DIR/MacHost/SideScreen.entitlements" "$APP_DIR"
+    fi
     echo "  ✓ macOS .app bundle created: $APP_NAME"
     echo ""
 fi

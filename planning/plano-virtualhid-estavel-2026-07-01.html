@@ -33,7 +33,7 @@
       letter-spacing: 0;
     }
 
-    main {
+    .page {
       width: min(1080px, calc(100% - 40px));
       margin: 0 auto;
       padding: 38px 0 64px;
@@ -271,7 +271,7 @@
     }
 
     @media (max-width: 820px) {
-      main { width: min(100% - 24px, 1080px); padding-top: 24px; }
+      .page { width: min(100% - 24px, 1080px); padding-top: 24px; }
       .hero { padding: 20px; }
       .grid { grid-template-columns: 1fr; }
       .pipe-row { grid-template-columns: 1fr; }
@@ -284,8 +284,8 @@
   </style>
 </head>
 <body>
-  <main>
-    <section class="hero">
+  <div class="page">
+    <div class="hero">
       <div class="meta">
         <span>Aguardando aprovação</span>
         <span>2026-07-01</span>
@@ -295,10 +295,10 @@
       <p class="summary">O app já tem backend VirtualHID, helper root e QA de input. O plano agora é endurecer o conjunto: health real, helper que não trava, fallback explícito, release-all confiável e prova com hardware.</p>
       <div class="decision"><strong>Decisão:</strong> VirtualHID via helper vira o caminho preferido para teclado/mouse. CGEvent continua como fallback, mas nunca escondido. Unicode/TextCommit fica documentado como caminho separado.</div>
       <p><a href="./plano-virtualhid-estavel-2026-07-01.md">Abrir plano técnico completo em Markdown</a></p>
-    </section>
+    </div>
 
     <h2>Mapa do input</h2>
-    <section class="pipeline" aria-label="Pipeline de input">
+    <div class="pipeline" aria-label="Pipeline de input">
       <div class="pipe-row">
         <div class="node good">Android focado</div>
         <div class="node">RMIP P+1</div>
@@ -308,10 +308,10 @@
         <div class="node good">macOS HID</div>
       </div>
       <div class="arrow">Fallback permitido: CGEvent, mas só quando o usuário e os diagnósticos conseguem ver isso claramente.</div>
-    </section>
+    </div>
 
     <h2>O que muda</h2>
-    <section class="grid">
+    <div class="grid">
       <div class="tile">
         <strong>Health deixa de ser teatro</strong>
         <span>“Ready” só vale com helper/Karabiner respondendo a probe real, versão compatível e motivo claro quando falhar.</span>
@@ -336,10 +336,10 @@
         <strong>Promessa honesta</strong>
         <span>Fase 1 cobre keyboard HID page `0x07`, mouse relativo e botões capturados hoje. Unicode continua via TextCommit.</span>
       </div>
-    </section>
+    </div>
 
     <h2>Ondas</h2>
-    <section class="waves">
+    <div class="waves">
       <div class="wave">
         <div class="step">Wave 1</div>
         <div><h3>Contrato de status e seleção</h3><p>Modelo operacional, fallback reason e seleção Automatic/VirtualHID sem queda silenciosa.</p></div>
@@ -370,7 +370,7 @@
         <div><h3>QA e documentação</h3><p>Harness VirtualHID, Logitech Options+, helper restart, Karabiner stopped e README honesto.</p></div>
         <div class="outcome">Aprovação baseada em evidência.</div>
       </div>
-    </section>
+    </div>
 
     <h2>Riscos principais</h2>
     <ul class="risk-list">
@@ -391,14 +391,14 @@
     </ul>
 
     <h2>Revisão crítica incorporada</h2>
-    <section class="review">
+    <div class="review">
       <p><strong>Advogado do diabo:</strong> encontrou 10 lacunas. As mais importantes viraram requisitos: health real, helper não bloqueante, protocolo versionado, falha runtime visível, Android com motivo de fallback e promessa limitada a HID page `0x07` mais mouse capturado hoje.</p>
-    </section>
+    </div>
 
-    <section class="approval">
+    <div class="approval">
       <h2>Pronto para aprovação</h2>
       <p>Nenhum código do app foi alterado por este plano. A implementação só deve começar depois de aprovação explícita.</p>
-    </section>
-  </main>
+    </div>
+  </div>
 </body>
 </html>

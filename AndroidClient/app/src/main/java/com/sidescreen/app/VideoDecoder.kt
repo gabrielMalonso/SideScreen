@@ -45,6 +45,7 @@ class VideoDecoder(
 
     private var currentWidth = initialWidth
     private var currentHeight = initialHeight
+    private val decoderOperatingRate = 30
 
     @Volatile private var isRunning = false
 
@@ -68,29 +69,29 @@ class VideoDecoder(
         width: Int,
         height: Int,
     ) {
-        if (width != currentWidth || height != currentHeight) {
+        val resolutionChanged = width != currentWidth || height != currentHeight
+        val decoderMissing = decoder == null || !isRunning
+        if (resolutionChanged || decoderMissing) {
+            diagLog(
+                "updateResolution: ${currentWidth}x$currentHeight -> ${width}x$height, " +
+                    "decoderMissing=$decoderMissing",
+            )
+            release()
             currentWidth = width
             currentHeight = height
-            release()
             setupDecoder()
-            requestKeyframe("resolution changed", force = true)
+            requestKeyframe(if (resolutionChanged) "resolution changed" else "decoder rebuilt", force = true)
         }
     }
 
     private fun setupDecoder() {
         decoderThread = HandlerThread("DecoderThread", Process.THREAD_PRIORITY_DISPLAY).also { it.start() }
         decoderHandler = Handler(decoderThread!!.looper)
+        availableInputBuffers.clear()
 
         // Find a decoder that supports our resolution (prefer HW, fallback to SW)
         val decoderName = findBestDecoder(currentWidth, currentHeight)
         diagLog("setupDecoder: ${currentWidth}x$currentHeight, decoder=$decoderName")
-
-        val codec =
-            if (decoderName != null) {
-                MediaCodec.createByCodecName(decoderName)
-            } else {
-                MediaCodec.createDecoderByType(mime)
-            }
 
         val callback =
             object : MediaCodec.Callback() {
@@ -126,84 +127,76 @@ class VideoDecoder(
                     diagLog("Output format changed: $format")
                 }
             }
-        codec.setCallback(callback, decoderHandler)
 
-        val format =
-            MediaFormat.createVideoFormat(
-                mime,
-                currentWidth,
-                currentHeight,
+        fun createCodec(): MediaCodec =
+            if (decoderName != null) {
+                MediaCodec.createByCodecName(decoderName)
+            } else {
+                MediaCodec.createDecoderByType(mime)
+            }
+
+        fun videoFormat(): MediaFormat = MediaFormat.createVideoFormat(mime, currentWidth, currentHeight)
+
+        val candidates =
+            listOf(
+                "full low-latency" to
+                    videoFormat().apply {
+                        setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+                        setInteger(MediaFormat.KEY_PRIORITY, 0)
+                        setInteger(MediaFormat.KEY_OPERATING_RATE, decoderOperatingRate)
+                        setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
+                    },
+                "basic format" to
+                    videoFormat().apply {
+                        setInteger(MediaFormat.KEY_PRIORITY, 0)
+                        setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
+                    },
+                "minimal format" to videoFormat(),
             )
 
-        var configured = false
+        var lastError: Exception? = null
+        for ((label, format) in candidates) {
+            val codec =
+                try {
+                    createCodec()
+                } catch (e: Exception) {
+                    lastError = e
+                    diagLog("Decoder create failed ($label): ${e.javaClass.simpleName}: ${e.message}")
+                    continue
+                }
 
-        // Attempt 1: Full low-latency config
-        try {
-            format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
-            format.setInteger(MediaFormat.KEY_PRIORITY, 0)
-            format.setInteger(MediaFormat.KEY_OPERATING_RATE, displayRefreshRate.toInt())
-            format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-            codec.configure(format, surface, null, 0)
-            configured = true
-            diagLog("Configured with full low-latency")
-        } catch (e: Exception) {
-            diagLog("Full low-latency config failed: ${e.message}")
-            codec.reset()
-            codec.setCallback(callback, decoderHandler)
-        }
-
-        // Attempt 2: Without KEY_LOW_LATENCY
-        if (!configured) {
             try {
-                val basicFormat =
-                    MediaFormat.createVideoFormat(
-                        mime,
-                        currentWidth,
-                        currentHeight,
-                    )
-                basicFormat.setInteger(MediaFormat.KEY_PRIORITY, 0)
-                basicFormat.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-                codec.configure(basicFormat, surface, null, 0)
-                configured = true
-                diagLog("Configured with basic format")
-            } catch (e: Exception) {
-                diagLog("Basic config failed: ${e.message}")
-                codec.reset()
                 codec.setCallback(callback, decoderHandler)
-            }
-        }
-
-        // Attempt 3: Minimal config (just resolution)
-        if (!configured) {
-            try {
-                val minimalFormat =
-                    MediaFormat.createVideoFormat(
-                        mime,
-                        currentWidth,
-                        currentHeight,
-                    )
-                codec.configure(minimalFormat, surface, null, 0)
-                diagLog("Configured with minimal format")
+                codec.configure(format, surface, null, 0)
+                diagLog("Configured with $label")
+                codec.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT)
+                needsKeyframe = true
+                codec.start()
+                decoder = codec
+                isRunning = true
+                diagLog(
+                    "Decoder started: ${currentWidth}x$currentHeight @ stream ${decoderOperatingRate}fps " +
+                        "(panel ${displayRefreshRate}Hz), config=$label, surface=$surface, valid=${surface.isValid}",
+                )
+                return
             } catch (e: Exception) {
-                diagLog("All configure attempts failed: ${e.message}")
-                Log.e(TAG, "All configure attempts failed", e)
-                codec.release()
-                decoderThread?.quitSafely()
-                decoderThread = null
-                decoderHandler = null
-                throw e
+                isRunning = false
+                lastError = e
+                diagLog("Decoder setup failed ($label): ${e.javaClass.simpleName}: ${e.message}")
+                try {
+                    codec.release()
+                } catch (_: Exception) {
+                }
             }
         }
 
-        codec.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT)
-        needsKeyframe = true
-        isRunning = true
-        codec.start()
-        decoder = codec
-        diagLog(
-            "Decoder started: ${currentWidth}x$currentHeight @ ${displayRefreshRate}Hz, " +
-                "surface=$surface, valid=${surface.isValid}",
-        )
+        decoderThread?.quitSafely()
+        decoderThread = null
+        decoderHandler = null
+        val error = lastError ?: IllegalStateException("No decoder configuration succeeded")
+        diagLog("All decoder setup attempts failed: ${error.javaClass.simpleName}: ${error.message}")
+        Log.e(TAG, "All decoder setup attempts failed", error)
+        throw error
     }
 
     /**
@@ -217,7 +210,7 @@ class VideoDecoder(
     ): String? {
         try {
             val codecList = MediaCodecList(MediaCodecList.ALL_CODECS)
-            val targetRate = displayRefreshRate.toDouble().coerceAtLeast(30.0)
+            val targetRate = decoderOperatingRate.toDouble()
             var hwRateDecoder: String? = null
             var hwSizeDecoder: String? = null
             var swRateDecoder: String? = null
@@ -316,7 +309,9 @@ class VideoDecoder(
 
         val codec =
             decoder ?: run {
-                diagLog("decoder is null in decode()")
+                if (inputFrameCount <= 3L || inputFrameCount % 60L == 0L) {
+                    diagLog("decoder is null in decode()")
+                }
                 onFrameDecoded?.invoke(frameData)
                 return
             }
@@ -513,16 +508,23 @@ class VideoDecoder(
 
     fun release() {
         isRunning = false
+        availableInputBuffers.clear()
+
+        val codec = decoder
+        decoder = null
+        val thread = decoderThread
+        decoderThread = null
+        decoderHandler = null
+
         try {
-            availableInputBuffers.clear()
-            decoder?.stop()
-            decoder?.release()
-            decoder = null
-            decoderThread?.quitSafely()
-            decoderThread = null
-            decoderHandler = null
+            codec?.stop()
         } catch (_: Exception) {
         }
+        try {
+            codec?.release()
+        } catch (_: Exception) {
+        }
+        thread?.quitSafely()
     }
 
     companion object {

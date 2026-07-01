@@ -64,6 +64,7 @@ class ScreenCapture {
     private var encodeQueue: DispatchQueue?
     private var pendingEncodes: Int32 = 0
     private var lastPixelBuffer: CVPixelBuffer?
+    private let frameSessionLock = OSAllocatedUnfairLock(initialState: UInt64(0))
 
     /// Callback when capture method changes (e.g. SCStream → CGDisplayStream fallback)
     var onCaptureMethodChanged: ((String) -> Void)?
@@ -77,6 +78,33 @@ class ScreenCapture {
             return
         }
         keyframeRequestLock.withLock { $0.pendingEncoderCreationRequest = true }
+    }
+
+    @discardableResult
+    private func beginFrameSession(clearCachedFrame: Bool = true) -> UInt64 {
+        let sessionID = frameSessionLock.withLock { state -> UInt64 in
+            state &+= 1
+            return state
+        }
+        pendingEncodes = 0
+        if clearCachedFrame {
+            lastPixelBuffer = nil
+        }
+        return sessionID
+    }
+
+    private func invalidateFrameSession(clearCachedFrame: Bool = true) {
+        _ = beginFrameSession(clearCachedFrame: clearCachedFrame)
+        streamOutput?.onFrameReceived = nil
+        encodeQueue = nil
+    }
+
+    private func currentFrameSessionID() -> UInt64 {
+        frameSessionLock.withLock { $0 }
+    }
+
+    private func isCurrentFrameSession(_ sessionID: UInt64) -> Bool {
+        frameSessionLock.withLock { $0 == sessionID }
     }
 
     /// Force a keyframe for the next captured frame, AND immediately re-encode
@@ -98,14 +126,16 @@ class ScreenCapture {
 
         requestKeyframe()
 
-        guard let encoder, let cached = lastPixelBuffer else { return }
+        guard let encoder, let cached = lastPixelBuffer, let queue = encodeQueue else { return }
+        let sessionID = currentFrameSessionID()
 
         let pts = CMTime(
             value: CMTimeValue(DispatchTime.now().uptimeNanoseconds / 1000),
             timescale: 1_000_000
         )
 
-        encodeQueue?.async {
+        queue.async { [weak self, encoder, cached] in
+            guard let self, self.isCurrentFrameSession(sessionID) else { return }
             encoder.encode(pixelBuffer: cached, presentationTimeStamp: pts)
         }
     }
@@ -276,13 +306,13 @@ class ScreenCapture {
     // MARK: - Shared frame handler (used by both startStreaming and restartStream)
 
     private func configureFrameHandler(label: String) {
+        let sessionID = beginFrameSession()
         let queue = DispatchQueue(label: "encodeQueue.\(label)", qos: .userInteractive)
         encodeQueue = queue
-        pendingEncodes = 0
-        lastPixelBuffer = nil
 
         streamOutput?.onFrameReceived = { [weak self] sampleBuffer in
             guard let self = self else { return }
+            guard self.isCurrentFrameSession(sessionID) else { return }
 
             // Thread-safe update of frame monitor state
             let isFirst = self.stateLock.withLock { state -> Bool in
@@ -307,18 +337,22 @@ class ScreenCapture {
                 return
             }
 
-            if let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            if let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+               let encoder = self.encoder {
                 self.lastPixelBuffer = imageBuffer
                 OSAtomicIncrement32(&self.pendingEncodes)
-                queue.async {
-                    self.encoder?.encode(pixelBuffer: imageBuffer, presentationTimeStamp: pts)
-                    OSAtomicDecrement32(&self.pendingEncodes)
+                queue.async { [weak self, encoder, imageBuffer] in
+                    guard let self, self.isCurrentFrameSession(sessionID) else { return }
+                    defer { OSAtomicDecrement32(&self.pendingEncodes) }
+                    encoder.encode(pixelBuffer: imageBuffer, presentationTimeStamp: pts)
                 }
-            } else if let cached = self.lastPixelBuffer {
+            } else if let cached = self.lastPixelBuffer,
+                      let encoder = self.encoder {
                 OSAtomicIncrement32(&self.pendingEncodes)
-                queue.async {
-                    self.encoder?.encode(pixelBuffer: cached, presentationTimeStamp: pts)
-                    OSAtomicDecrement32(&self.pendingEncodes)
+                queue.async { [weak self, encoder, cached] in
+                    guard let self, self.isCurrentFrameSession(sessionID) else { return }
+                    defer { OSAtomicDecrement32(&self.pendingEncodes) }
+                    encoder.encode(pixelBuffer: cached, presentationTimeStamp: pts)
                 }
             }
         }
@@ -412,8 +446,12 @@ class ScreenCapture {
                         value: CMTimeValue(DispatchTime.now().uptimeNanoseconds / 1000),
                         timescale: 1_000_000
                     )
-                    self.encodeQueue?.async {
-                        self.encoder?.encode(pixelBuffer: lastBuffer, presentationTimeStamp: pts)
+                    let sessionID = self.currentFrameSessionID()
+                    if let encoder = self.encoder, let queue = self.encodeQueue {
+                        queue.async { [weak self, encoder, lastBuffer] in
+                            guard let self, self.isCurrentFrameSession(sessionID) else { return }
+                            encoder.encode(pixelBuffer: lastBuffer, presentationTimeStamp: pts)
+                        }
                     }
                     self.stateLock.withLock { $0.lastFrameTime = DispatchTime.now() }
                     // Keep monitoring — real errors are handled by the SCStream error delegate
@@ -442,6 +480,7 @@ class ScreenCapture {
 
     private func restartStream() {
         restartAttempted = true
+        invalidateFrameSession()
         stateLock.withLock { $0.hasReceivedFirstFrame = false }
 
         Task {
@@ -490,7 +529,9 @@ class ScreenCapture {
         }
 
         // Stop SCStream synchronously (nil out output first to prevent new frames)
+        let sessionID = beginFrameSession()
         streamOutput?.onFrameReceived = nil
+        encodeQueue = nil
         Task {
             try? await stream?.stopCapture()
             stream = nil
@@ -516,6 +557,7 @@ class ScreenCapture {
             queue: queue,
             handler: { [weak self] _, _, frameSurface, _ in
                 guard let self = self, let surface = frameSurface else { return }
+                guard self.isCurrentFrameSession(sessionID) else { return }
 
                 var unmanagedPB: Unmanaged<CVPixelBuffer>?
                 let attrs: [String: Any] = [
@@ -560,7 +602,7 @@ class ScreenCapture {
     func switchDisplay(to source: DisplaySource, refreshRate: Int) async throws {
         debugLog("Switching capture display to \(source.diagnosticKind) \(source.title) (ID: \(source.displayID))")
         stopFrameMonitor()
-        streamOutput?.onFrameReceived = nil
+        invalidateFrameSession()
         try? await stream?.stopCapture()
         stream = nil
         streamOutput = nil
@@ -582,7 +624,6 @@ class ScreenCapture {
 
         captureDisplayID = source.displayID
         self.refreshRate = refreshRate
-        lastPixelBuffer = nil
         restartAttempted = false
 
         try await setupDisplay(label: source.diagnosticKind)
@@ -634,6 +675,7 @@ class ScreenCapture {
             server?.sendFrame(data, timestamp: timestamp, isKeyframe: isKeyframe)
         }
         newEncoder.requestKeyframe()
+        invalidateFrameSession()
         encoder = newEncoder
 
         restartStream()
@@ -644,6 +686,7 @@ class ScreenCapture {
     func stopStreaming() {
         // Cancel frame flow monitor
         stopFrameMonitor()
+        invalidateFrameSession()
 
         // Stop SCStream
         Task {
