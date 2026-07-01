@@ -33,6 +33,7 @@ class StreamClient(
     var onDisplaySize: ((Int, Int, Int) -> Unit)? = null // width, height, rotation
     var onStats: ((Double, Double) -> Unit)? = null
     var onSessionCredentials: ((AuthHandshake.SessionCredentials) -> Unit)? = null
+    var onDisplayControlMessage: ((DisplayControlMessage) -> Unit)? = null
 
     /** Invoked when the server confirms the stream codec (true = HEVC). */
     var onCodecSelected: ((Boolean) -> Unit)? = null
@@ -128,6 +129,7 @@ class StreamClient(
                 codecNegotiated = false
                 advertiseAvcOnlyIfNeeded() // MUST precede type 8: type 8 can trigger the server's early protocol finish
                 advertiseFrameMetadataSupport()
+                advertiseDisplayControlSupport()
                 isConnected = true
                 lastKeyframeReceivedNs = 0L
                 synchronized(keyframeRequestLock) {
@@ -254,6 +256,7 @@ class StreamClient(
                 codecNegotiated = false
                 advertiseAvcOnlyIfNeeded() // MUST precede type 8: type 8 can trigger the server's early protocol finish
                 advertiseFrameMetadataSupport()
+                advertiseDisplayControlSupport()
                 isConnected = true
                 diagLog("Wireless connected to $host:$port")
                 onConnectionStatus?.invoke(true)
@@ -320,6 +323,14 @@ class StreamClient(
         }
     }
 
+    private fun advertiseDisplayControlSupport() {
+        outputStream?.let { out ->
+            out.writeByte(MESSAGE_CLIENT_SUPPORTS_DISPLAY_CONTROL)
+            out.flush()
+            diagLog("Advertised display control support")
+        }
+    }
+
     private suspend fun receiveData() =
         withContext(Dispatchers.IO) {
             val input = inputStream ?: return@withContext
@@ -361,6 +372,10 @@ class StreamClient(
                             onCodecSelected?.invoke(streamCodecIsHevc)
                         }
 
+                        MESSAGE_DISPLAY_CONTROL_JSON -> {
+                            receiveDisplayControl(input)
+                        }
+
                         else -> {
                             Log.e(
                                 TAG,
@@ -378,6 +393,44 @@ class StreamClient(
                 disconnect()
             }
         }
+
+    private fun receiveDisplayControl(input: DataInputStream) {
+        val payloadLength = input.readInt()
+        if (payloadLength <= 0 || payloadLength > DisplayControlCodec.MAX_PAYLOAD_BYTES) {
+            throw IOException("Invalid display control payload length: $payloadLength")
+        }
+        val payload = ByteArray(payloadLength)
+        input.readFully(payload)
+        val message = DisplayControlCodec.decode(payload)
+        diagLog("Display control message: ${message.javaClass.simpleName}")
+        onDisplayControlMessage?.invoke(message)
+    }
+
+    fun requestDisplayList() {
+        sendDisplayControl(DisplayControlMessage.RequestDisplayList)
+    }
+
+    fun selectDisplay(displayId: Long) {
+        sendDisplayControl(DisplayControlMessage.SelectDisplay(displayId))
+    }
+
+    private fun sendDisplayControl(message: DisplayControlMessage) {
+        if (!isConnected) return
+        touchScope.launch {
+            try {
+                val payload = DisplayControlCodec.encode(message)
+                outputStream?.let { out ->
+                    out.writeByte(MESSAGE_DISPLAY_CONTROL_JSON)
+                    out.writeInt(payload.size)
+                    out.write(payload)
+                    out.flush()
+                    diagLog("Sent display control: ${message.javaClass.simpleName}")
+                }
+            } catch (e: Exception) {
+                diagLog("Display control send failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
 
     fun sendTouch(
         x: Float,
@@ -612,6 +665,8 @@ class StreamClient(
         private const val MESSAGE_CLIENT_SUPPORTS_FRAME_METADATA = 8
         private const val MESSAGE_CLIENT_AVC_ONLY = 9
         private const val MESSAGE_CODEC_SELECTED = 10
+        private const val MESSAGE_CLIENT_SUPPORTS_DISPLAY_CONTROL = 11
+        private const val MESSAGE_DISPLAY_CONTROL_JSON = 12
         private const val FRAME_FLAG_KEYFRAME = 1
         private const val KEYFRAME_REQUEST_FLAG_FORCE = 1
 

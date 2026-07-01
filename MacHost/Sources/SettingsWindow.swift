@@ -1378,6 +1378,15 @@ class DisplaySettings: ObservableObject {
     @Published var displaySourceMode: DisplaySourceMode {
         didSet { save("displaySourceMode", displaySourceMode.rawValue) }
     }
+    @Published var selectedRemoteDisplayID: CGDirectDisplayID? {
+        didSet {
+            if let selectedRemoteDisplayID {
+                save("selectedRemoteDisplayID", Int(selectedRemoteDisplayID))
+            } else {
+                defaults.removeObject(forKey: keyPrefix + "selectedRemoteDisplayID")
+            }
+        }
+    }
     @Published var endpointMode: EndpointMode {
         didSet { save("endpointMode", endpointMode.rawValue) }
     }
@@ -1454,6 +1463,11 @@ class DisplaySettings: ObservableObject {
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
         let displaySourceRaw = defaults.string(forKey: keyPrefix + "displaySourceMode") ?? DisplaySourceMode.remoteDesktop.rawValue
         self.displaySourceMode = DisplaySourceMode(rawValue: displaySourceRaw) ?? .remoteDesktop
+        if let selectedRemoteDisplayInt = defaults.object(forKey: keyPrefix + "selectedRemoteDisplayID") as? Int, selectedRemoteDisplayInt > 0 {
+            self.selectedRemoteDisplayID = CGDirectDisplayID(selectedRemoteDisplayInt)
+        } else {
+            self.selectedRemoteDisplayID = nil
+        }
         let endpointRaw = defaults.string(forKey: keyPrefix + "endpointMode") ?? EndpointMode.lan.rawValue
         self.endpointMode = EndpointMode(rawValue: endpointRaw) ?? .lan
         self.tailnetHost = defaults.string(forKey: keyPrefix + "tailnetHost") ?? ""
@@ -1550,7 +1564,7 @@ class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality", "streamingProfile",
                     "gamingBoost", "port", "rotation", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "displaySourceMode", "endpointMode", "tailnetHost",
+                    "customWidth", "customHeight", "touchEnabled", "displaySourceMode", "selectedRemoteDisplayID", "endpointMode", "tailnetHost",
                     "inputBackendMode"]
         for key in keys {
             defaults.removeObject(forKey: keyPrefix + key)
@@ -1570,6 +1584,7 @@ class DisplaySettings: ObservableObject {
         customHeight = 1200
         touchEnabled = true
         displaySourceMode = .remoteDesktop
+        selectedRemoteDisplayID = nil
         endpointMode = .lan
         tailnetHost = ""
         inputBackendMode = .automatic

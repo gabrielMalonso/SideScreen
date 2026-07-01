@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -63,6 +64,71 @@ struct ExistingDisplaySource: Equatable {
     }
 }
 
+struct DisplaySourceCatalog {
+    private let listDisplays: () -> [ExistingDisplaySource]
+
+    init(listDisplays: @escaping () -> [ExistingDisplaySource] = DisplaySourceCatalog.onlineDisplays) {
+        self.listDisplays = listDisplays
+    }
+
+    func displays() -> [ExistingDisplaySource] {
+        let sources = listDisplays()
+            .filter { $0.physicalWidth > 0 && $0.physicalHeight > 0 }
+            .sorted { lhs, rhs in
+                if lhs.isMain != rhs.isMain { return lhs.isMain }
+                if lhs.bounds.minY != rhs.bounds.minY { return lhs.bounds.minY < rhs.bounds.minY }
+                if lhs.bounds.minX != rhs.bounds.minX { return lhs.bounds.minX < rhs.bounds.minX }
+                return lhs.displayID < rhs.displayID
+            }
+        return sources.isEmpty ? [.main()] : sources
+    }
+
+    func source(preferredID: CGDirectDisplayID?) -> ExistingDisplaySource {
+        let available = displays()
+        if let preferredID, let match = available.first(where: { $0.displayID == preferredID }) {
+            return match
+        }
+        if let main = available.first(where: \.isMain) {
+            return main
+        }
+        return available[0]
+    }
+
+    func contains(displayID: CGDirectDisplayID) -> Bool {
+        displays().contains { $0.displayID == displayID }
+    }
+
+    static func onlineDisplays() -> [ExistingDisplaySource] {
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else {
+            return [.main()]
+        }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetOnlineDisplayList(count, &displayIDs, &count) == .success else {
+            return [.main()]
+        }
+
+        return displayIDs.prefix(Int(count)).map { displayID in
+            ExistingDisplaySource.make(
+                displayID: displayID,
+                name: name(for: displayID),
+                isMain: displayID == CGMainDisplayID()
+            )
+        }
+    }
+
+    private static func name(for displayID: CGDirectDisplayID) -> String {
+        if let screen = NSScreen.screens.first(where: { screen in
+            let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            return number?.uint32Value == displayID
+        }) {
+            return screen.localizedName
+        }
+        return displayID == CGMainDisplayID() ? "Main Display" : "Display \(displayID)"
+    }
+}
+
 struct VirtualDisplaySource: Equatable {
     let displayID: CGDirectDisplayID
     let requestedWidth: Int
@@ -112,5 +178,124 @@ enum DisplaySource: Equatable {
         case .virtual(let source):
             return source.requestedSize
         }
+    }
+}
+
+struct DisplayControlDisplay: Codable, Equatable {
+    let id: UInt32
+    let name: String
+    let isMain: Bool
+    let width: Int
+    let height: Int
+    let scale: Double
+
+    init(source: ExistingDisplaySource) {
+        self.id = source.displayID
+        self.name = source.name
+        self.isMain = source.isMain
+        self.width = source.physicalWidth
+        self.height = source.physicalHeight
+        self.scale = Double(source.scale)
+    }
+}
+
+struct DisplayControlEnvelope: Codable, Equatable {
+    enum MessageType: String, Codable {
+        case requestDisplayList
+        case displayList
+        case selectDisplay
+        case selectDisplayResult
+    }
+
+    let type: MessageType
+    let selectedDisplayId: UInt32?
+    let displays: [DisplayControlDisplay]?
+    let displayId: UInt32?
+    let status: String?
+    let message: String?
+
+    static func requestDisplayList() -> DisplayControlEnvelope {
+        DisplayControlEnvelope(
+            type: .requestDisplayList,
+            selectedDisplayId: nil,
+            displays: nil,
+            displayId: nil,
+            status: nil,
+            message: nil
+        )
+    }
+
+    static func displayList(selectedDisplayId: UInt32, displays: [ExistingDisplaySource]) -> DisplayControlEnvelope {
+        DisplayControlEnvelope(
+            type: .displayList,
+            selectedDisplayId: selectedDisplayId,
+            displays: displays.map(DisplayControlDisplay.init),
+            displayId: nil,
+            status: nil,
+            message: nil
+        )
+    }
+
+    static func selectDisplay(_ displayId: UInt32) -> DisplayControlEnvelope {
+        DisplayControlEnvelope(
+            type: .selectDisplay,
+            selectedDisplayId: nil,
+            displays: nil,
+            displayId: displayId,
+            status: nil,
+            message: nil
+        )
+    }
+
+    static func selectDisplayResult(displayId: UInt32, status: String, message: String? = nil) -> DisplayControlEnvelope {
+        DisplayControlEnvelope(
+            type: .selectDisplayResult,
+            selectedDisplayId: nil,
+            displays: nil,
+            displayId: displayId,
+            status: status,
+            message: message
+        )
+    }
+
+    func validated() throws -> DisplayControlEnvelope {
+        switch type {
+        case .requestDisplayList:
+            return self
+        case .displayList:
+            guard selectedDisplayId != nil, let displays, !displays.isEmpty else {
+                throw DisplayControlCodecError.invalidEnvelope
+            }
+        case .selectDisplay:
+            guard displayId != nil else {
+                throw DisplayControlCodecError.invalidEnvelope
+            }
+        case .selectDisplayResult:
+            guard displayId != nil, status == "ok" || status == "error" else {
+                throw DisplayControlCodecError.invalidEnvelope
+            }
+        }
+        return self
+    }
+}
+
+enum DisplayControlCodecError: Error, Equatable {
+    case invalidEnvelope
+    case payloadTooLarge
+}
+
+enum DisplayControlCodec {
+    static let maxPayloadBytes = 64 * 1024
+
+    static func encode(_ envelope: DisplayControlEnvelope) throws -> Data {
+        _ = try envelope.validated()
+        let data = try JSONEncoder().encode(envelope)
+        guard data.count <= maxPayloadBytes else { throw DisplayControlCodecError.payloadTooLarge }
+        return data
+    }
+
+    static func decode(_ data: Data) throws -> DisplayControlEnvelope {
+        guard data.count <= maxPayloadBytes else { throw DisplayControlCodecError.payloadTooLarge }
+        return try JSONDecoder().decode(DisplayControlEnvelope.self, from: data).validated()
     }
 }

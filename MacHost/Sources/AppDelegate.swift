@@ -56,6 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     let pairedDeviceStore = PairedDeviceStore()
     private let remoteSessionStore = RemoteSessionStore()
+    private let displaySourceCatalog = DisplaySourceCatalog()
     /// Identity of the wireless device currently streaming (nil when no wireless client is active).
     /// Used to roll its `lastConnected` timestamp forward every status refresh tick so the UI
     /// shows "just now" while connected and freezes at the disconnect moment afterward.
@@ -702,7 +703,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         switch settings.displaySourceMode {
         case .remoteDesktop:
             virtualDisplayManager = nil
-            return .existing(.main())
+            let source = displaySourceCatalog.source(preferredID: settings.selectedRemoteDisplayID)
+            if settings.selectedRemoteDisplayID != source.displayID {
+                settings.selectedRemoteDisplayID = source.displayID
+            }
+            return .existing(source)
         case .extendedDisplay:
             virtualDisplayManager = VirtualDisplayManager()
             let size = settings.resolutionSize
@@ -749,6 +754,102 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func displayConfigRotation(for source: DisplaySource) -> Int {
         source.isVirtual ? settings.rotation : 0
+    }
+
+    private func remoteDisplayListEnvelope() -> DisplayControlEnvelope {
+        let displays = displaySourceCatalog.displays()
+        let selected = activeDisplaySource.flatMap { source -> CGDirectDisplayID? in
+            if case .existing(let existing) = source { return existing.displayID }
+            return nil
+        } ?? displaySourceCatalog.source(preferredID: settings.selectedRemoteDisplayID).displayID
+        return .displayList(selectedDisplayId: selected, displays: displays)
+    }
+
+    @MainActor
+    private func sendRemoteDisplayList() {
+        streamingServer?.sendDisplayControl(remoteDisplayListEnvelope())
+    }
+
+    @MainActor
+    private func handleDisplayControl(_ envelope: DisplayControlEnvelope) async {
+        switch envelope.type {
+        case .requestDisplayList:
+            sendRemoteDisplayList()
+        case .selectDisplay:
+            guard let displayID = envelope.displayId else {
+                return
+            }
+            await switchRemoteDisplay(displayID: displayID)
+        case .displayList, .selectDisplayResult:
+            break
+        }
+    }
+
+    @MainActor
+    private func switchRemoteDisplay(displayID: CGDirectDisplayID) async {
+        guard displaySourceCatalog.contains(displayID: displayID) else {
+            streamingServer?.sendDisplayControl(.selectDisplayResult(
+                displayId: displayID,
+                status: "error",
+                message: "Display unavailable"
+            ))
+            sendRemoteDisplayList()
+            return
+        }
+
+        let existing = displaySourceCatalog.source(preferredID: displayID)
+        settings.selectedRemoteDisplayID = displayID
+
+        guard settings.displaySourceMode == .remoteDesktop else {
+            streamingServer?.sendDisplayControl(.selectDisplayResult(
+                displayId: displayID,
+                status: "ok",
+                message: "Display will be used when Remote Desktop mode is active"
+            ))
+            sendRemoteDisplayList()
+            return
+        }
+
+        let source = DisplaySource.existing(existing)
+        guard settings.isRunning, let capture = screenCapture else {
+            activeDisplaySource = source
+            settings.activeDisplaySourceName = source.title
+            settings.activeDisplaySourceKind = source.diagnosticKind
+            streamingServer?.sendDisplayControl(.selectDisplayResult(displayId: displayID, status: "ok"))
+            sendRemoteDisplayList()
+            return
+        }
+
+        inputServer?.releaseAll(reason: "display changed")
+        releaseLegacyTouchState(reason: "display changed")
+
+        do {
+            try await capture.switchDisplay(to: source, refreshRate: settings.effectiveRefreshRate)
+            activeDisplaySource = source
+            settings.displayCreated = false
+            settings.activeDisplaySourceName = source.title
+            settings.activeDisplaySourceKind = source.diagnosticKind
+
+            let configSize = displayConfigSize(for: capture.codec, source: source, capture: capture)
+            streamingServer?.setDisplaySize(
+                width: configSize.width,
+                height: configSize.height,
+                rotation: displayConfigRotation(for: source)
+            )
+            streamingServer?.sendDisplaySize()
+            capture.requestKeyframeOrReplayCachedFrame(force: true)
+            streamingServer?.sendDisplayControl(.selectDisplayResult(displayId: displayID, status: "ok"))
+            sendRemoteDisplayList()
+            debugLog("Remote display switched to \(source.title) (ID: \(displayID))")
+        } catch {
+            debugLog("Remote display switch failed: \(error)")
+            streamingServer?.sendDisplayControl(.selectDisplayResult(
+                displayId: displayID,
+                status: "error",
+                message: error.localizedDescription
+            ))
+            sendRemoteDisplayList()
+        }
     }
 
     func startServer() async {
@@ -846,6 +947,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             )
             streamingServer?.touchEnabled = settings.touchEnabled
+            streamingServer?.onDisplayControlReady = { [weak self] in
+                Task { @MainActor in
+                    self?.sendRemoteDisplayList()
+                }
+            }
+            streamingServer?.onDisplayControlMessage = { [weak self] envelope in
+                Task { @MainActor in
+                    await self?.handleDisplayControl(envelope)
+                }
+            }
             if settings.connectionMode == .wireless {
                 streamingServer?.expectedAuthToken = WirelessAuth.loadOrCreate()
                 streamingServer?.isWirelessDeviceRevoked = { [weak self] deviceId in
@@ -888,11 +999,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.onCodecNegotiated = { [weak self] codec in
                 guard let self = self, let capture = self.screenCapture else { return }
                 capture.setCodec(codec)
-                let configSize = self.displayConfigSize(for: codec, source: displaySource, capture: capture)
+                let source = self.activeDisplaySource ?? displaySource
+                let configSize = self.displayConfigSize(for: codec, source: source, capture: capture)
                 self.streamingServer?.setDisplaySize(
                     width: configSize.width,
                     height: configSize.height,
-                    rotation: self.displayConfigRotation(for: displaySource)
+                    rotation: self.displayConfigRotation(for: source)
                 )
             }
             streamingServer?.onKeyframeRequested = { [weak self] force in

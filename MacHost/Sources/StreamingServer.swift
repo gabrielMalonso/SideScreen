@@ -17,6 +17,8 @@ private enum WireMessage {
     /// clients that sent clientAvcOnly — old clients disconnect on unknown
     /// message types, so this must never be sent unsolicited.
     static let codecSelected: UInt8 = 10
+    static let clientSupportsDisplayControl: UInt8 = 11
+    static let displayControlJson: UInt8 = 12
 }
 
 private extension NWEndpoint {
@@ -49,6 +51,8 @@ class StreamingServer {
     var onTouchEvent: ((Float, Float, Int, Int, Float, Float) -> Void)?
     var onStats: ((Double, Double) -> Void)?
     var onKeyframeRequested: ((Bool) -> Void)?
+    var onDisplayControlReady: (() -> Void)?
+    var onDisplayControlMessage: ((DisplayControlEnvelope) -> Void)?
     // Whether host wants to receive touch events from client. Ping/pong is
     // handled regardless. When false, incoming touch frames are dropped
     // immediately without parsing or dispatching to main queue.
@@ -79,6 +83,7 @@ class StreamingServer {
     private var waitingForSyncFrame = false
     private var clientSupportsFrameMetadata = false
     private var clientIsAvcOnly = false
+    private var clientSupportsDisplayControl = false
     private var inputBuffer = Data()
     private var seenAuthNonces = Set<String>()
 
@@ -135,6 +140,7 @@ class StreamingServer {
         connectionReady = false
         clientSupportsFrameMetadata = false
         clientIsAvcOnly = false
+        clientSupportsDisplayControl = false
         waitingForSyncFrame = true
         inputBuffer.removeAll(keepingCapacity: true)
         connection = newConnection
@@ -428,6 +434,26 @@ class StreamingServer {
         debugLog("Sent display config: \(displayWidth)x\(displayHeight) @ \(rotation)°")
     }
 
+    func sendDisplayControl(_ envelope: DisplayControlEnvelope) {
+        guard let connection = connection, clientSupportsDisplayControl else { return }
+        do {
+            let payload = try DisplayControlCodec.encode(envelope)
+            var data = Data(capacity: 5 + payload.count)
+            data.append(WireMessage.displayControlJson)
+            var length = UInt32(payload.count).bigEndian
+            withUnsafeBytes(of: &length) { data.append(contentsOf: $0) }
+            data.append(payload)
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error {
+                    debugLog("Display control send failed: \(error)")
+                }
+            })
+            debugLog("Sent display control message: \(envelope.type.rawValue)")
+        } catch {
+            debugLog("Failed to encode display control message: \(error)")
+        }
+    }
+
     private func startReceivingTouch() {
         guard !isReceiving else {
             debugLog("Already receiving touch events")
@@ -538,6 +564,33 @@ class StreamingServer {
                 if !clientIsAvcOnly {
                     clientIsAvcOnly = true
                     debugLog("Client is AVC-only — will negotiate H.264")
+                }
+
+            case WireMessage.clientSupportsDisplayControl:
+                consumeInputBytes(1)
+                if !clientSupportsDisplayControl {
+                    clientSupportsDisplayControl = true
+                    debugLog("Client supports display control")
+                    onDisplayControlReady?()
+                }
+
+            case WireMessage.displayControlJson:
+                guard inputBuffer.count >= 5 else { return }
+                let payloadLength = Int(inputBuffer.dropFirst().prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) })
+                guard payloadLength <= DisplayControlCodec.maxPayloadBytes else {
+                    debugLog("Display control payload too large: \(payloadLength)")
+                    consumeInputBytes(1)
+                    continue
+                }
+                let expectedSize = 5 + payloadLength
+                guard inputBuffer.count >= expectedSize else { return }
+                let payload = Data(inputBuffer.dropFirst(5).prefix(payloadLength))
+                consumeInputBytes(expectedSize)
+                do {
+                    let envelope = try DisplayControlCodec.decode(payload)
+                    onDisplayControlMessage?(envelope)
+                } catch {
+                    debugLog("Invalid display control payload: \(error)")
                 }
 
             default:

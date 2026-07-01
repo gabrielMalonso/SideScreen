@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plano Visual - Sidebar remota e seleção de monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050505;
+      --panel: #0d0c0b;
+      --panel-2: #15130f;
+      --ink: #f3eee3;
+      --muted: #aaa196;
+      --soft: #786f63;
+      --line: #2b2721;
+      --line-strong: #4a4034;
+      --gold: #e7cc8f;
+      --gold-soft: rgba(231, 204, 143, .10);
+      --green: #79d69a;
+      --red: #ff7373;
+      --blue: #8ebcff;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .42);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(231, 204, 143, .10), transparent 30rem),
+        linear-gradient(180deg, #080807 0%, var(--bg) 28rem);
+      color: var(--ink);
+      font: 15px/1.58 "Aptos", "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    main {
+      width: min(1040px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 40px 0 64px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      max-width: 920px;
+      color: var(--gold);
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-top: 42px;
+      margin-bottom: 14px;
+      font-size: 24px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: 17px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    p { color: var(--muted); }
+
+    .hero {
+      display: grid;
+      gap: 22px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(21, 19, 15, .96), rgba(13, 12, 11, .96));
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .meta span:not(:last-child)::after {
+      content: "/";
+      margin-left: 8px;
+      color: var(--line-strong);
+    }
+
+    .summary {
+      max-width: 850px;
+      font-size: 17px;
+    }
+
+    .decision {
+      border-left: 3px solid var(--gold);
+      border-radius: 8px;
+      background: var(--gold-soft);
+      padding: 16px 18px;
+      color: var(--ink);
+    }
+
+    .decision strong { color: var(--gold); }
+
+    .change-list,
+    .risk-list,
+    .accept-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .change,
+    .risk,
+    .accept {
+      display: grid;
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(13, 12, 11, .78);
+      padding: 14px;
+    }
+
+    .label {
+      color: var(--gold);
+      font-weight: 750;
+    }
+
+    .text {
+      color: var(--muted);
+    }
+
+    .map {
+      display: grid;
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(8, 7, 6, .72);
+      padding: 16px;
+    }
+
+    .wave {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) minmax(180px, .55fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .wave + .wave {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    .step {
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(231, 204, 143, .42);
+      border-radius: 999px;
+      color: var(--gold);
+      background: rgba(231, 204, 143, .08);
+      font-size: 12px;
+      font-weight: 800;
+      min-height: 34px;
+      text-transform: uppercase;
+    }
+
+    .wave-body,
+    .wave-outcome {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .wave-outcome {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .deliverables {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .deliverables li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(13, 12, 11, .78);
+      padding: 13px 14px;
+      color: var(--muted);
+    }
+
+    .deliverables strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 3px;
+    }
+
+    .risk {
+      grid-template-columns: 92px minmax(0, 1fr);
+    }
+
+    .risk.high .label { color: var(--red); }
+    .risk.medium .label { color: var(--gold); }
+    .risk.low .label { color: var(--blue); }
+
+    .accept {
+      grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .num {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(231, 204, 143, .42);
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .review {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .approval {
+      border: 1px solid rgba(231, 204, 143, .45);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(231, 204, 143, .11), rgba(13, 12, 11, .82));
+      padding: 18px;
+    }
+
+    .approval p {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        width: min(100% - 28px, 1040px);
+        padding: 24px 0 48px;
+      }
+
+      .hero { padding: 22px; }
+      h1 { font-size: 34px; }
+      h2 { margin-top: 34px; }
+
+      .change,
+      .risk,
+      .accept,
+      .wave {
+        grid-template-columns: 1fr;
+      }
+
+      .deliverables {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="meta">
+        <span>Aguardando aprovação</span>
+        <span>Android + MacHost</span>
+        <span>2026-07-01</span>
+      </div>
+      <h1>Sidebar remota e seleção de monitor</h1>
+      <p class="summary">Trocar o botão flutuante por uma sidebar mínima no Android e permitir escolher qual monitor real do Mac será transmitido no modo Remote Desktop.</p>
+      <div class="decision">
+        <strong>Decisão:</strong> usar uma side sheet custom no Android, não um drawer genérico. A lista de monitores vem do MacHost, e a troca reinicia captura/encoder com novo display config e keyframe, sem depender da janela de Settings do Mac.
+      </div>
+    </section>
+
+    <h2>O Que Muda</h2>
+    <ul class="change-list">
+      <li class="change">
+        <span class="label">Antes</span>
+        <span class="text">Durante a sessão aparece um botão de settings flutuante; Remote Desktop sempre captura a tela principal do Mac.</span>
+      </li>
+      <li class="change">
+        <span class="label">Depois</span>
+        <span class="text">A sessão mostra só uma aba lateral discreta. A sidebar abre controles de input/overlay e um seletor de monitores reais do Mac.</span>
+      </li>
+      <li class="change">
+        <span class="label">Fora do escopo</span>
+        <span class="text">Não mexer no core de encoder, não trocar TCP por QUIC e não redesenhar todo onboarding wireless agora.</span>
+      </li>
+    </ul>
+
+    <h2>Mapa do Plano</h2>
+    <div class="map" aria-label="Mapa das waves">
+      <div class="wave">
+        <div class="step">Wave 1</div>
+        <div class="wave-body">
+          <h3>Mac sabe listar telas</h3>
+          <p>Criar catálogo de displays reais e persistir a tela escolhida para Remote Desktop.</p>
+        </div>
+        <div class="wave-outcome"><strong>Resultado:</strong> Remote Desktop deixa de ser preso à tela principal.</div>
+      </div>
+      <div class="wave">
+        <div class="step">Wave 2</div>
+        <div class="wave-body">
+          <h3>Protocolo pequeno</h3>
+          <p>Android anuncia suporte, recebe lista de displays e pede troca pelo canal controlado.</p>
+        </div>
+        <div class="wave-outcome"><strong>Resultado:</strong> cliente antigo não quebra; cliente novo consegue pedir seleção.</div>
+      </div>
+      <div class="wave">
+        <div class="step">Wave 3</div>
+        <div class="wave-body">
+          <h3>Troca segura</h3>
+          <p>Mac libera input, troca captura, reenvia display config e força keyframe.</p>
+        </div>
+        <div class="wave-outcome"><strong>Resultado:</strong> imagem muda sem tecla presa e sem tela preta persistente.</div>
+      </div>
+      <div class="wave">
+        <div class="step">Wave 4</div>
+        <div class="wave-body">
+          <h3>Sidebar Android</h3>
+          <p>Substituir o botão por handle lateral e migrar os controles de sessão.</p>
+        </div>
+        <div class="wave-outcome"><strong>Resultado:</strong> UI mínima, lado configurável e controles mais próximos do uso real.</div>
+      </div>
+    </div>
+
+    <h2>Entregáveis</h2>
+    <ul class="deliverables">
+      <li><strong>Handle lateral</strong>Aba discreta à esquerda ou direita durante a sessão.</li>
+      <li><strong>Sidebar de sessão</strong>Stats, input overlay, mouse, scroll, meta key e disconnect.</li>
+      <li><strong>Seletor de monitor</strong>Lista de displays reais do Mac com estado selecionado/indisponível.</li>
+      <li><strong>Troca sem caos</strong>Release de input, novo display config e keyframe forçado.</li>
+    </ul>
+
+    <h2>Riscos Que Importam</h2>
+    <ul class="risk-list">
+      <li class="risk high">
+        <span class="label">Alto</span>
+        <span class="text"><strong>Stream desalinhado na troca.</strong><br>Mitigar com novo display config, recriação do decoder quando tamanho mudar e keyframe forçado.</span>
+      </li>
+      <li class="risk medium">
+        <span class="label">Médio</span>
+        <span class="text"><strong>Sidebar roubando controle remoto.</strong><br>Mitigar com handle estreito, lado configurável e pointer capture liberado só enquanto a sidebar estiver aberta.</span>
+      </li>
+      <li class="risk low">
+        <span class="label">Atenção</span>
+        <span class="text"><strong>Compatibilidade cliente antigo.</strong><br>Servidor só envia mensagens novas depois de capability explícita do Android.</span>
+      </li>
+    </ul>
+
+    <h2>Critérios de Aceite</h2>
+    <ol class="accept-list">
+      <li class="accept">
+        <span class="num">1</span>
+        <span class="text">Durante uma sessão, só a aba lateral fica visível; o botão flutuante antigo não aparece.</span>
+      </li>
+      <li class="accept">
+        <span class="num">2</span>
+        <span class="text">A sidebar permite escolher entre monitores reais do Mac sem abrir Settings no Mac.</span>
+      </li>
+      <li class="accept">
+        <span class="num">3</span>
+        <span class="text">Trocar monitor não deixa mouse/teclado presos e atualiza a imagem no Android.</span>
+      </li>
+      <li class="accept">
+        <span class="num">4</span>
+        <span class="text">Extended Display, USB, LAN e Tailnet continuam funcionando.</span>
+      </li>
+    </ol>
+
+    <h2>Revisão Crítica</h2>
+    <div class="review">
+      <p>Foram encontrados três riscos altos que mudaram a rota: capability para não quebrar clientes antigos, release explícito de input antes de trocar display e cuidado com pointer capture/gestos de borda na sidebar. O plano já incorpora esses ajustes.</p>
+    </div>
+
+    <h2>Aprovação</h2>
+    <div class="approval">
+      <p>Nada será implementado até aprovação explícita deste plano.</p>
+    </div>
+  </main>
+</body>
+</html>

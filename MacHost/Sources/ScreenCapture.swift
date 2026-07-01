@@ -557,6 +557,61 @@ class ScreenCapture {
         encoder?.updateSettings(bitrateMbps: bitrateMbps, quality: quality, gamingBoost: gamingBoost)
     }
 
+    func switchDisplay(to source: DisplaySource, refreshRate: Int) async throws {
+        debugLog("Switching capture display to \(source.diagnosticKind) \(source.title) (ID: \(source.displayID))")
+        stopFrameMonitor()
+        streamOutput?.onFrameReceived = nil
+        try? await stream?.stopCapture()
+        stream = nil
+        streamOutput = nil
+        streamDelegate = nil
+        display = nil
+
+        let wasFallback = stateLock.withLock { state -> Bool in
+            let active = state.fallbackActive
+            state.fallbackActive = false
+            state.lastFrameTime = nil
+            state.hasReceivedFirstFrame = false
+            return active
+        }
+        if wasFallback {
+            cgDisplayStream?.stop()
+            cgDisplayStream = nil
+            debugLog("Stopped CGDisplayStream fallback before display switch")
+        }
+
+        captureDisplayID = source.displayID
+        self.refreshRate = refreshRate
+        lastPixelBuffer = nil
+        restartAttempted = false
+
+        try await setupDisplay(label: source.diagnosticKind)
+        try await setupStream()
+
+        if encoder != nil {
+            let (width, height) = encodeSize(for: codec)
+            let server = currentServer
+            let newEncoder = VideoEncoder(
+                width: width,
+                height: height,
+                codec: codec,
+                bitrateMbps: currentBitrateMbps,
+                quality: currentQuality,
+                gamingBoost: currentGamingBoost,
+                frameRate: currentFrameRate
+            )
+            newEncoder.onEncodedFrame = { [weak server] data, timestamp, isKeyframe in
+                server?.sendFrame(data, timestamp: timestamp, isKeyframe: isKeyframe)
+            }
+            newEncoder.requestKeyframe()
+            encoder = newEncoder
+            configureFrameHandler(label: "displaySwitch")
+            try await stream?.startCapture()
+            debugLog("SCStream capture restarted after display switch")
+            startFrameMonitor()
+        }
+    }
+
     /// Switch the wire codec. No-op when unchanged. When changed mid-stream,
     /// rebuilds the encoder at the codec's encode size and restarts capture so
     /// SCStream delivers buffers at the (possibly clamped) dimensions. The

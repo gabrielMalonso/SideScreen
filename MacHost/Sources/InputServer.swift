@@ -85,6 +85,12 @@ final class InputServer {
         }
     }
 
+    func releaseAll(reason: String) {
+        runOnQueueSync {
+            backend.releaseAll(reason: reason)
+        }
+    }
+
     private func handleConnection(_ conn: NWConnection) {
         debugLog("InputServer incoming connection")
         conn.stateUpdateHandler = { [weak self, weak conn] state in

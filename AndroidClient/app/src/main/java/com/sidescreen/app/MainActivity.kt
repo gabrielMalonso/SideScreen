@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -28,6 +29,7 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -76,6 +78,10 @@ class MainActivity : AppCompatActivity() {
     private var wirelessReconnectAttempts = 0
     private var userRequestedDisconnect = false
     private var lastWirelessTarget: WirelessConnectionTarget? = null
+    private var remoteDisplays: List<RemoteDisplay> = emptyList()
+    private var selectedRemoteDisplayId: Long? = null
+    private var pendingRemoteDisplayId: Long? = null
+    private var settingsSidebarOpen = false
 
     // For dragging stats overlay
     private var isDraggingOverlay = false
@@ -141,9 +147,9 @@ class MainActivity : AppCompatActivity() {
         setupSurface()
         setupUI()
         setupDraggableOverlay()
-        setupSettingsButton()
+        setupSettingsSidebar()
         restoreOverlayPosition()
-        restoreSettingsButtonPosition()
+        updateSettingsSidebarSide(prefs.settingsSidebarSide)
         startChecklistUpdates()
         setupModeToggle()
         setupWirelessController()
@@ -520,6 +526,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
     private fun setupDraggableOverlay() {
         binding.statusBar.setOnTouchListener { view, event ->
@@ -843,18 +851,97 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSettingsButtonOpacity(opacity: Float) {
         binding.settingsButton.alpha = opacity
+        binding.settingsSidebarHandle.alpha = opacity
     }
 
-    private fun setupSettingsButton() {
-        // Simple click to show settings dialog
-        // Position can be changed via corner buttons in settings
-        binding.settingsButton.setOnClickListener {
-            showSettingsDialog()
+    private fun setupSettingsSidebar() {
+        binding.settingsButton.visibility = View.GONE
+        binding.settingsSidebarHandle.setOnClickListener { openSettingsSidebar() }
+        binding.settingsSidebarCloseButton.setOnClickListener { closeSettingsSidebar() }
+        binding.disconnectSettingsButton.setOnClickListener {
+            closeSettingsSidebar()
+            disconnect()
         }
-    }
 
-    private fun restoreSettingsButtonPosition() {
-        updateSettingsButtonPosition(prefs.settingsButtonCorner)
+        binding.showStatsSwitch.isChecked = prefs.showStatsOverlay
+        binding.showInputOverlaySwitch.isChecked = prefs.showInputOverlay
+        binding.opacitySlider.value = prefs.overlayOpacity
+        binding.opacityValue.text = "${(prefs.overlayOpacity * 100).toInt()}%"
+        binding.mouseSensitivitySlider.value = prefs.mouseSensitivity
+        binding.mouseSensitivityValue.text =
+            getString(R.string.settings_sidebar_multiplier_value, getString(R.string.settings_sidebar_pointer), prefs.mouseSensitivity)
+        binding.scrollSensitivitySlider.value = prefs.scrollSensitivity
+        binding.scrollSensitivityValue.text =
+            getString(R.string.settings_sidebar_multiplier_value, getString(R.string.settings_sidebar_scroll), prefs.scrollSensitivity)
+        binding.naturalScrollSwitch.isChecked = prefs.naturalScroll
+
+        binding.showStatsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.showStatsOverlay = isChecked
+            updateOverlayVisibility(isChecked)
+        }
+        binding.showInputOverlaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.showInputOverlay = isChecked
+            updateInputOverlayVisibility()
+        }
+        binding.opacitySlider.addOnChangeListener { _, value, _ ->
+            prefs.overlayOpacity = value
+            updateOverlayOpacity(value)
+            updateSettingsButtonOpacity(value)
+            binding.opacityValue.text = "${(value * 100).toInt()}%"
+        }
+        binding.mouseSensitivitySlider.addOnChangeListener { _, value, _ ->
+            prefs.mouseSensitivity = value
+            binding.mouseSensitivityValue.text =
+                getString(R.string.settings_sidebar_multiplier_value, getString(R.string.settings_sidebar_pointer), value)
+        }
+        binding.scrollSensitivitySlider.addOnChangeListener { _, value, _ ->
+            prefs.scrollSensitivity = value
+            binding.scrollSensitivityValue.text =
+                getString(R.string.settings_sidebar_multiplier_value, getString(R.string.settings_sidebar_scroll), value)
+        }
+        binding.naturalScrollSwitch.setOnCheckedChangeListener { _, isChecked ->
+            prefs.naturalScroll = isChecked
+        }
+
+        fun updateMetaMappingSelection(selected: MetaKeyMapping) {
+            listOf(
+                MetaKeyMapping.COMMAND to binding.metaMapCommand,
+                MetaKeyMapping.OPTION to binding.metaMapOption,
+                MetaKeyMapping.CONTROL to binding.metaMapControl,
+                MetaKeyMapping.OFF to binding.metaMapOff,
+            ).forEach { (mapping, button) ->
+                button.backgroundTintList =
+                    if (mapping == selected) {
+                        ColorStateList.valueOf(0x334CAF50)
+                    } else {
+                        null
+                    }
+            }
+        }
+        updateMetaMappingSelection(prefs.metaKeyMapping)
+        listOf(
+            MetaKeyMapping.COMMAND to binding.metaMapCommand,
+            MetaKeyMapping.OPTION to binding.metaMapOption,
+            MetaKeyMapping.CONTROL to binding.metaMapControl,
+            MetaKeyMapping.OFF to binding.metaMapOff,
+        ).forEach { (mapping, button) ->
+            button.setOnClickListener {
+                prefs.metaKeyMapping = mapping
+                updateMetaMappingSelection(mapping)
+            }
+        }
+
+        binding.sidebarSideLeft.setOnClickListener {
+            prefs.settingsSidebarSide = 0
+            updateSettingsSidebarSide(0)
+        }
+        binding.sidebarSideRight.setOnClickListener {
+            prefs.settingsSidebarSide = 1
+            updateSettingsSidebarSide(1)
+        }
+
+        updateSettingsSidebarSide(prefs.settingsSidebarSide)
+        renderRemoteDisplays()
     }
 
     /**
@@ -976,6 +1063,115 @@ class MainActivity : AppCompatActivity() {
         constraintSet.applyTo(constraintLayout)
     }
 
+    private fun updateSettingsSidebarSide(side: Int) {
+        val normalizedSide = side.coerceIn(0, 1)
+        val constraintLayout = binding.root
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(constraintLayout)
+        val handleId = binding.settingsSidebarHandle.id
+        val sidebarId = binding.settingsSidebar.id
+        val margin = dp(12)
+        binding.settingsSidebar.layoutParams =
+            binding.settingsSidebar.layoutParams.apply {
+                width = (resources.displayMetrics.widthPixels - margin * 2)
+                    .coerceAtMost(dp(360))
+                    .coerceAtLeast(dp(240))
+            }
+
+        listOf(handleId, sidebarId).forEach { id ->
+            constraintSet.clear(id, ConstraintSet.START)
+            constraintSet.clear(id, ConstraintSet.END)
+        }
+        if (normalizedSide == 0) {
+            constraintSet.connect(handleId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, margin)
+            constraintSet.connect(sidebarId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, margin)
+            binding.settingsSidebarHandleLabel.text = "›"
+        } else {
+            constraintSet.connect(handleId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END, margin)
+            constraintSet.connect(sidebarId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END, margin)
+            binding.settingsSidebarHandleLabel.text = "‹"
+        }
+        constraintSet.applyTo(constraintLayout)
+        binding.sidebarSideLeft.backgroundTintList =
+            if (normalizedSide == 0) ColorStateList.valueOf(0x334CAF50) else null
+        binding.sidebarSideRight.backgroundTintList =
+            if (normalizedSide == 1) ColorStateList.valueOf(0x334CAF50) else null
+    }
+
+    private fun openSettingsSidebar() {
+        if (!isConnected) return
+        settingsSidebarOpen = true
+        releasePointerCaptureForLocalUse()
+        binding.settingsSidebar.visibility = View.VISIBLE
+        binding.settingsSidebarHandle.visibility = View.GONE
+        streamClient?.requestDisplayList()
+        renderRemoteDisplays()
+    }
+
+    private fun closeSettingsSidebar() {
+        settingsSidebarOpen = false
+        binding.settingsSidebar.visibility = View.GONE
+        binding.settingsSidebarHandle.visibility = if (isConnected) View.VISIBLE else View.GONE
+        requestPointerCaptureIfInputActive()
+    }
+
+    private fun renderRemoteDisplays() {
+        binding.remoteDisplayList.removeAllViews()
+        val pending = pendingRemoteDisplayId
+        val selected = selectedRemoteDisplayId
+        if (remoteDisplays.isEmpty()) {
+            binding.remoteDisplayStatusText.text = getString(R.string.settings_sidebar_display_waiting)
+            return
+        }
+        binding.remoteDisplayStatusText.text =
+            if (pending != null) {
+                getString(R.string.settings_sidebar_display_switching)
+            } else {
+                val currentName =
+                    remoteDisplays.firstOrNull { it.id == selected }?.name
+                        ?: getString(R.string.settings_sidebar_display_unknown)
+                getString(R.string.settings_sidebar_display_current, currentName)
+            }
+        remoteDisplays.forEach { display ->
+            val button =
+                MaterialButton(this).apply {
+                    layoutParams =
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            dp(48),
+                        ).also { params ->
+                            params.setMargins(0, 0, 0, dp(6))
+                        }
+                    text =
+                        buildString {
+                            append(display.label)
+                            if (display.isMain) append(" · ${getString(R.string.settings_sidebar_display_main)}")
+                            if (display.id == selected) append(" · ${getString(R.string.settings_sidebar_display_selected)}")
+                            if (display.id == pending) append(" · ${getString(R.string.settings_sidebar_display_switching_short)}")
+                        }
+                    textAlignment = View.TEXT_ALIGNMENT_TEXT_START
+                    isAllCaps = false
+                    setTextColor(Color.WHITE)
+                    strokeColor = ColorStateList.valueOf(0x664CAF50)
+                    cornerRadius = dp(10)
+                    backgroundTintList =
+                        if (display.id == selected) {
+                            ColorStateList.valueOf(0x334CAF50)
+                        } else {
+                            ColorStateList.valueOf(0x1AFFFFFF)
+                        }
+                    isEnabled = pending == null || pending == display.id
+                    setOnClickListener {
+                        if (display.id == selected || pendingRemoteDisplayId != null) return@setOnClickListener
+                        pendingRemoteDisplayId = display.id
+                        renderRemoteDisplays()
+                        streamClient?.selectDisplay(display.id)
+                    }
+                }
+            binding.remoteDisplayList.addView(button)
+        }
+    }
+
     /**
      * Display config from a new Mac always arrives AFTER codecSelected, so a
      * missing negotiation at this point proves the Mac app predates H.264
@@ -1090,9 +1286,11 @@ class MainActivity : AppCompatActivity() {
                     stopChecklistUpdates()
                     enableFullscreenMode()
                     binding.settingsPanel.visibility = View.GONE
-                    binding.settingsButton.visibility = View.VISIBLE
+                    binding.settingsButton.visibility = View.GONE
+                    binding.settingsSidebarHandle.visibility = View.VISIBLE
+                    binding.settingsSidebar.visibility = View.GONE
+                    updateSettingsSidebarSide(prefs.settingsSidebarSide)
                     updateInputOverlayVisibility()
-                    restoreSettingsButtonPosition()
                     updateOverlayVisibility(prefs.showStatsOverlay)
                     // For wireless mode, transition controller to CONNECTED here —
                     // not in MainActivity.connectWireless's coroutine after the
@@ -1114,6 +1312,9 @@ class MainActivity : AppCompatActivity() {
                     resetOrientationToSensor()
                     binding.settingsPanel.visibility = View.VISIBLE
                     binding.settingsButton.visibility = View.GONE
+                    binding.settingsSidebarHandle.visibility = View.GONE
+                    binding.settingsSidebar.visibility = View.GONE
+                    settingsSidebarOpen = false
                     binding.inputCaptureBar.visibility = View.GONE
                     binding.statusBar.visibility = View.GONE
                     val mode = prefs.connectionMode
@@ -1170,6 +1371,39 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 binding.fpsText.text = String.format("%.1f", fps)
                 binding.bitrateText.text = String.format("%.1f Mbps", mbps)
+            }
+        }
+
+        streamClient?.onDisplayControlMessage = { message ->
+            runOnUiThread {
+                when (message) {
+                    is DisplayControlMessage.DisplayList -> {
+                        remoteDisplays = message.displays
+                        selectedRemoteDisplayId = message.selectedDisplayId
+                        if (pendingRemoteDisplayId == selectedRemoteDisplayId) {
+                            pendingRemoteDisplayId = null
+                        }
+                        renderRemoteDisplays()
+                    }
+                    is DisplayControlMessage.SelectDisplayResult -> {
+                        if (message.ok) {
+                            selectedRemoteDisplayId = message.displayId
+                        } else {
+                            Toast.makeText(
+                                this,
+                                message.message ?: getString(R.string.settings_sidebar_display_switch_failed),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                        pendingRemoteDisplayId = null
+                        renderRemoteDisplays()
+                        streamClient?.requestDisplayList()
+                    }
+                    DisplayControlMessage.RequestDisplayList,
+                    is DisplayControlMessage.SelectDisplay -> {
+                        // Client-originated messages should not come back from the host.
+                    }
+                }
             }
         }
     }
@@ -1554,6 +1788,7 @@ class MainActivity : AppCompatActivity() {
             updatePointerCaptureUi(false)
             return
         }
+        if (settingsSidebarOpen) return
         if (!isConnected || inputClient?.isConnected != true) return
         binding.surfaceView.post {
             if (!isConnected || inputClient?.isConnected != true) return@post
