@@ -83,9 +83,11 @@ Use your tablet's touchscreen to interact with macOS. Touch prediction compensat
 Remote input needs one of these Mac paths:
 
 - **Accessibility granted** for the CGEvent backend
-- **Virtual HID ready** for the privileged helper path
+- **Virtual HID ready** for the privileged helper path, verified by a live helper/Karabiner probe
 
-Streaming video still works without Accessibility; touch, mouse, and keyboard control do not.
+Virtual HID is the preferred path for hardware-like keyboard and mouse input, including Command shortcuts that macOS apps expect from real HID devices. It currently targets keyboard usage page `0x07`, relative mouse movement, wheel, and mouse buttons captured by Android. Unicode text such as acentos, emoji, and composed characters uses the separate `TextCommit` path, which can still depend on CGEvent/Accessibility.
+
+Streaming video still works without Accessibility. Remote input needs Virtual HID or CGEvent; Unicode text commit may still need Accessibility even when basic Virtual HID keyboard/mouse is healthy.
 
 ### HiDPI (Retina) Support
 
@@ -183,6 +185,7 @@ Before a real daily-driver run or release candidate, run:
 ```
 
 It checks shell scripts, local toolchains, Mac signing, APK/DMG artifacts, ADB, Tailnet, and the automated Mac/Android tests. Dev warnings mean something still needs a human/device check.
+For Virtual HID, preflight can verify the helper is bundled and reports whether the installed helper socket is present. Real approval still needs manual QA with the helper installed, Karabiner running, and Android connected.
 
 For distribution, use the stricter profile:
 
@@ -377,8 +380,9 @@ Grant Screen Recording permission: **System Preferences → Privacy & Security �
 <details>
 <summary><strong>Touch or keyboard input does nothing</strong></summary>
 
-- In the Mac app, check **Status → Accessibility**. If it says **Required for touch**, click **Open Accessibility Settings** and enable Side Screen.
-- If using Virtual HID, check **Remote Input → Virtual HID**. It should say **Ready** or **Ready via helper**.
+- In the Mac app, check **Remote Input → Active backend**. If it says **CGEvent fallback**, read the fallback reason before chasing random settings.
+- If using Virtual HID, check **Remote Input → Virtual HID**. It should say **Ready** or **Ready via helper** after a live status probe, not merely because a socket file exists.
+- For accents, emoji, and pasted Unicode text, check **Status → Accessibility** too. That path is `TextCommit`, not pure HID.
 - Click **Copy Diagnostics** on both Mac and Android before debugging; stuck input without diagnostics is just guessing in a trench coat.
 </details>
 

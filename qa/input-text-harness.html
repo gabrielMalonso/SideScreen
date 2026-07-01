@@ -489,12 +489,15 @@
       { id: "letters-numbers", label: "Teclado: A-Z e números" },
       { id: "modifiers", label: "Teclado: Shift, Control, Option/Alt, Command/Meta" },
       { id: "control-keys", label: "Teclado: Enter, Escape, Tab, Backspace, Delete e setas" },
-      { id: "accents-dead-keys", label: "Teclado: acentos/dead keys ou TextCommit" },
+      { id: "accents-dead-keys", label: "Teclado: acentos/dead keys via TextCommit/Unicode" },
+      { id: "logitech-shortcuts", label: "Logitech/macOS: atalhos baseados em teclado ou mouse HID" },
       { id: "relative-move", label: "Mouse: movimento relativo" },
-      { id: "buttons", label: "Mouse: botões esquerdo, direito e meio" },
+      { id: "buttons", label: "Mouse: botões esquerdo, direito, meio, voltar e avançar quando capturados" },
       { id: "drag", label: "Mouse: drag inicia, move e solta" },
       { id: "scroll", label: "Mouse: scroll vertical e horizontal quando houver" },
-      { id: "all-inputs-up", label: "Perda de foco/rede/captura solta todos os inputs" }
+      { id: "all-inputs-up", label: "Perda de foco/rede/captura solta todos os inputs" },
+      { id: "helper-restart-release", label: "Virtual HID: restart/falha do helper não deixa tecla ou botão preso" },
+      { id: "karabiner-stopped-fallback", label: "Virtual HID: Karabiner parado mostra fallback/falha explícita" }
     ];
 
     function createCase(testCase) {

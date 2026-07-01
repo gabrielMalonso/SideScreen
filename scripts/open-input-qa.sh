@@ -171,17 +171,20 @@ cat > "$CHECKLIST_JSON" <<EOF
     { "id": "letters-numbers", "label": "A-Z and numbers", "status": "pending" },
     { "id": "modifiers", "label": "Shift, Control, Option/Alt, Command/Meta", "status": "pending" },
     { "id": "control-keys", "label": "Enter, Escape, Tab, Backspace, Delete, arrows", "status": "pending" },
-    { "id": "accents-dead-keys", "label": "Accents/dead keys or TextCommit path", "status": "pending" },
+    { "id": "accents-dead-keys", "label": "Accents/dead keys via TextCommit/Unicode path", "status": "pending" },
     { "id": "shortcuts", "label": "Command+C, Command+V, Command+A, Command+Tab", "status": "pending" },
+    { "id": "logitech-shortcuts", "label": "Logitech/macOS shortcuts based on keyboard or mouse HID", "status": "pending" },
     { "id": "no-stuck-keys", "label": "No stuck keys after focus/network loss", "status": "pending" }
   ],
   "mouseChecks": [
     { "id": "relative-move", "label": "Relative pointer movement", "status": "pending" },
-    { "id": "buttons", "label": "Left, right, and middle buttons", "status": "pending" },
+    { "id": "buttons", "label": "Left, right, middle, back, and forward buttons when captured", "status": "pending" },
     { "id": "drag", "label": "Drag starts, moves, and releases", "status": "pending" },
     { "id": "scroll-vertical", "label": "Vertical scroll", "status": "pending" },
     { "id": "scroll-horizontal", "label": "Horizontal scroll when hardware supports it", "status": "pending" },
-    { "id": "capture-loss-release", "label": "Pointer capture loss sends AllInputsUp", "status": "pending" }
+    { "id": "capture-loss-release", "label": "Pointer capture loss sends AllInputsUp", "status": "pending" },
+    { "id": "helper-restart-release", "label": "Helper restart/failure does not leave keys or buttons stuck", "status": "pending" },
+    { "id": "karabiner-stopped-fallback", "label": "Karabiner stopped shows explicit fallback or failure reason", "status": "pending" }
   ],
   "textReportExpected": "Attach sidescreen-input-qa-*.json downloaded from the harness. It stores lengths, mismatch index, shortcut IDs, and manual check states, not typed text."
 }

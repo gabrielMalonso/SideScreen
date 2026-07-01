@@ -79,6 +79,8 @@ required = [
     "Command+C",
     "Command+V",
     "Command+A",
+    "TextCommit",
+    "Logitech",
     "downloadReport",
     "backend-select",
     "transport-select",

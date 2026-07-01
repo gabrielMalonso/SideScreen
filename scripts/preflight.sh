@@ -167,6 +167,32 @@ if [ -d "$ROOT_DIR/SideScreen.app" ]; then
     else
         warn "Virtual HID helper missing from app bundle; remote input will fall back to CGEvent"
     fi
+    HELPER_SOCKET="/tmp/sidescreen-virtualhid-$(id -u).sock"
+    if [ -S "$HELPER_SOCKET" ]; then
+        run_check "Virtual HID helper live status probe" python3 - "$HELPER_SOCKET" <<'PY'
+import socket
+import struct
+import sys
+
+path = sys.argv[1]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(1.0)
+sock.connect(path)
+sock.sendall(b"SSHV" + bytes([1, 5]) + struct.pack(">H", 0))
+response = sock.recv(11)
+if len(response) != 11 or response[:4] != b"SSHR":
+    raise SystemExit("invalid helper status response")
+status = response[4]
+helper_version = struct.unpack(">H", response[6:8])[0]
+karabiner_protocol = struct.unpack(">H", response[8:10])[0]
+upstream = response[10] == 1
+if status != 0 or not upstream:
+    raise SystemExit(f"helper responded but Karabiner upstream is unavailable: status={status}")
+print(f"helper v{helper_version}, Karabiner protocol {karabiner_protocol}, upstream ok")
+PY
+    else
+        warn "Virtual HID helper socket not present; install/restart helper before Virtual HID QA"
+    fi
 else
     distribution_issue "SideScreen.app missing; run ./scripts/build_mac.sh --release for distribution"
 fi

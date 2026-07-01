@@ -930,7 +930,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             settings.activeInputBackend = inputSelection.activeBackend.title
             if let fallbackReason = inputSelection.fallbackReason, !fallbackReason.isEmpty {
                 settings.activeInputBackend += " fallback"
-                settings.inputLastReleaseReason = fallbackReason
             }
             settings.virtualHIDStatus = inputSelection.status.title
             settings.virtualHIDStatusDetail = inputSelection.status.detail

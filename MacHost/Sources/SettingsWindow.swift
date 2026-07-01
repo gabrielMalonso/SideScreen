@@ -557,7 +557,7 @@ struct SettingsView: View {
                                 StatusRow(
                                     title: "Active backend",
                                     status: settings.activeInputBackend,
-                                    color: settings.activeInputBackend == "CGEvent" ? .orange : .green,
+                                    color: settings.activeInputBackend.contains("CGEvent") ? .orange : .green,
                                     hint: "Which backend is currently applying keyboard and mouse events on macOS. Virtual HID is preferred when a privileged helper is available; CGEvent is the fallback."
                                 )
                                 StatusRow(
@@ -846,9 +846,9 @@ struct SettingsView: View {
                                     hint: "macOS privacy permission required to capture the selected display. Grant in System Settings → Privacy & Security → Screen Recording."
                                 )
                                 StatusRow(title: "Accessibility",
-                                          status: settings.hasAccessibilityPermission ? "Granted" : "Required for touch",
+                                          status: settings.hasAccessibilityPermission ? "Granted" : "Required for CGEvent/TextCommit",
                                           color: settings.hasAccessibilityPermission ? .green : .orange,
-                                          hint: "Streaming works without this. Touch, mouse, and keyboard control need Accessibility when Side Screen is using the CGEvent backend. Virtual HID can avoid it once its helper is ready.")
+                                          hint: "Streaming works without this. CGEvent input and Unicode TextCommit need Accessibility. Basic Virtual HID keyboard and mouse input can avoid it when the helper is healthy.")
                                 HStack(spacing: 8) {
                                     Spacer()
                                     Button(action: { settings.onCopyDiagnostics?() }) {
