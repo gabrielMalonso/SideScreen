@@ -195,11 +195,6 @@ class ScreenCapture {
         try await setupStream()
     }
 
-    /// Setup screen capture for a specific virtual display.
-    func setupForVirtualDisplay(_ displayID: CGDirectDisplayID, refreshRate: Int = 60) async throws {
-        try await setupForDisplay(displayID, refreshRate: refreshRate, label: "virtualDisplay")
-    }
-
     // MARK: - SCShareableContent with timeout
 
     private func getShareableContentWithTimeout(seconds: Int = 10) async throws -> SCShareableContent {

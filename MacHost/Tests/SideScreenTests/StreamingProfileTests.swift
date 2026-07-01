@@ -18,11 +18,9 @@ final class StreamingProfileTests: XCTestCase {
         settings.applyStreamingProfile(.lowBandwidth)
 
         XCTAssertEqual(settings.streamingProfile, .lowBandwidth)
-        XCTAssertEqual(settings.resolution, "1280x800")
         XCTAssertEqual(settings.refreshRate, 30)
         XCTAssertEqual(settings.bitrate, 60)
         XCTAssertEqual(settings.quality, "low")
-        XCTAssertFalse(settings.hiDPI)
         XCTAssertFalse(settings.gamingBoost)
     }
 
@@ -32,11 +30,9 @@ final class StreamingProfileTests: XCTestCase {
         settings.applyStreamingProfile(.quality)
 
         XCTAssertEqual(settings.streamingProfile, .quality)
-        XCTAssertEqual(settings.resolution, "2560x1600")
         XCTAssertEqual(settings.refreshRate, 60)
         XCTAssertEqual(settings.bitrate, 800)
         XCTAssertEqual(settings.quality, "high")
-        XCTAssertTrue(settings.hiDPI)
         XCTAssertFalse(settings.gamingBoost)
     }
 

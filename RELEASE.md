@@ -1,6 +1,6 @@
 # Release and Installation Guide
 
-Side Screen has two build profiles. Dev builds are allowed to be convenient. Distribution builds are not.
+Remote Mac has two build profiles. Dev builds are allowed to be convenient. Distribution builds are not.
 
 | Check | Dev profile | Distribution profile |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ After installing a newly signed Mac app, open it once and grant the requested pe
 
 | Permission | Why it exists |
 | --- | --- |
-| Screen Recording | Captures the virtual display for streaming |
+| Screen Recording | Captures the selected real Mac display for streaming |
 | Local Network | Lets Android reach the Mac over LAN |
 | Accessibility | Enables CGEvent touch, mouse, and keyboard fallback |
 | Input Monitoring | May be required by macOS for reliable input paths |

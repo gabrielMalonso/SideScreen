@@ -34,7 +34,7 @@ enum class EndpointMode {
                 LAN ->
                     "Check that the Mac and tablet are on the same Wi-Fi, the Mac app is running, and the firewall allows the selected port."
                 TAILNET ->
-                    "Check Tailscale on both devices, make sure Side Screen is not excluded from split tunneling, and try switching between MagicDNS and the Mac's 100.x Tailnet IP."
+                    "Check Tailscale on both devices, make sure Remote Mac is not excluded from split tunneling, and try switching between MagicDNS and the Mac's 100.x Tailnet IP."
                 MANUAL ->
                     "Check that the host and port are reachable from Android, then scan a fresh QR if the Mac settings changed."
             }

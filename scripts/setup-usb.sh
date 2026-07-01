@@ -27,8 +27,8 @@ fi
 
 echo "  ✓ Device connected ($ANDROID_SERIAL)"
 
-# Remove existing reverse for Side Screen only. Other adb forwards may belong to debuggers.
-echo "  Clearing existing Side Screen port forward..."
+# Remove existing reverse for Remote Mac only. Other adb forwards may belong to debuggers.
+echo "  Clearing existing Remote Mac port forward..."
 adb reverse --remove "tcp:$PORT" 2>/dev/null || true
 adb reverse --remove "tcp:$INPUT_PORT" 2>/dev/null || true
 sleep 0.5

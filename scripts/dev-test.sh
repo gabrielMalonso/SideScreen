@@ -14,7 +14,7 @@ INPUT_PORT=$((PORT + 1))
 ADB_AVAILABLE=0
 
 echo "======================================="
-echo "  Side Screen - Dev Test (v$VERSION)"
+echo "  Remote Mac - Dev Test (v$VERSION)"
 echo "======================================="
 echo ""
 
@@ -49,7 +49,7 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>CFBundleIdentifier</key>
     <string>com.sidescreen.app</string>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
@@ -65,9 +65,9 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
+    <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -114,7 +114,7 @@ echo ""
 echo "======================================="
 echo "  Ready to test!"
 echo "  App: $APP_DIR"
-echo "  Open Side Screen on your tablet"
+echo "  Open Remote Mac on your tablet"
 echo "======================================="
 echo ""
 read -p "Test result? [y=OK / n=failed]: " RESULT

@@ -106,7 +106,7 @@ for report_path in report_paths:
 
     data = json.loads(report_path.read_text(encoding="utf-8"))
     tool = data.get("tool")
-    if tool not in {"Side Screen Input QA", "Side Screen Input QA Checklist"}:
+    if tool not in {"Remote Mac Input QA", "Remote Mac Input QA Checklist"}:
         raise SystemExit(f"unexpected report tool in {report_path}: {tool!r}")
 
     forbidden_keys = {
@@ -133,7 +133,7 @@ for report_path in report_paths:
 
     walk(data)
 
-    if tool == "Side Screen Input QA":
+    if tool == "Remote Mac Input QA":
         context = data.get("context") or {}
         if not context.get("backend") or not context.get("keyboardLayout"):
             raise SystemExit(f"report missing backend/layout context: {report_path}")

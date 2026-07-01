@@ -73,7 +73,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-echo "🚀 Installing Side Screen..."
+echo "🚀 Installing Remote Mac..."
 echo ""
 
 if [ "$INSTALL_MAC" -eq 1 ]; then
@@ -116,9 +116,9 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleDisplayName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleIdentifier</key>
     <string>com.sidescreen.app</string>
     <key>CFBundleVersion</key>
@@ -136,9 +136,9 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
     <key>LSUIElement</key>
     <false/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
+    <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -223,7 +223,7 @@ if [ "$INSTALL_MAC" -eq 1 ]; then
 else
     echo "  1. Start the Mac app on the Mac"
 fi
-echo "  2. Open 'Side Screen' app on Android"
+echo "  2. Open 'Remote Mac' app on Android"
 echo "  3. Tap Connect or pair via Wireless"
 echo ""
 echo "💡 Troubleshooting:"

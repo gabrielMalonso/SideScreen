@@ -48,7 +48,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-echo "🚀 Starting Side Screen..."
+echo "🚀 Starting Remote Mac..."
 
 # Kill any existing instance
 pkill -x SideScreen 2>/dev/null || true
@@ -98,5 +98,5 @@ fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Open 'Side Screen' on Android and tap Connect"
+echo "Open 'Remote Mac' on Android and tap Connect"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

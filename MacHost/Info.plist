@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleIdentifier</key>
     <string>com.sidescreen.app</string>
     <key>CFBundleVersion</key>

@@ -150,11 +150,11 @@ class WirelessTabController(
         val parsed =
             PairingURL.parse(url) ?: run {
                 DiagLog.log("WT", "Invalid pairing QR returned by scanner")
-                Toast.makeText(activity, "Invalid Side Screen QR. Scan the QR shown on your Mac.", Toast.LENGTH_LONG)
+                Toast.makeText(activity, "Invalid Remote Mac QR. Scan the QR shown on your Mac.", Toast.LENGTH_LONG)
                     .show()
                 views.repairTitle.text = "Invalid QR code"
                 views.repairMessage.text =
-                    "That QR code is not a valid Side Screen pairing code. Open Side Screen on the Mac and scan the QR from the Wireless tab."
+                    "That QR code is not a valid Remote Mac pairing code. Open Remote Mac on the Mac and scan the QR from the Wireless tab."
                 updateDiagnostics(storage.load(), "Input: waiting for valid QR")
                 transition(State.REPAIR_NEEDED)
                 return
@@ -199,9 +199,9 @@ class WirelessTabController(
                 views.repairTitle.text = "Device blocked on Mac"
                 views.repairMessage.text =
                     if (cached != null) {
-                        "${cached.macName} rejected this Android device. Open SideScreen on the Mac, go to Paired Devices, and click Allow for this device."
+                        "${cached.macName} rejected this Android device. Open Remote Mac on the Mac, go to Paired Devices, and click Allow for this device."
                     } else {
-                        "The Mac rejected this Android device. Open SideScreen on the Mac and allow this device in Paired Devices."
+                        "The Mac rejected this Android device. Open Remote Mac on the Mac and allow this device in Paired Devices."
                     }
                 transition(State.REPAIR_NEEDED)
             }

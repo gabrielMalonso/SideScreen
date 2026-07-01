@@ -147,7 +147,7 @@ CHECKLIST_MD="$EVIDENCE_DIR/input-qa-checklist.md"
 
 cat > "$CHECKLIST_JSON" <<EOF
 {
-  "tool": "Side Screen Input QA Checklist",
+  "tool": "Remote Mac Input QA Checklist",
   "generatedAt": "$(json_escape "$GENERATED_AT")",
   "harness": "$(json_escape "$HARNESS")",
   "evidenceDir": "$(json_escape "$EVIDENCE_DIR")",
@@ -191,7 +191,7 @@ cat > "$CHECKLIST_JSON" <<EOF
 EOF
 
 cat > "$CHECKLIST_MD" <<EOF
-# Side Screen Input QA Checklist
+# Remote Mac Input QA Checklist
 
 | Campo | Valor |
 |---|---|
@@ -221,13 +221,13 @@ EOF
 if [ "$OPEN_HARNESS" -eq 1 ]; then
     if command -v open >/dev/null 2>&1; then
         open "$HARNESS"
-        echo "Opened Side Screen Input QA:"
+        echo "Opened Remote Mac Input QA:"
     else
         echo "open command unavailable; open the harness manually: $HARNESS" >&2
-        echo "Side Screen Input QA harness:"
+        echo "Remote Mac Input QA harness:"
     fi
 else
-    echo "Side Screen Input QA harness:"
+    echo "Remote Mac Input QA harness:"
 fi
 
 echo "  $HARNESS"
@@ -236,7 +236,7 @@ echo "Checklist written to:"
 echo "  $CHECKLIST_JSON"
 echo "  $CHECKLIST_MD"
 echo ""
-echo "Connect Side Screen, type into the page from Android, then download the JSON report into:"
+echo "Connect Remote Mac, type into the page from Android, then download the JSON report into:"
 echo "  $EVIDENCE_DIR"
 echo ""
 echo "The report records lengths, mismatch index, shortcut IDs, backend/layout metadata, and checkbox states. It must not record typed text."

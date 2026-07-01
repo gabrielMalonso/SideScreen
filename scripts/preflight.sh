@@ -105,7 +105,7 @@ print_matching_output() {
     fi
 }
 
-echo "# Side Screen Preflight"
+echo "# Remote Mac Preflight"
 echo ""
 echo "Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 echo "Root: $ROOT_DIR"

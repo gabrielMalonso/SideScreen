@@ -101,7 +101,7 @@ class QRScannerActivity : AppCompatActivity() {
         if (now - lastInvalidNoticeMs < INVALID_NOTICE_THROTTLE_MS) return
         lastInvalidNoticeMs = now
         DiagLog.log("QR", "Invalid QR detected while scanning")
-        Toast.makeText(this, "Not a Side Screen QR. Scan the QR shown on your Mac.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Not a Remote Mac QR. Scan the QR shown on your Mac.", Toast.LENGTH_SHORT).show()
     }
 
     private fun finishCanceled() {

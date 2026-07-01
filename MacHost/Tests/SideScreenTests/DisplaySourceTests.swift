@@ -13,10 +13,9 @@ final class DisplaySourceTests: XCTestCase {
         super.tearDown()
     }
 
-    func testSettingsDefaultToRemoteDesktopMode() {
+    func testSettingsDefaultToNoPinnedRemoteDisplay() {
         let settings = DisplaySettings()
 
-        XCTAssertEqual(settings.displaySourceMode, .remoteDesktop)
         XCTAssertNil(settings.selectedRemoteDisplayID)
     }
 
@@ -31,7 +30,7 @@ final class DisplaySourceTests: XCTestCase {
         XCTAssertNil(DisplaySettings().selectedRemoteDisplayID)
     }
 
-    func testExistingDisplaySourceCannotAlsoOwnVirtualDisplay() {
+    func testExistingDisplaySourceUsesPhysicalPixelsForStreamConfig() {
         let existing = ExistingDisplaySource(
             displayID: 42,
             name: "Main Display",
@@ -43,28 +42,10 @@ final class DisplaySourceTests: XCTestCase {
         )
         let source = DisplaySource.existing(existing)
 
-        XCTAssertFalse(source.isVirtual)
         XCTAssertEqual(source.displayID, 42)
         XCTAssertEqual(source.diagnosticKind, "existingDisplay")
         XCTAssertEqual(source.hevcDisplayConfigSize.width, 3840)
         XCTAssertEqual(source.hevcDisplayConfigSize.height, 2160)
-    }
-
-    func testVirtualDisplaySourceKeepsRequestedDisplayConfigSize() {
-        let virtual = VirtualDisplaySource(
-            displayID: 99,
-            requestedWidth: 1920,
-            requestedHeight: 1200,
-            hiDPI: true,
-            refreshRate: 60
-        )
-        let source = DisplaySource.virtual(virtual)
-
-        XCTAssertTrue(source.isVirtual)
-        XCTAssertEqual(source.displayID, 99)
-        XCTAssertEqual(source.diagnosticKind, "virtualDisplay")
-        XCTAssertEqual(source.hevcDisplayConfigSize.width, 1920)
-        XCTAssertEqual(source.hevcDisplayConfigSize.height, 1200)
     }
 
     func testCatalogPrefersSelectedDisplayWhenAvailable() {

@@ -135,7 +135,7 @@ write_manifest() {
     fi
 
     {
-        echo "Side Screen QA Evidence"
+        echo "Remote Mac QA Evidence"
         echo "Version: $VERSION"
         echo "Status: $run_status"
         echo "Started: $STARTED_AT"
@@ -163,7 +163,7 @@ write_manifest() {
 
     {
         echo "{"
-        echo "  \"tool\": \"Side Screen QA Evidence\","
+        echo "  \"tool\": \"Remote Mac QA Evidence\","
         echo "  \"version\": \"$(json_escape "$VERSION")\","
         echo "  \"status\": \"$(json_escape "$run_status")\","
         echo "  \"startedAt\": \"$(json_escape "$STARTED_AT")\","
@@ -193,7 +193,7 @@ write_manifest() {
 
 write_readme() {
 cat > "$OUT_DIR/README.md" <<EOF
-# Rodada de Evidências QA do Side Screen
+# Rodada de Evidências QA do Remote Mac
 
 Esta pasta é o pacote auditável de uma rodada de QA.
 
@@ -378,7 +378,7 @@ fi
 
 if command -v tailscale >/dev/null 2>&1; then
     capture "Tailscale status" "tailscale-status.txt" tailscale status
-    capture "Side Screen Tailnet diagnostics" "tailnet-diagnostics.txt" "$SCRIPT_DIR/tailnet-diagnostics.sh"
+    capture "Remote Mac Tailnet diagnostics" "tailnet-diagnostics.txt" "$SCRIPT_DIR/tailnet-diagnostics.sh"
 else
     echo "tailscale unavailable" > "$OUT_DIR/tailscale-status.txt"
 fi

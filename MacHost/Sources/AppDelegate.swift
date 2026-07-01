@@ -49,7 +49,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var streamingServer: StreamingServer?
     var inputServer: InputServer?
     var screenCapture: ScreenCapture?
-    var virtualDisplayManager: VirtualDisplayManager?
     private var activeDisplaySource: DisplaySource?
     var settings = DisplaySettings()
     var settingsWindow: SettingsWindowController?
@@ -268,17 +267,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Observer cho rotation changes - send to connected client immediately
-        settings.$rotation
-            .dropFirst()
-            .sink { [weak self] rotation in
-                guard let self = self, self.settings.isRunning else { return }
-                guard self.activeDisplaySource?.isVirtual == true else { return }
-                print("🔄 Rotation changed to \(rotation)°")
-                self.streamingServer?.updateRotation(rotation)
-            }
-            .store(in: &cancellables)
-
         // Observer cho touch enable/disable - propagate to streaming server so
         // incoming touch frames from the client are dropped early when off.
         settings.$touchEnabled
@@ -299,19 +287,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        settings.$displaySourceMode
-            .dropFirst()
-            .sink { [weak self] mode in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    guard self.settings.isRunning else { return }
-                    debugLog("Display source mode changed to \(mode.rawValue) — restarting server")
-                    self.stopServer()
-                    await self.startServer()
-                }
-            }
-            .store(in: &cancellables)
-
         settings.$inputBackendMode
             .dropFirst()
             .sink { [weak self] _ in
@@ -328,25 +303,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Resolution/HiDPI rebuild only applies to Extended Display, where the
-        // virtual display is created at server start.
-        settings.$resolution
+        settings.$refreshRate
             .dropFirst()
             .removeDuplicates()
-            .sink { [weak self] resolution in
+            .sink { [weak self] refreshRate in
                 guard let self = self else { return }
                 guard self.settings.isRunning else { return }
-                guard self.activeDisplaySource?.isVirtual == true else { return }
-                self.schedulePipelineRestart(reason: "Resolution changed to \(resolution)")
-            }
-            .store(in: &cancellables)
-
-        Publishers.CombineLatest(settings.$refreshRate, settings.$hiDPI)
-            .dropFirst()
-            .sink { [weak self] refreshRate, hiDPI in
-                guard let self = self, self.settings.isRunning else { return }
-                guard self.activeDisplaySource?.isVirtual == true else { return }
-                self.schedulePipelineRestart(reason: "Display timing changed to \(refreshRate)Hz, HiDPI=\(hiDPI)")
+                self.schedulePipelineRestart(reason: "Frame rate changed to \(refreshRate)Hz")
             }
             .store(in: &cancellables)
     }
@@ -366,7 +329,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "Side Screen")
+            button.image = NSImage(systemSymbolName: "macbook.and.iphone", accessibilityDescription: "Remote Mac")
         }
 
         let menu = NSMenu()
@@ -491,12 +454,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .map { $0.split(separator: "\n").suffix(80).joined(separator: "\n") } ?? "No log found at /tmp/sidescreen.log"
 
         return """
-        Side Screen Mac diagnostics
+        Remote Mac diagnostics
         Version: \(version)
         macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
         Mode: \(settings.connectionMode.rawValue)
         Endpoint: \(settings.endpointMode.rawValue)
-        Display source mode: \(settings.displaySourceMode.rawValue)
         Active display source: \(settings.activeDisplaySourceKind) / \(settings.activeDisplaySourceName)
         Port: \(settings.port)
         Running: \(settings.isRunning)
@@ -700,39 +662,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func makeDisplaySourceForCurrentSettings() throws -> DisplaySource {
-        switch settings.displaySourceMode {
-        case .remoteDesktop:
-            virtualDisplayManager = nil
-            let source = displaySourceCatalog.source(preferredID: settings.selectedRemoteDisplayID)
-            if settings.selectedRemoteDisplayID != source.displayID {
-                settings.selectedRemoteDisplayID = source.displayID
-            }
-            return .existing(source)
-        case .extendedDisplay:
-            virtualDisplayManager = VirtualDisplayManager()
-            let size = settings.resolutionSize
-            try virtualDisplayManager?.createDisplay(
-                width: size.width,
-                height: size.height,
-                refreshRate: settings.effectiveRefreshRate,
-                hiDPI: settings.hiDPI,
-                name: "SideScreen"
-            )
-            guard let displayID = virtualDisplayManager?.displayID else {
-                throw NSError(
-                    domain: "DisplaySource",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Virtual display was not created"]
-                )
-            }
-            return .virtual(VirtualDisplaySource(
-                displayID: displayID,
-                requestedWidth: size.width,
-                requestedHeight: size.height,
-                hiDPI: settings.hiDPI,
-                refreshRate: settings.effectiveRefreshRate
-            ))
+        let source = displaySourceCatalog.source(preferredID: settings.selectedRemoteDisplayID)
+        if settings.selectedRemoteDisplayID != source.displayID {
+            settings.selectedRemoteDisplayID = source.displayID
         }
+        return .existing(source)
     }
 
     private func displayConfigSize(
@@ -750,10 +684,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let physical = ScreenCapture.physicalSize(for: source.displayID)
             return CodecLimits.clampForAvc(width: physical.width, height: physical.height)
         }
-    }
-
-    private func displayConfigRotation(for source: DisplaySource) -> Int {
-        source.isVirtual ? settings.rotation : 0
     }
 
     private func remoteDisplayListEnvelope() -> DisplayControlEnvelope {
@@ -800,16 +730,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let existing = displaySourceCatalog.source(preferredID: displayID)
         settings.selectedRemoteDisplayID = displayID
 
-        guard settings.displaySourceMode == .remoteDesktop else {
-            streamingServer?.sendDisplayControl(.selectDisplayResult(
-                displayId: displayID,
-                status: "ok",
-                message: "Display will be used when Remote Desktop mode is active"
-            ))
-            sendRemoteDisplayList()
-            return
-        }
-
         let source = DisplaySource.existing(existing)
         guard settings.isRunning, let capture = screenCapture else {
             activeDisplaySource = source
@@ -834,7 +754,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.setDisplaySize(
                 width: configSize.width,
                 height: configSize.height,
-                rotation: displayConfigRotation(for: source)
+                rotation: 0
             )
             streamingServer?.sendDisplaySize()
             capture.requestKeyframe()
@@ -862,43 +782,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let displaySource = try makeDisplaySourceForCurrentSettings()
             activeDisplaySource = displaySource
             await MainActor.run {
-                settings.displayCreated = displaySource.isVirtual
+                settings.displayCreated = false
                 settings.activeDisplaySourceName = displaySource.title
                 settings.activeDisplaySourceKind = displaySource.diagnosticKind
             }
             debugLog("Display source selected: \(displaySource.diagnosticKind) \(displaySource.title) (ID: \(displaySource.displayID))")
 
-            if displaySource.isVirtual {
-                // Disable mirror mode (may fail if already in extend mode)
-                do {
-                    try virtualDisplayManager?.disableMirrorMode()
-                } catch {
-                    // Not critical - continue anyway
-                }
-            }
-
-            // Run ADB setup (USB only) and display init wait in parallel.
-            // For wireless mode, skip ADB entirely — the auth handshake gates LAN connections instead.
+            // Run ADB setup for USB only. Wireless/Tailnet uses the auth handshake.
             await withTaskGroup(of: Void.self) { group in
                 if settings.connectionMode == .usb {
                     group.addTask { await self.setupADBReverse() }
                 } else {
                     debugLog("Wireless mode: skipping ADB setup")
-                }
-                if displaySource.isVirtual {
-                    group.addTask { try? await Task.sleep(nanoseconds: 500_000_000) }
-                }
-            }
-
-            if displaySource.isVirtual {
-                virtualDisplayManager?.restoreDisplayPosition()
-
-                // Verify display is registered in the system
-                if let vdm = virtualDisplayManager {
-                    let registered = vdm.verifyDisplayRegistered()
-                    if !registered {
-                        debugLog("WARNING: Virtual display not found in online display list — capture may fail")
-                    }
                 }
             }
 
@@ -988,7 +883,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             streamingServer?.setDisplaySize(
                 width: initialConfigSize.width,
                 height: initialConfigSize.height,
-                rotation: displayConfigRotation(for: displaySource)
+                rotation: 0
             )
             streamingServer?.onClientConnected = { [weak self] in
                 guard let self = self else { return }
@@ -1008,7 +903,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.streamingServer?.setDisplaySize(
                     width: configSize.width,
                     height: configSize.height,
-                    rotation: self.displayConfigRotation(for: source)
+                    rotation: 0
                 )
             }
             streamingServer?.onKeyframeRequested = { [weak self] force in
@@ -1071,11 +966,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("✅ Server started on port \(settings.port), input port \(inputPort)")
         } catch {
             print("❌ Failed to start: \(error)")
-            if activeDisplaySource?.isVirtual == true {
-                virtualDisplayManager?.destroyDisplay()
-            }
             activeDisplaySource = nil
-            virtualDisplayManager = nil
             await MainActor.run {
                 settings.isRunning = false
                 settings.displayCreated = false
@@ -1092,21 +983,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func stopServer() {
-        // Save display position before destroying
-        if activeDisplaySource?.isVirtual == true {
-            virtualDisplayManager?.saveDisplayPosition()
-        }
-
         releaseLegacyTouchState(reason: "server stopped")
         screenCapture?.stopStreaming()
         inputServer?.stop()
         streamingServer?.stop()
         remoteSessionStore.clear()
-        if activeDisplaySource?.isVirtual == true {
-            virtualDisplayManager?.destroyDisplay()
-        }
         activeDisplaySource = nil
-        virtualDisplayManager = nil
         inputServer = nil
 
         settings.isRunning = false

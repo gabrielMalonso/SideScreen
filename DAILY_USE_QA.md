@@ -1,4 +1,4 @@
-# Side Screen Daily Use QA
+# Remote Mac Daily Use QA
 
 Checklist prático para provar uso diário real. Smoke curto é sinal de vida, não aprovação.
 

@@ -74,7 +74,7 @@ struct KarabinerVirtualHIDStatus {
         }
         if canUseThroughHelper {
             let version = helperStatus.map { " Helper v\($0.helperBuildVersion)." } ?? ""
-            return "SideScreen privileged helper responded and can reach Karabiner VirtualHID.\(version)"
+            return "Remote Mac privileged helper responded and can reach Karabiner VirtualHID.\(version)"
         }
         if !installed {
             return "Install Karabiner-DriverKit-VirtualHIDDevice to use hardware-like keyboard and mouse input."
@@ -83,18 +83,18 @@ struct KarabinerVirtualHIDStatus {
             return "Start Karabiner-VirtualHIDDevice-Daemon. The driver accepts input only through its daemon."
         }
         if helperSocketAvailable && helperStatus == nil {
-            return probeFailure ?? "SideScreen helper did not answer the status probe. Reinstall the helper so the app and helper speak the same protocol."
+            return probeFailure ?? "Remote Mac helper did not answer the status probe. Reinstall the helper so the app and helper speak the same protocol."
         }
         if helperSocketAvailable && helperStatus?.upstreamAvailable == false {
-            return "SideScreen helper is running, but Karabiner VirtualHID did not answer the helper probe."
+            return "Remote Mac helper is running, but Karabiner VirtualHID did not answer the helper probe."
         }
         if helperBinaryInstalled && helperLaunchDaemonInstalled {
-            return "SideScreen helper is installed but its socket is not available. Try reinstalling or restarting the helper."
+            return "Remote Mac helper is installed but its socket is not available. Try reinstalling or restarting the helper."
         }
         if !socketAvailable {
             return "The daemon socket was not found at /Library/Application Support/org.pqrs/tmp/rootonly/karabiner_virtual_hid_device_service.sock."
         }
-        return "Karabiner VirtualHID is installed, but the service socket is root-only. SideScreen is using CGEvent until a privileged Mac helper is installed."
+        return "Karabiner VirtualHID is installed, but the service socket is root-only. Remote Mac is using CGEvent until a privileged Mac helper is installed."
     }
 }
 
@@ -125,7 +125,7 @@ enum KarabinerVirtualHIDDetector {
                 liveHelperStatus = try SideScreenVirtualHIDHelperClient().status()
             } catch {
                 liveHelperStatus = nil
-                probeFailure = "SideScreen helper status probe failed: \(error)."
+                probeFailure = "Remote Mac helper status probe failed: \(error)."
             }
         } else {
             liveHelperStatus = nil
@@ -204,7 +204,7 @@ enum InputBackendFactory {
                 )
             }
             if status.canUseThroughHelper {
-                debugLog("VirtualHID helper is ready — using SideScreen VirtualHID helper")
+                debugLog("VirtualHID helper is ready — using Remote Mac VirtualHID helper")
                 return InputBackendSelection(
                     backend: virtualHIDIngress(client: SideScreenVirtualHIDHelperClient()),
                     requestedBackend: mode,
@@ -241,7 +241,7 @@ enum InputBackendFactory {
                 )
             }
             if status.canUseThroughHelper {
-                debugLog("VirtualHID requested — using SideScreen VirtualHID helper")
+                debugLog("VirtualHID requested — using Remote Mac VirtualHID helper")
                 return InputBackendSelection(
                     backend: virtualHIDIngress(client: SideScreenVirtualHIDHelperClient()),
                     requestedBackend: mode,

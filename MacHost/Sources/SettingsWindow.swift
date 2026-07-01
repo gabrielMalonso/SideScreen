@@ -108,38 +108,30 @@ enum StreamingProfile: String, Codable, CaseIterable {
             return nil
         case .productivity:
             return StreamingProfileSettings(
-                resolution: "1920x1200",
                 refreshRate: 60,
                 bitrate: 500,
                 quality: "medium",
-                hiDPI: false,
                 gamingBoost: false
             )
         case .quality:
             return StreamingProfileSettings(
-                resolution: "2560x1600",
                 refreshRate: 60,
                 bitrate: 800,
                 quality: "high",
-                hiDPI: true,
                 gamingBoost: false
             )
         case .lowLatency:
             return StreamingProfileSettings(
-                resolution: "1920x1080",
                 refreshRate: 120,
                 bitrate: 300,
                 quality: "ultralow",
-                hiDPI: false,
                 gamingBoost: false
             )
         case .lowBandwidth:
             return StreamingProfileSettings(
-                resolution: "1280x800",
                 refreshRate: 30,
                 bitrate: 60,
                 quality: "low",
-                hiDPI: false,
                 gamingBoost: false
             )
         }
@@ -147,11 +139,9 @@ enum StreamingProfile: String, Codable, CaseIterable {
 }
 
 struct StreamingProfileSettings {
-    let resolution: String
     let refreshRate: Int
     let bitrate: Int
     let quality: String
-    let hiDPI: Bool
     let gamingBoost: Bool
 }
 
@@ -162,18 +152,6 @@ struct SettingsView: View {
     @State private var showPermissionAlert = false
     @State private var showResetConfirmation = false
     @State private var headerHovered = false
-    // Plain strings for the custom resolution fields: TextField(value:format:)
-    // only commits on Return/focus-loss, so clicking Apply read stale values,
-    // and .number formatting injected locale grouping separators ("1,200").
-    @State private var customWidthText = ""
-    @State private var customHeightText = ""
-
-    private var customWidthValue: Int? { Int(customWidthText.trimmingCharacters(in: .whitespaces)) }
-    private var customHeightValue: Int? { Int(customHeightText.trimmingCharacters(in: .whitespaces)) }
-    private var customResolutionValid: Bool {
-        guard let w = customWidthValue, let h = customHeightValue else { return false }
-        return DisplaySettings.isValidCustomResolution(width: w, height: h)
-    }
 
     var body: some View {
         ZStack {
@@ -193,7 +171,7 @@ struct SettingsView: View {
                             .frame(width: 48, height: 48)
                             .shadow(color: Color.accentColor.opacity(0.3), radius: 8, y: 4)
 
-                        Image(systemName: "rectangle.on.rectangle")
+                        Image(systemName: "macbook.and.iphone")
                             .font(.system(size: 22, weight: .medium))
                             .foregroundColor(.white)
                     }
@@ -202,9 +180,9 @@ struct SettingsView: View {
                     .onHover { headerHovered = $0 }
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Side Screen")
+                        Text("Remote Mac")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                        Text("Turn your tablet into a second display")
+                        Text("Control your Mac from Android")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.secondary)
                     }
@@ -226,7 +204,7 @@ struct SettingsView: View {
                         Button("Cancel", role: .cancel) { }
                         Button("Reset", role: .destructive) {
                             settings.resetToDefaults()
-                            if let window = NSApp.windows.first(where: { $0.title == "Side Screen" }) {
+                            if let window = NSApp.windows.first(where: { $0.title == "Remote Mac" }) {
                                 window.center()
                             }
                         }
@@ -272,211 +250,20 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        // Display Configuration
-                        FrostedGroupBox(title: "Display Configuration", icon: "display") {
-                            VStack(alignment: .leading, spacing: 16) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Mode")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                    Picker("", selection: $settings.displaySourceMode) {
-                                        ForEach(DisplaySourceMode.allCases, id: \.self) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-                                    .pickerStyle(.segmented)
-                                    .disabled(settings.isRunning)
-                                }
-
-                                if settings.displaySourceMode == .extendedDisplay {
-                                // Resolution
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("Resolution")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                        Spacer()
-                                        Toggle("Show all", isOn: $settings.showAllResolutions)
-                                            .toggleStyle(.switch)
-                                            .controlSize(.mini)
-                                    }
-
-                                    ScrollView {
-                                        VStack(alignment: .leading, spacing: 0) {
-                                            if settings.showAllResolutions {
-                                                // Custom (Apply) values aren't in any preset group —
-                                                // surface them so the selection is visible in the list.
-                                                if !DisplaySettings.allResolutions.contains(settings.resolution) {
-                                                    HStack(spacing: 6) {
-                                                        Text("Custom")
-                                                            .font(.system(size: 11, weight: .semibold))
-                                                        Text("User defined")
-                                                            .font(.system(size: 10))
-                                                            .foregroundColor(.secondary)
-                                                    }
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 6)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                                    .background(Color.primary.opacity(0.03))
-
-                                                    ResolutionRow(resolution: settings.resolution, isSelected: true) {}
-                                                }
-                                                ForEach(DisplaySettings.resolutionGroups) { group in
-                                                    HStack(spacing: 6) {
-                                                        Text(group.name)
-                                                            .font(.system(size: 11, weight: .semibold))
-                                                        Text(group.ratio)
-                                                            .font(.system(size: 10))
-                                                            .foregroundColor(.secondary)
-                                                    }
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 6)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                                    .background(Color.primary.opacity(0.03))
-
-                                                    ForEach(group.resolutions, id: \.self) { res in
-                                                        ResolutionRow(resolution: res, isSelected: settings.resolution == res) {
-                                                            settings.resolution = res
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                ForEach(DisplaySettings.commonResolutions, id: \.self) { res in
-                                                    ResolutionRow(resolution: res, isSelected: settings.resolution == res) {
-                                                        settings.resolution = res
-                                                    }
-                                                }
-                                                // Current selection from the full list or a custom
-                                                // Apply — keep it visible in the compact list too.
-                                                if !DisplaySettings.commonResolutions.contains(settings.resolution) {
-                                                    ResolutionRow(resolution: settings.resolution, isSelected: true) {}
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .frame(height: settings.showAllResolutions ? 180 : 140)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                                    )
-
-                                    if settings.showAllResolutions {
-                                        HStack(spacing: 8) {
-                                            TextField("W", text: $customWidthText)
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(width: 70)
-                                            Text("x")
-                                                .foregroundColor(.secondary)
-                                            TextField("H", text: $customHeightText)
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(width: 70)
-                                            Button("Apply") {
-                                                guard customResolutionValid,
-                                                      let w = customWidthValue,
-                                                      let h = customHeightValue else { return }
-                                                settings.customWidth = w
-                                                settings.customHeight = h
-                                                settings.applyCustomResolution()
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .controlSize(.small)
-                                            .disabled(!customResolutionValid)
-                                        }
-                                        .onAppear {
-                                            customWidthText = String(settings.customWidth)
-                                            customHeightText = String(settings.customHeight)
-                                        }
-                                        if !customResolutionValid {
-                                            Text("Supported range: 640–7680 × 480–4320")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(.orange)
-                                        }
-                                    }
-                                }
-
-                                // HiDPI (Retina)
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("HiDPI (Retina)")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.secondary)
-                                        Text("Renders at 2× resolution for sharper text. Increases bandwidth.")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary.opacity(0.7))
-                                    }
-                                    Spacer()
-                                    Toggle("", isOn: $settings.hiDPI)
-                                        .toggleStyle(.switch)
-                                        .controlSize(.mini)
-                                        .disabled(settings.isRunning)
-                                }
-
-                                // Rotation
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Rotation")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-
-                                    HStack(spacing: 12) {
-                                        ZStack {
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
-                                                .frame(width: 80, height: 50)
-                                                .rotationEffect(.degrees(Double(settings.rotation)))
-
-                                            Text(settings.rotation == 90 || settings.rotation == 270 ? "Portrait" : "Landscape")
-                                                .font(.system(size: 8))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .frame(width: 100, height: 80)
-
-                                        VStack(spacing: 6) {
-                                            HStack(spacing: 6) {
-                                                RotationButton(degrees: 270, label: "270", isSelected: settings.rotation == 270) {
-                                                    settings.rotation = 270
-                                                }
-                                                RotationButton(degrees: 0, label: "0", isSelected: settings.rotation == 0) {
-                                                    settings.rotation = 0
-                                                }
-                                                RotationButton(degrees: 90, label: "90", isSelected: settings.rotation == 90) {
-                                                    settings.rotation = 90
-                                                }
-                                            }
-                                            HStack(spacing: 6) {
-                                                Spacer()
-                                                RotationButton(degrees: 180, label: "180", isSelected: settings.rotation == 180) {
-                                                    settings.rotation = 180
-                                                }
-                                                Spacer()
-                                            }
-                                        }
-                                    }
-
-                                    if settings.rotation == 90 || settings.rotation == 270 {
-                                        Text("Display will be in portrait mode")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.accentColor)
-                                    }
-
-                                    HStack {
-                                        Spacer()
-                                        Button(action: {
-                                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.displays?displayArrangement")!)
-                                        }) {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "rectangle.connected.to.line.below")
-                                                Text("Arrange Displays…")
-                                            }
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                    .padding(.top, 10)
-                                }
-                                }
-
+                        FrostedGroupBox(title: "Mac Display", icon: "display") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                StatusRow(
+                                    title: "Source",
+                                    status: settings.activeDisplaySourceName,
+                                    color: settings.activeDisplaySourceKind == "none" ? .secondary : .green,
+                                    hint: "Real Mac display currently captured for the remote desktop session."
+                                )
+                                StatusRow(
+                                    title: "Mode",
+                                    status: "Remote Desktop",
+                                    color: .green,
+                                    hint: "Captures an existing Mac display. It does not create an extra monitor."
+                                )
                             }
                         }
 
@@ -530,7 +317,7 @@ struct SettingsView: View {
                                 }
 
                                 if !settings.touchEnabled {
-                                    Text("Touch input is disabled — tablet is display-only")
+                                    Text("Remote input is disabled; video keeps streaming")
                                         .font(.system(size: 10))
                                         .foregroundColor(.orange)
                                 }
@@ -689,9 +476,9 @@ struct SettingsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
 
                                 HStack(spacing: 8) {
-                                    ProfileMetric(label: "Resolution", value: settings.resolution)
                                     ProfileMetric(label: "FPS", value: "\(settings.effectiveRefreshRate)")
                                     ProfileMetric(label: "Bitrate", value: "\(settings.effectiveBitrate) Mbps")
+                                    ProfileMetric(label: "Quality", value: settings.effectiveQuality)
                                 }
                             }
                         }
@@ -793,7 +580,7 @@ struct SettingsView: View {
                                         HStack(spacing: 4) {
                                             Image(systemName: "bolt.fill")
                                                 .font(.system(size: 10))
-                                            Text("Locked at 1000 Mbps in Gaming Boost")
+                                            Text("Locked at 50 Mbps in Gaming Boost")
                                                 .font(.system(size: 10))
                                         }
                                         .foregroundColor(.orange)
@@ -834,7 +621,7 @@ struct SettingsView: View {
                                 StatusRow(title: "Display Source",
                                           status: settings.activeDisplaySourceName,
                                           color: settings.activeDisplaySourceKind == "none" ? .secondary : .green,
-                                          hint: "Active capture source: existingDisplay for Remote Desktop, virtualDisplay for Extended Display.")
+                                          hint: "Active real Mac display captured for the remote session.")
                                 StatusRow(title: "Client Connected",
                                           status: settings.clientConnected ? "Yes" : "No",
                                           color: settings.clientConnected ? .green : .secondary,
@@ -1088,7 +875,7 @@ struct SettingsView: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .help("Quit Side Screen (⌘Q)")
+                        .help("Quit Remote Mac (⌘Q)")
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
@@ -1191,34 +978,6 @@ struct StatusRow: View {
     }
 }
 
-struct ResolutionRow: View {
-    let resolution: String
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(resolution.replacingOccurrences(of: "x", with: " x "))
-                    .font(.system(size: 12))
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor : (isHovered ? Color.primary.opacity(0.05) : Color.clear))
-            .foregroundColor(isSelected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-}
-
 struct BitrateButton: View {
     let label: String
     let value: Int
@@ -1257,48 +1016,6 @@ struct BitrateButton: View {
     }
 }
 
-struct RotationButton: View {
-    let degrees: Int
-    let label: String
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                RoundedRectangle(cornerRadius: 2)
-                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: 1)
-                    .frame(width: degrees == 90 || degrees == 270 ? 16 : 24, height: degrees == 90 || degrees == 270 ? 24 : 16)
-
-                Text("\(label)")
-                    .font(.system(size: 9))
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
-            }
-            .frame(width: 50, height: 40)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.15))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.accentColor, lineWidth: 1)
-                        }
-                } else {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                        }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-}
-
 // MARK: - Display Settings
 
 class DisplaySettings: ObservableObject {
@@ -1306,21 +1023,9 @@ class DisplaySettings: ObservableObject {
     private let keyPrefix = "SideScreen_"
     private var applyingProfile = false
 
-    @Published var resolution: String {
-        didSet {
-            save("resolution", resolution)
-            markCustomIfNeeded()
-        }
-    }
     @Published var refreshRate: Int {
         didSet {
             save("refreshRate", refreshRate)
-            markCustomIfNeeded()
-        }
-    }
-    @Published var hiDPI: Bool {
-        didSet {
-            save("hiDPI", hiDPI)
             markCustomIfNeeded()
         }
     }
@@ -1357,26 +1062,11 @@ class DisplaySettings: ObservableObject {
             save("port", Int(port))
         }
     }
-    @Published var rotation: Int {
-        didSet { save("rotation", rotation) }
-    }
-    @Published var showAllResolutions: Bool {
-        didSet { save("showAllResolutions", showAllResolutions) }
-    }
-    @Published var customWidth: Int {
-        didSet { save("customWidth", customWidth) }
-    }
-    @Published var customHeight: Int {
-        didSet { save("customHeight", customHeight) }
-    }
     @Published var touchEnabled: Bool {
         didSet { save("touchEnabled", touchEnabled) }
     }
     @Published var connectionMode: ConnectionMode {
         didSet { save("connectionMode", connectionMode.rawValue) }
-    }
-    @Published var displaySourceMode: DisplaySourceMode {
-        didSet { save("displaySourceMode", displaySourceMode.rawValue) }
     }
     @Published var selectedRemoteDisplayID: CGDirectDisplayID? {
         didSet {
@@ -1443,9 +1133,7 @@ class DisplaySettings: ObservableObject {
     var onResetWirelessPairing: (() -> Void)?
 
     init() {
-        self.resolution = defaults.string(forKey: keyPrefix + "resolution") ?? "1920x1200"
         self.refreshRate = defaults.object(forKey: keyPrefix + "refreshRate") as? Int ?? 60  // Default: 60 — balanced for most tablets. 120 may saturate high-res panel pipelines.
-        self.hiDPI = defaults.bool(forKey: keyPrefix + "hiDPI")
         self.bitrate = defaults.object(forKey: keyPrefix + "bitrate") as? Int ?? 1000  // Default: 1000 Mbps
         self.quality = defaults.string(forKey: keyPrefix + "quality") ?? "ultralow"  // Default: fastest encoding
         self.gamingBoost = defaults.bool(forKey: keyPrefix + "gamingBoost")
@@ -1454,15 +1142,9 @@ class DisplaySettings: ObservableObject {
         // Default port 54321 (was 8888 in <=0.7.1; 8888 collides with jupyter/splunk/HP printers).
         // Existing users keep their saved value unless it would collide with the input port.
         self.port = Self.clampedVideoPort(defaults.object(forKey: keyPrefix + "port") as? Int ?? 54321)
-        self.rotation = defaults.object(forKey: keyPrefix + "rotation") as? Int ?? 0
-        self.showAllResolutions = defaults.bool(forKey: keyPrefix + "showAllResolutions")
-        self.customWidth = defaults.object(forKey: keyPrefix + "customWidth") as? Int ?? 1920
-        self.customHeight = defaults.object(forKey: keyPrefix + "customHeight") as? Int ?? 1200
         self.touchEnabled = defaults.object(forKey: keyPrefix + "touchEnabled") as? Bool ?? true
         let modeRaw = defaults.string(forKey: keyPrefix + "connectionMode") ?? ConnectionMode.usb.rawValue
         self.connectionMode = ConnectionMode(rawValue: modeRaw) ?? .usb
-        let displaySourceRaw = defaults.string(forKey: keyPrefix + "displaySourceMode") ?? DisplaySourceMode.remoteDesktop.rawValue
-        self.displaySourceMode = DisplaySourceMode(rawValue: displaySourceRaw) ?? .remoteDesktop
         if let selectedRemoteDisplayInt = defaults.object(forKey: keyPrefix + "selectedRemoteDisplayID") as? Int, selectedRemoteDisplayInt > 0 {
             self.selectedRemoteDisplayID = CGDirectDisplayID(selectedRemoteDisplayInt)
         } else {
@@ -1474,7 +1156,7 @@ class DisplaySettings: ObservableObject {
         let inputBackendRaw = defaults.string(forKey: keyPrefix + "inputBackendMode") ?? InputBackendMode.automatic.rawValue
         self.inputBackendMode = InputBackendMode(rawValue: inputBackendRaw) ?? .automatic
 
-        print("Loaded settings: \(resolution) @ \(refreshRate)Hz, bitrate=\(bitrate), quality=\(quality)")
+        print("Loaded settings: \(refreshRate)Hz, bitrate=\(bitrate), quality=\(quality)")
     }
 
     private func save(_ key: String, _ value: Any) {
@@ -1485,42 +1167,6 @@ class DisplaySettings: ObservableObject {
 
     static func clampedVideoPort(_ value: Int) -> UInt16 {
         UInt16(min(max(value, 1), Int(maxVideoPort)))
-    }
-
-    struct ResolutionGroup: Identifiable {
-        let id = UUID()
-        let name: String
-        let ratio: String
-        let resolutions: [String]
-    }
-
-    static let resolutionGroups: [ResolutionGroup] = [
-        ResolutionGroup(name: "16:10", ratio: "Widescreen", resolutions: [
-            "1280x800", "1440x900", "1680x1050", "1920x1200", "2560x1600"
-        ]),
-        ResolutionGroup(name: "16:9", ratio: "HD/4K", resolutions: [
-            "1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440", "3840x2160"
-        ]),
-        ResolutionGroup(name: "4:3", ratio: "Classic", resolutions: [
-            "1024x768", "1280x960", "1600x1200"
-        ]),
-        ResolutionGroup(name: "3:2", ratio: "Surface/Pixel", resolutions: [
-            "1920x1280", "2160x1440", "2736x1824"
-        ]),
-        ResolutionGroup(name: "5:3", ratio: "Tablet Wide", resolutions: [
-            "2000x1200", "2560x1536", "2800x1680"
-        ]),
-        ResolutionGroup(name: "4:3", ratio: "iPad", resolutions: [
-            "2048x1536", "2224x1668", "2388x1668", "2732x2048"
-        ])
-    ]
-
-    static let commonResolutions = [
-        "1920x1080", "1920x1200", "2560x1440", "2560x1600"
-    ]
-
-    static var allResolutions: [String] {
-        resolutionGroups.flatMap { $0.resolutions }
     }
 
     var effectiveBitrate: Int {
@@ -1541,11 +1187,9 @@ class DisplaySettings: ObservableObject {
             return
         }
         applyingProfile = true
-        resolution = preset.resolution
         refreshRate = preset.refreshRate
         bitrate = preset.bitrate
         quality = preset.quality
-        hiDPI = preset.hiDPI
         gamingBoost = preset.gamingBoost
         streamingProfile = profile
         applyingProfile = false
@@ -1562,54 +1206,27 @@ class DisplaySettings: ObservableObject {
     }
 
     func resetToDefaults() {
-        let keys = ["resolution", "refreshRate", "hiDPI", "bitrate", "quality", "streamingProfile",
-                    "gamingBoost", "port", "rotation", "showAllResolutions",
-                    "customWidth", "customHeight", "touchEnabled", "displaySourceMode", "selectedRemoteDisplayID", "endpointMode", "tailnetHost",
+        let keys = ["refreshRate", "bitrate", "quality", "streamingProfile",
+                    "gamingBoost", "port", "touchEnabled", "selectedRemoteDisplayID", "endpointMode", "tailnetHost",
                     "inputBackendMode"]
-        for key in keys {
+        let legacyDisplayKeys = ["resolution", "hiDPI", "rotation", "showAllResolutions", "customWidth", "customHeight", "displaySourceMode"]
+        for key in keys + legacyDisplayKeys {
             defaults.removeObject(forKey: keyPrefix + key)
         }
 
-        resolution = "1920x1200"
         refreshRate = 60  // Default: balanced for daily use
-        hiDPI = false
         bitrate = 1000  // Default: 1000 Mbps
         quality = "ultralow"  // Default: fastest encoding
         gamingBoost = false
         streamingProfile = .custom
         port = 54321
-        rotation = 0
-        showAllResolutions = false
-        customWidth = 1920
-        customHeight = 1200
         touchEnabled = true
-        displaySourceMode = .remoteDesktop
         selectedRemoteDisplayID = nil
         endpointMode = .lan
         tailnetHost = ""
         inputBackendMode = .automatic
 
         print("Settings reset to defaults")
-    }
-
-    var resolutionSize: (width: Int, height: Int) {
-        let parts = resolution.split(separator: "x")
-        let baseWidth = Int(parts[0]) ?? 1920
-        let baseHeight = Int(parts[1]) ?? 1200
-        if rotation == 90 || rotation == 270 {
-            return (baseHeight, baseWidth)
-        }
-        return (baseWidth, baseHeight)
-    }
-
-    static func isValidCustomResolution(width: Int, height: Int) -> Bool {
-        width >= 640 && width <= 7680 && height >= 480 && height <= 4320
-    }
-
-    func applyCustomResolution() {
-        if DisplaySettings.isValidCustomResolution(width: customWidth, height: customHeight) {
-            resolution = "\(customWidth)x\(customHeight)"
-        }
     }
 }
 
@@ -1624,7 +1241,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
 
-        window.title = "Side Screen"
+        window.title = "Remote Mac"
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .windowBackgroundColor
         window.isMovableByWindowBackground = true
@@ -1747,7 +1364,7 @@ struct WirelessSection: View {
                     } else {
                         Text(qrUnavailableReason ?? "Generating QR…").foregroundColor(.secondary)
                     }
-                    Text("Scan this QR from Side Screen Android (Wireless tab)")
+                    Text("Scan this QR from Remote Mac Android (Wireless tab)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

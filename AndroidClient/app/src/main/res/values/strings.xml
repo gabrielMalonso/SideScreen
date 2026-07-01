@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Side Screen</string>
-    <string name="accessibility_service_description">Optional keyboard assist for remote Mac input. Side Screen does not read screen content.</string>
+    <string name="app_name">Remote Mac</string>
+    <string name="accessibility_service_description">Optional keyboard assist for remote Mac input. Remote Mac does not read screen content.</string>
     <string name="settings_sidebar_title">Settings</string>
     <string name="settings_sidebar_hint">Remote session controls</string>
     <string name="settings_sidebar_handle">Settings</string>

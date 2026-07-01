@@ -107,7 +107,7 @@ fi
 cd "$ROOT_DIR/MacHost"
 
 # Kill running instance
-echo "Stopping running Side Screen..."
+echo "Stopping running Remote Mac..."
 pkill -x SideScreen 2>/dev/null || true
 sleep 0.5
 
@@ -163,9 +163,9 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>CFBundleIdentifier</key>
     <string>com.sidescreen.app</string>
     <key>CFBundleName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleDisplayName</key>
-    <string>Side Screen</string>
+    <string>Remote Mac</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string><!-- VERSION -->
     <key>CFBundleShortVersionString</key>
@@ -181,9 +181,9 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Side Screen needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
+    <string>Remote Mac needs screen recording access to capture the selected Mac display and stream it to your Android device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Side Screen needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
+    <string>Remote Mac needs Local Network access so your Android tablet can connect to the Mac over WiFi for wireless mode. Without this, only USB-tethered connections work.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_sidescreen._tcp</string>
@@ -215,7 +215,7 @@ DMG_DIR=$(mktemp -d)
 cp -R "$APP_DIR" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
 DMG_PATH="$ROOT_DIR/SideScreen-${VERSION}-mac-arm64.dmg"
-hdiutil create -volname "Side Screen" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
+hdiutil create -volname "Remote Mac" -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
 rm -rf "$DMG_DIR"
 
 if [ "$SIGN_IDENTITY" != "-" ]; then

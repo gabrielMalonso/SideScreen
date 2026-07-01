@@ -264,7 +264,7 @@ class MainActivity : AppCompatActivity() {
         val entry = pairedHostStorage.load()
         val text =
             buildString {
-                appendLine("Side Screen Android diagnostics")
+                appendLine("Remote Mac Android diagnostics")
                 appendLine("Mode: ${prefs.connectionMode}")
                 appendLine("Connected: $isConnected")
                 appendLine("Host: ${entry?.macName ?: "not paired"}")
@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
                 appendLine(DiagLog.recentLogText())
             }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Side Screen diagnostics", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText("Remote Mac diagnostics", text))
         Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
     }
 
@@ -1259,7 +1259,7 @@ class MainActivity : AppCompatActivity() {
         if (!CodecCapabilities.hasHevcDecoder && streamClient?.codecNegotiated != true) {
             mainDiag("AVC-only device but Mac did not negotiate codec — Mac app too old")
             runOnUiThread {
-                updateStatus("This device has no HEVC decoder. Update the SideScreen Mac app to enable H.264 support.")
+                updateStatus("This device has no HEVC decoder. Update the Remote Mac app on your Mac to enable H.264 support.")
             }
         }
     }
@@ -1627,7 +1627,7 @@ class MainActivity : AppCompatActivity() {
                 val errorMessage =
                     when {
                         e.message?.contains("ECONNREFUSED") == true -> {
-                            "Mac server is not running.\n\nPlease start Side Screen.app on your Mac first."
+                            "Mac server is not running.\n\nPlease start the Remote Mac app on your Mac first."
                         }
 
                         e.message?.contains("Network is unreachable") == true -> {
@@ -1641,7 +1641,7 @@ class MainActivity : AppCompatActivity() {
 
                         else -> {
                             "Connection failed: ${e.message}\n\n" +
-                                "Try:\n• Start Side Screen.app on Mac\n" +
+                                "Try:\n• Start the Remote Mac app on Mac\n" +
                                 "• Check USB connection\n• Run: adb reverse tcp:$port tcp:$port"
                         }
                     }

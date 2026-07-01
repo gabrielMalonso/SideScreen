@@ -55,12 +55,12 @@ peers = list((data.get("Peer") or {}).values())
 android_peers = [peer for peer in peers if (peer.get("OS") or "").lower() == "android"]
 online_androids = [peer for peer in android_peers if peer.get("Online")]
 
-print("# Side Screen Tailnet Diagnostics")
+print("# Remote Mac Tailnet Diagnostics")
 print("")
 print(f"Mac Tailnet host: {suggested_host or 'unavailable'}")
 print(f"Mac Tailnet DNS:  {mac_dns or 'unavailable'}")
 print(f"Mac Tailnet IP:   {mac_ip or 'unavailable'}")
-print(f"Side Screen port: {port}")
+print(f"Remote Mac port: {port}")
 print("")
 
 if android_peers:

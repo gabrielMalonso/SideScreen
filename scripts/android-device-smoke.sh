@@ -168,7 +168,7 @@ fi
 DEVICE_SERIAL="$ANDROID_SERIAL"
 ADB=(adb -s "$DEVICE_SERIAL")
 
-echo "# Side Screen Android Device Smoke"
+echo "# Remote Mac Android Device Smoke"
 echo "Device: $DEVICE_SERIAL"
 echo "APK: $APK_PATH"
 echo "APK source: $APK_SOURCE"
@@ -356,7 +356,7 @@ else
 fi
 
 echo ""
-echo "## Recent Side Screen logcat"
+echo "## Recent Remote Mac logcat"
 "${ADB[@]}" logcat -d -t 200 -s MA SC IC QR WT VD DiagLog VideoDecoder InputClient StreamClient QRScanner 2>/dev/null > /tmp/sidescreen-device-logcat.out
 cat /tmp/sidescreen-device-logcat.out |
     sed 's/^/   /' |

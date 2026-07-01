@@ -4,7 +4,7 @@ import Darwin
 
 signal(SIGPIPE, SIG_IGN)
 
-print("🚀 Side Screen starting...")
+print("Remote Mac starting...")
 
 // Entry point
 let app = NSApplication.shared
@@ -16,9 +16,9 @@ let mainMenu = NSMenu()
 let appMenu = NSMenu()
 let appMenuItem = NSMenuItem()
 appMenuItem.submenu = appMenu
-appMenu.addItem(NSMenuItem(title: "About Side Screen", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+appMenu.addItem(NSMenuItem(title: "About Remote Mac", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
 appMenu.addItem(NSMenuItem.separator())
-appMenu.addItem(NSMenuItem(title: "Quit Side Screen", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+appMenu.addItem(NSMenuItem(title: "Quit Remote Mac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 mainMenu.addItem(appMenuItem)
 
 // Edit menu (for standard text editing shortcuts)

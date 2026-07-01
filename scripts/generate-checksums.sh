@@ -10,7 +10,7 @@ OUT_FILE="$OUT_DIR/SHA256SUMS.txt"
 usage() {
     echo "Usage: ./scripts/generate-checksums.sh [--stdout] [file ...]"
     echo ""
-    echo "Without file arguments, checksums local Side Screen release artifacts."
+    echo "Without file arguments, checksums local Remote Mac release artifacts."
 }
 
 WRITE_STDOUT=0
