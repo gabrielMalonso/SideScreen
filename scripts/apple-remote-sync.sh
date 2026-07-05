@@ -6,11 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/apple-remote-lib.sh"
 
 DRY_RUN=0
+VERBOSE=0
+FRESH=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
+        --verbose) VERBOSE=1 ;;
+        --fresh) FRESH=1 ;;
         -h|--help)
-            echo "Usage: $0 [--dry-run]"
+            echo "Usage: $0 [--dry-run] [--verbose] [--fresh]"
             exit 0
             ;;
         *)
@@ -31,14 +35,18 @@ if [ "$DRY_RUN" -eq 1 ]; then
         exit 1
     fi
 else
+    if [ "$FRESH" -eq 1 ]; then
+        apple_remote_ssh "rm -rf '$APPLE_REMOTE_PATH'"
+    fi
     apple_remote_ssh "mkdir -p '$APPLE_REMOTE_PATH'"
+    if [ -n "$APPLE_REMOTE_DERIVED_DATA" ]; then
+        apple_remote_ssh "mkdir -p '$APPLE_REMOTE_DERIVED_DATA'"
+    fi
 fi
 
 RSYNC_ARGS=(
     -az
     --delete
-    --delete-excluded
-    --info=stats2,progress2
     --exclude='.git/'
     --exclude='.apple-remote.env'
     --exclude='**/.DS_Store'
@@ -66,6 +74,14 @@ RSYNC_ARGS=(
     --exclude='tmp/'
     --exclude='temp/'
 )
+
+if [ "$VERBOSE" -eq 1 ]; then
+    RSYNC_ARGS+=(-v --stats)
+fi
+
+if [ -n "$APPLE_REMOTE_RSYNC_PROTOCOL" ]; then
+    RSYNC_ARGS+=(--protocol="$APPLE_REMOTE_RSYNC_PROTOCOL")
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
     RSYNC_ARGS+=(--dry-run --itemize-changes)

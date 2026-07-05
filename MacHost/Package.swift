@@ -1,5 +1,10 @@
 // swift-tools-version: 5.9
+import Foundation
 import PackageDescription
+
+let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
+let sourcesDirectory = "\(packageDirectory)/Sources"
+let moduleMapFile = "\(sourcesDirectory)/module.modulemap"
 
 let package = Package(
     name: "SideScreen",
@@ -20,20 +25,20 @@ let package = Package(
             dependencies: [],
             path: "Sources",
             cSettings: [
-                .unsafeFlags(["-I", "Sources"])
+                .unsafeFlags(["-I", sourcesDirectory])
             ],
             swiftSettings: [
-                .unsafeFlags(["-Xcc", "-fmodule-map-file=Sources/module.modulemap"])
+                .unsafeFlags(["-Xcc", "-fmodule-map-file=\(moduleMapFile)"])
             ]),
         .testTarget(
             name: "SideScreenTests",
             dependencies: ["SideScreen"],
             path: "Tests/SideScreenTests",
             cSettings: [
-                .unsafeFlags(["-I", "Sources"])
+                .unsafeFlags(["-I", sourcesDirectory])
             ],
             swiftSettings: [
-                .unsafeFlags(["-Xcc", "-fmodule-map-file=Sources/module.modulemap"])
+                .unsafeFlags(["-Xcc", "-fmodule-map-file=\(moduleMapFile)"])
             ]
         )
     ]
