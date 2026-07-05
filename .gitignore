@@ -48,6 +48,7 @@ dist/
 # Env
 .env
 .env.local
+.apple-remote.env
 *.pem
 
 # Docs (local design docs)
